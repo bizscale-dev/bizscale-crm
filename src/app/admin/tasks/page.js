@@ -1,0 +1,142 @@
+import { getDb } from '@/lib/db';
+import { getActiveCampaign } from '@/lib/services';
+import TaskActions from './TaskActions';
+
+export const revalidate = 0;
+
+export default async function TasksPage() {
+  const db = await getDb();
+  const campaign = await getActiveCampaign();
+
+  let seoTaskSummary = [];
+  let writingTaskSummary = [];
+  let dailyTarget = 0; // 66 links per day for the whole team
+
+  if (campaign) {
+    // Calculate daily target: (total active clients × 50 links) / 16 working days
+    const totalActiveClients = (await db.prepare(`
+      SELECT COUNT(*) as count FROM clients WHERE campaign_id = ? AND is_active = 1
+    `).get(campaign.id))?.count || 0;
+    
+    const totalExpectedLinks = totalActiveClients * 50;
+    dailyTarget = Math.round(totalExpectedLinks / 16);
+
+    seoTaskSummary = await db.prepare(`
+      SELECT u.id, u.name as associate_name, st.day_number, st.task_date,
+        SUM(st.target_count) as target, SUM(st.completed_count) as completed,
+        COUNT(DISTINCT st.client_id) as clients,
+        (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ?) as assigned_clients
+      FROM seo_tasks st JOIN users u ON u.id = st.associate_id
+      WHERE st.campaign_id = ?
+      GROUP BY st.associate_id, st.day_number
+      ORDER BY st.day_number, u.name
+    `).all(campaign.id, campaign.id);
+
+    writingTaskSummary = await db.prepare(`
+      SELECT u.name as writer_name, wt.week_number, wt.day_number, wt.task_date, wt.post_type,
+        SUM(wt.target_count) as target, SUM(wt.completed_count) as completed
+      FROM writing_tasks wt JOIN users u ON u.id = wt.writer_id
+      WHERE wt.campaign_id = ?
+      GROUP BY wt.writer_id, wt.day_number, wt.post_type
+      ORDER BY wt.day_number, u.name
+    `).all(campaign.id);
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      {!campaign ? (
+        <div className="card">
+          <p style={{ color: 'var(--danger)', margin: 0 }}>
+            No active campaign found. You must activate a campaign before managing tasks.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Task Generation</h2>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>
+              Generate daily SEO and Writing tasks for the duration of the campaign based on the target settings and assigned users. This will overwrite any uncompleted tasks.
+            </p>
+            <TaskActions />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+            <div className="card">
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+                SEO Task Summary
+              </h2>
+              {seoTaskSummary.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)' }}>No SEO tasks generated yet.</p>
+              ) : (
+                <div style={{ overflowX: 'auto', maxHeight: '400px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--card-bg)' }}>
+                      <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                        <th style={{ padding: '0.75rem 0' }}>Day</th>
+                        <th style={{ padding: '0.75rem 0' }}>Date</th>
+                        <th style={{ padding: '0.75rem 0' }}>Associate</th>
+                        <th style={{ padding: '0.75rem 0' }}>Assigned Clients</th>
+                        <th style={{ padding: '0.75rem 0' }}>Expected Daily Target</th>
+                        <th style={{ padding: '0.75rem 0' }}>Completed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {seoTaskSummary.map((t, i) => {
+                        // Expected daily target for this associate = (assigned clients × 50) / 16 days
+                        const expectedDailyForAssociate = t.assigned_clients > 0 ? Math.round((t.assigned_clients * 50) / 16) : 0;
+                        return (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                            <td style={{ padding: '0.75rem 0' }}>Day {t.day_number}</td>
+                            <td style={{ padding: '0.75rem 0' }}>{t.task_date}</td>
+                            <td style={{ padding: '0.75rem 0', fontWeight: '500' }}>{t.associate_name}</td>
+                            <td style={{ padding: '0.75rem 0' }}>{t.assigned_clients}</td>
+                            <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--primary)' }}>{expectedDailyForAssociate}</td>
+                            <td style={{ padding: '0.75rem 0', color: 'var(--success)' }}>{t.completed}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+                Writing Task Summary
+              </h2>
+              {writingTaskSummary.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)' }}>No Writing tasks generated yet.</p>
+              ) : (
+                <div style={{ overflowX: 'auto', maxHeight: '400px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--card-bg)' }}>
+                      <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                        <th style={{ padding: '0.75rem 0' }}>Day</th>
+                        <th style={{ padding: '0.75rem 0' }}>Date</th>
+                        <th style={{ padding: '0.75rem 0' }}>Writer</th>
+                        <th style={{ padding: '0.75rem 0' }}>Post Type</th>
+                        <th style={{ padding: '0.75rem 0' }}>Posts Target</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {writingTaskSummary.map((t, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '0.75rem 0' }}>Day {t.day_number}</td>
+                          <td style={{ padding: '0.75rem 0' }}>{t.task_date}</td>
+                          <td style={{ padding: '0.75rem 0', fontWeight: '500' }}>{t.writer_name}</td>
+                          <td style={{ padding: '0.75rem 0', textTransform: 'capitalize' }}>{t.post_type}</td>
+                          <td style={{ padding: '0.75rem 0', color: 'var(--success)' }}>{t.target}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
