@@ -225,24 +225,47 @@ async function runMigrations(raw) {
     // Migration already done or table doesn't exist yet
   }
 
-  // Migrate users table to include web_seo_associate role
+  // Widen the users.role CHECK constraint as new roles are added. Guarded by
+  // inspecting the current schema so the rename+recreate only runs when a role is
+  // actually missing.
+  //
+  // Other tables (web_clients, seo_tasks, etc.) have FOREIGN KEY ... REFERENCES
+  // users(id). Renaming `users` itself would make SQLite auto-rewrite those other
+  // tables' FK references to follow the rename (e.g. to "users_old"), which then
+  // breaks them once the old table is dropped — and Turso's remote protocol doesn't
+  // allow the `PRAGMA legacy_alter_table` that normally suppresses this. Avoided
+  // entirely by building the replacement under a throwaway name that nothing
+  // references yet, dropping the original, then renaming the replacement into
+  // place — at that point nothing points at the throwaway name, so there's nothing
+  // for SQLite to rewrite, and every other table's existing "REFERENCES users(id)"
+  // text (never touched) resolves correctly once `users` exists again.
   try {
-    await raw.execute('ALTER TABLE users RENAME TO users_old');
-    await raw.execute(`
-      CREATE TABLE users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        role TEXT NOT NULL CHECK(role IN ('admin','seo_associate','writer','manager','web_seo_associate')),
-        is_active INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    await raw.execute('INSERT INTO users SELECT * FROM users_old');
-    await raw.execute('DROP TABLE users_old');
+    const REQUIRED_ROLES = ['admin', 'seo_associate', 'writer', 'manager', 'web_seo_associate', 'writers_manager', 'seo_manager', 'web_seo_manager'];
+    const currentSchema = await raw.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'");
+    const currentSql = currentSchema.rows[0]?.sql || '';
+    const missingRole = REQUIRED_ROLES.some(role => !currentSql.includes(`'${role}'`));
+
+    if (missingRole) {
+      await raw.execute('PRAGMA foreign_keys = OFF');
+      await raw.execute('DROP TABLE IF EXISTS users_new');
+      await raw.execute(`
+        CREATE TABLE users_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          password TEXT NOT NULL,
+          role TEXT NOT NULL CHECK(role IN (${REQUIRED_ROLES.map(r => `'${r}'`).join(',')})),
+          is_active INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await raw.execute('INSERT INTO users_new SELECT * FROM users');
+      await raw.execute('DROP TABLE users');
+      await raw.execute('ALTER TABLE users_new RENAME TO users');
+      await raw.execute('PRAGMA foreign_keys = ON');
+    }
   } catch (e) {
-    // Migration already done or users table doesn't exist yet
+    console.warn('users role-constraint migration skipped:', e.message);
   }
 }
 
@@ -272,7 +295,7 @@ export async function initDb() {
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('admin','seo_associate','writer','manager','web_seo_associate')),
+      role TEXT NOT NULL CHECK(role IN ('admin','seo_associate','writer','manager','web_seo_associate','writers_manager','seo_manager','web_seo_manager')),
       is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );

@@ -41,6 +41,9 @@ export default function UserForm({ mode = 'create', initialData = null, onSucces
           <select name="role" defaultValue={initialData?.role || 'seo_associate'} style={inputStyle}>
             <option value="admin">Admin</option>
             <option value="manager">Manager</option>
+            <option value="writers_manager">Writers Manager</option>
+            <option value="seo_manager">SEO Associate Manager</option>
+            <option value="web_seo_manager">Web SEO Associate Manager</option>
             <option value="seo_associate">SEO Associate</option>
             <option value="web_seo_associate">Web SEO Associate</option>
             <option value="writer">Writer</option>

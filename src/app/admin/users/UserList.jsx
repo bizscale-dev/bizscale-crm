@@ -75,7 +75,7 @@ export default function UserList({ users, assignedAssociates, assignedWriters, h
                 <td style={{ padding: '1rem 0' }}>
                   {!hasActiveCampaign && <span style={{ color: 'var(--text-muted)' }}>No Active Campaign</span>}
                   {hasActiveCampaign && u.role === 'admin' && <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                  {hasActiveCampaign && u.role === 'manager' && <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  {hasActiveCampaign && ['manager', 'writers_manager', 'seo_manager', 'web_seo_manager'].includes(u.role) && <span style={{ color: 'var(--text-muted)' }}>—</span>}
                   
                   {hasActiveCampaign && (u.role === 'seo_associate' || u.role === 'writer') && (
                     isAssigned ? (
@@ -147,6 +147,9 @@ function RoleBadge({ role }) {
   const map = {
     admin: { label: 'Admin', tone: 'danger' },
     manager: { label: 'Manager', tone: 'warning' },
+    writers_manager: { label: 'Writers Manager', tone: 'warning' },
+    seo_manager: { label: 'SEO Associate Manager', tone: 'warning' },
+    web_seo_manager: { label: 'Web SEO Associate Manager', tone: 'warning' },
     seo_associate: { label: 'SEO Associate', tone: 'brand' },
     web_seo_associate: { label: 'Web SEO Associate', tone: 'neutral' },
     writer: { label: 'Writer', tone: 'success' },

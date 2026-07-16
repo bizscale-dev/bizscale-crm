@@ -21,7 +21,10 @@ export async function proxy(req) {
     seo_associate: '/associate',
     writer: '/writer',
     manager: '/manager',
-    web_seo_associate: '/web-associate'
+    web_seo_associate: '/web-associate',
+    writers_manager: '/writers-manager',
+    seo_manager: '/seo-manager',
+    web_seo_manager: '/web-seo-manager'
   };
 
   if (session && path === '/login') {
