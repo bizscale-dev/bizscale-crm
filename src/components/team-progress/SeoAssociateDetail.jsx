@@ -27,6 +27,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   let todayTasks = [], overallStats = null, recentLogs = [], upcomingDays = [], weeklySummary = [], funnelClients = [];
   let totalExpectedLinks = 0;
   let dailyTarget = 0;
+  let cumulativeByClientType = {};
 
   if (campaign) {
     // Get clients assigned to this associate — excludes clients currently in the
@@ -71,6 +72,21 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
       WHERE st.associate_id = ? AND st.campaign_id = ? AND st.task_date = ? AND c.is_active = 1
       ORDER BY c.sort_order, st.link_type
     `).all(associateId, campaign.id, today);
+
+    // Cumulative target/completed per client+link_type, from campaign start through
+    // today — so the numbers on each client's card grow day over day (e.g. 6/3 today,
+    // 12/6 once the next scheduled day for that client/type syncs) instead of repeating
+    // the same day-only slice, which otherwise looks unchanged and confusing.
+    const cumulativeRows = await db.prepare(`
+      SELECT client_id, link_type, SUM(target_count) as target, SUM(completed_count) as completed
+      FROM seo_tasks
+      WHERE associate_id = ? AND campaign_id = ? AND task_date <= ?
+      GROUP BY client_id, link_type
+    `).all(associateId, campaign.id, today);
+    for (const row of cumulativeRows) {
+      if (!cumulativeByClientType[row.client_id]) cumulativeByClientType[row.client_id] = {};
+      cumulativeByClientType[row.client_id][row.link_type] = { target: row.target, completed: row.completed };
+    }
 
     overallStats = await db.prepare(`
       SELECT SUM(st.target_count) as target, SUM(st.completed_count) as completed
@@ -129,13 +145,20 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     }
   }
 
-  // Group today's tasks by client
+  // Group today's tasks by client. Each task's displayed target/completed is the
+  // cumulative-to-date figure (campaign start through today) rather than just today's
+  // slice, so the card grows day over day instead of showing the same number forever.
   const tasksByClient = {};
   todayTasks.forEach(t => {
     if (!tasksByClient[t.client_id]) {
       tasksByClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, website: t.website, tasks: [] };
     }
-    tasksByClient[t.client_id].tasks.push(t);
+    const cumulative = cumulativeByClientType[t.client_id]?.[t.link_type];
+    tasksByClient[t.client_id].tasks.push({
+      ...t,
+      target_count: cumulative?.target ?? t.target_count,
+      completed_count: cumulative?.completed ?? t.completed_count,
+    });
   });
 
   const todayTarget = dailyTarget;
@@ -177,6 +200,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
             <StatCard title="Overall Target" value={totalExpectedLinks} sub={`${overallStats?.completed || 0} completed (${overallPercent}%)`} color="var(--success)" />
             <StatCard title="Upcoming Days" value={upcomingDays.length} sub="remaining days with tasks" color="#f59e0b" />
             <StatCard title="Recent Logs" value={recentLogs.length} sub="links logged recently" color="#8b5cf6" />
+            <StatCard title="All-Time Completed (Sheet)" value={associate.lifetime_completed_links || 0} sub="across all assigned clients, live from sheet" color="#16b293" />
           </div>
 
           {/* Funnel Clients — separate from the regular link rotation above */}

@@ -92,10 +92,16 @@ export async function POST(request) {
     const errors = [];
 
     const dbClients = await db.prepare(`
-      SELECT id, name, business_name FROM web_clients WHERE campaign_id = ?
+      SELECT id, name, business_name, assigned_associate_id FROM web_clients WHERE campaign_id = ?
     `).all(campaign.id);
 
     console.log(`[WEBSEO SYNC] Found ${dbClients.length} web clients in database`);
+
+    // Live, all-time total per associate straight from the sheet — summed across every
+    // one of their clients (not just ones scheduled today), so an associate with
+    // pre-existing sheet history sees their real total immediately rather than waiting
+    // for the daily rotation to eventually reach every client.
+    const lifetimeTotalByAssociate = {};
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
@@ -157,6 +163,16 @@ export async function POST(request) {
       }
 
       syncedClients.push(clientResult);
+
+      if (client.assigned_associate_id) {
+        const clientTotal = clientResult.web2 + clientResult.guestpost;
+        lifetimeTotalByAssociate[client.assigned_associate_id] =
+          (lifetimeTotalByAssociate[client.assigned_associate_id] || 0) + clientTotal;
+      }
+    }
+
+    for (const [associateId, total] of Object.entries(lifetimeTotalByAssociate)) {
+      await db.prepare('UPDATE users SET lifetime_completed_links = ? WHERE id = ?').run(total, associateId);
     }
 
     console.log(`[WEBSEO SYNC] Complete: ${syncedCount} records synced from ${syncedClients.length} clients`);

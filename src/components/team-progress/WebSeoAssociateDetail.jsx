@@ -29,6 +29,7 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel })
 
   let todayTasks = [], overallStats = null, upcomingDays = [];
   let assignedClientsCount = 0;
+  let cumulativeByClientType = {};
 
   if (campaign) {
     assignedClientsCount = (await db.prepare(`
@@ -42,6 +43,20 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel })
       WHERE wt.associate_id = ? AND wt.campaign_id = ? AND wt.task_date = ?
       ORDER BY c.business_name, wt.post_type
     `).all(associateId, campaign.id, today);
+
+    // Cumulative target/completed per client+post_type, from campaign start through
+    // today — so the numbers on each client's card grow day over day instead of
+    // repeating the same day-only slice, which otherwise looks unchanged and confusing.
+    const cumulativeRows = await db.prepare(`
+      SELECT client_id, post_type, SUM(target_count) as target, SUM(completed_count) as completed
+      FROM webseo_tasks
+      WHERE associate_id = ? AND campaign_id = ? AND task_date <= ?
+      GROUP BY client_id, post_type
+    `).all(associateId, campaign.id, today);
+    for (const row of cumulativeRows) {
+      if (!cumulativeByClientType[row.client_id]) cumulativeByClientType[row.client_id] = {};
+      cumulativeByClientType[row.client_id][row.post_type] = { target: row.target, completed: row.completed };
+    }
 
     overallStats = await db.prepare(`
       SELECT SUM(target_count) as target, SUM(completed_count) as completed
@@ -65,7 +80,12 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel })
     if (!tasksByClient[t.client_id]) {
       tasksByClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, tasks: [] };
     }
-    tasksByClient[t.client_id].tasks.push(t);
+    const cumulative = cumulativeByClientType[t.client_id]?.[t.post_type];
+    tasksByClient[t.client_id].tasks.push({
+      ...t,
+      target_count: cumulative?.target ?? t.target_count,
+      completed_count: cumulative?.completed ?? t.completed_count,
+    });
   });
 
   const todayTarget = todayTasks.reduce((s, t) => s + t.target_count, 0);
@@ -97,6 +117,7 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel })
             <StatCard title="Today's Target" value={todayTarget} sub={`${todayCompleted} completed (${todayPercent}%)`} color="var(--primary)" />
             <StatCard title="Overall Target" value={overallTarget} sub={`${overallCompleted} completed (${overallPercent}%)`} color="var(--success)" />
             <StatCard title="Upcoming Days" value={upcomingDays.length} sub="days with tasks" color="var(--warning)" />
+            <StatCard title="All-Time Completed (Sheet)" value={associate.lifetime_completed_links || 0} sub="across all assigned clients, live from sheet" color="#16b293" />
           </div>
 
           <div className="card">

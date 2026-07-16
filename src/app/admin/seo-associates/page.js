@@ -14,7 +14,7 @@ export default async function SEOAssociatesPage() {
   // campaign only (a client/task from a past campaign shouldn't count here), and
   // excluding clients currently in the Funnel (they don't get regular seo_tasks).
   const associates = campaign ? await db.prepare(`
-    SELECT u.id, u.name, u.email, u.is_active,
+    SELECT u.id, u.name, u.email, u.is_active, u.lifetime_completed_links,
       (SELECT COUNT(*) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as total_tasks,
       (SELECT SUM(completed_count) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as completed_tasks,
       (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ?
@@ -48,6 +48,7 @@ export default async function SEOAssociatesPage() {
                   <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Total Tasks Per Client</th>
                   <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Total Expected Links</th>
                   <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Completed</th>
+                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>All-Time (Sheet)</th>
                   <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Progress</th>
                   <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Action</th>
                 </tr>
@@ -76,6 +77,7 @@ export default async function SEOAssociatesPage() {
                       <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--success)' }}>{monthlyTargetPerClient}</td>
                       <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--primary)' }}>{expectedTotalLinks}</td>
                       <td style={{ padding: '0.75rem 0' }}>{associate.completed_tasks || 0}</td>
+                      <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--success)' }}>{associate.lifetime_completed_links || 0}</td>
                       <td style={{ padding: '0.75rem 0' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <div style={{ width: '80px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>

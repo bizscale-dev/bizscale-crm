@@ -27,6 +27,7 @@ export default async function WriterDetail({ id, backHref, backLabel }) {
 
   let todayTasks = [], overallStats = null, recentLogs = [], upcomingDays = [], weeklyBreakdown = [], weeklySummary = [];
   let todayClientsById = {}, allWriterClients = [];
+  let cumulativeByClientType = {};
 
   if (campaign) {
     todayTasks = await db.prepare(`
@@ -34,6 +35,20 @@ export default async function WriterDetail({ id, backHref, backLabel }) {
       WHERE writer_id = ? AND campaign_id = ? AND task_date = ?
       ORDER BY post_type
     `).all(writerId, campaign.id, today);
+
+    // Cumulative target/completed per client+post_type, from campaign start through
+    // today — so the numbers on each client's card grow day over day instead of
+    // repeating the same day-only slice, which otherwise looks unchanged and confusing.
+    const cumulativeRows = await db.prepare(`
+      SELECT client_id, post_type, SUM(target_count) as target, SUM(completed_count) as completed
+      FROM writing_tasks
+      WHERE writer_id = ? AND campaign_id = ? AND task_date <= ?
+      GROUP BY client_id, post_type
+    `).all(writerId, campaign.id, today);
+    for (const row of cumulativeRows) {
+      if (!cumulativeByClientType[row.client_id]) cumulativeByClientType[row.client_id] = {};
+      cumulativeByClientType[row.client_id][row.post_type] = { target: row.target, completed: row.completed };
+    }
 
     overallStats = await db.prepare(`
       SELECT SUM(target_count) as target, SUM(completed_count) as completed
@@ -159,7 +174,16 @@ export default async function WriterDetail({ id, backHref, backLabel }) {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {[...new Map(todayTasks.map(t => [t.client_id, t])).values()].map(task => {
-                      const clientTasks = todayTasks.filter(t => t.client_id === task.client_id);
+                      const clientTasks = todayTasks
+                        .filter(t => t.client_id === task.client_id)
+                        .map(t => {
+                          const cumulative = cumulativeByClientType[t.client_id]?.[t.post_type];
+                          return {
+                            ...t,
+                            target_count: cumulative?.target ?? t.target_count,
+                            completed_count: cumulative?.completed ?? t.completed_count,
+                          };
+                        });
                       const totalTarget = clientTasks.reduce((s, t) => s + t.target_count, 0);
                       const totalCompleted = clientTasks.reduce((s, t) => s + t.completed_count, 0);
                       const pct = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0;

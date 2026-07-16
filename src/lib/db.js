@@ -96,6 +96,11 @@ async function runMigrations(raw) {
     "ALTER TABLE campaigns ADD COLUMN funnel_bonus_profile INTEGER DEFAULT 0",
     "ALTER TABLE campaigns ADD COLUMN funnel_bonus_citation INTEGER DEFAULT 0",
     "ALTER TABLE campaigns ADD COLUMN funnel_bonus_image INTEGER DEFAULT 0",
+    // Live, all-time total pulled straight from the completed-links sheet across every
+    // client assigned to this associate (not scoped to a campaign's daily rotation) —
+    // refreshed on each sync run so associates with pre-existing sheet history can see
+    // their real total immediately, instead of waiting for the rotation to reach them.
+    "ALTER TABLE users ADD COLUMN lifetime_completed_links INTEGER DEFAULT 0",
   ];
 
   for (const sql of alterStatements) {
@@ -256,7 +261,8 @@ async function runMigrations(raw) {
           password TEXT NOT NULL,
           role TEXT NOT NULL CHECK(role IN (${REQUIRED_ROLES.map(r => `'${r}'`).join(',')})),
           is_active INTEGER DEFAULT 1,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          lifetime_completed_links INTEGER DEFAULT 0
         )
       `);
       await raw.execute('INSERT INTO users_new SELECT * FROM users');
@@ -297,7 +303,8 @@ export async function initDb() {
       password TEXT NOT NULL,
       role TEXT NOT NULL CHECK(role IN ('admin','seo_associate','writer','manager','web_seo_associate','writers_manager','seo_manager','web_seo_manager')),
       is_active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      lifetime_completed_links INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS campaigns (

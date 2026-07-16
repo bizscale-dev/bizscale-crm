@@ -23,7 +23,7 @@ export default async function WebSEOAssociatesPage() {
 
     // Get Web SEO stats for each associate
     webSeoStats = await db.prepare(`
-      SELECT u.id, u.name,
+      SELECT u.id, u.name, u.lifetime_completed_links,
         (SELECT COUNT(DISTINCT client_id) FROM webseo_tasks WHERE associate_id = u.id AND campaign_id = ?) as assigned_clients,
         (SELECT COUNT(DISTINCT day_number) FROM webseo_tasks WHERE associate_id = u.id AND campaign_id = ?) as scheduled_days,
         (SELECT SUM(target_count) FROM webseo_tasks WHERE associate_id = u.id AND campaign_id = ? AND post_type = 'guestpost') as guestpost_target,
@@ -128,6 +128,7 @@ export default async function WebSEOAssociatesPage() {
                       <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Guest Posts</th>
                       <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Web 2.0 Posts</th>
                       <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Total Progress</th>
+                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>All-Time (Sheet)</th>
                       <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Action</th>
                     </tr>
                   </thead>
@@ -175,6 +176,9 @@ export default async function WebSEOAssociatesPage() {
                               </div>
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{progressPercent}%</span>
                             </div>
+                          </td>
+                          <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--success)' }}>
+                            {associate.lifetime_completed_links || 0}
                           </td>
                           <td style={{ padding: '0.75rem 0' }}>
                             <Link href={`/admin/web-seo-associates/${associate.id}`} style={{
