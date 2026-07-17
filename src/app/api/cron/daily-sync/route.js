@@ -3,8 +3,9 @@ import { runSyncJob } from '@/lib/cron-scheduler';
 /**
  * GET /api/cron/daily-sync
  *
- * Entry point for Vercel Cron (see vercel.json — scheduled for 18:30 UTC = 11:30 PM
- * Pakistan Time daily). Vercel automatically sends `Authorization: Bearer $CRON_SECRET`
+ * Entry point for Vercel Cron (see vercel.json — scheduled twice daily: 09:00 UTC =
+ * 2 PM Pakistan Time, and 18:30 UTC = 11:30 PM Pakistan Time). Vercel automatically
+ * sends `Authorization: Bearer $CRON_SECRET`
  * on cron-triggered requests when CRON_SECRET is set as a project env var; requests
  * without a matching header are rejected so this endpoint can't be triggered by anyone
  * who finds the URL.

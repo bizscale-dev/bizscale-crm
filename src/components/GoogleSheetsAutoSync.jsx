@@ -241,7 +241,7 @@ export default function GoogleSheetsAutoSync() {
       <div style={cardStyle}>
         <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>🔄 Manual Sync from Google Sheets</h3>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-          Manually sync clients from your Google Sheet. This runs automatically at 11:30 PM (Pakistan Time) daily.
+          Manually sync clients from your Google Sheet. This runs automatically at 2 PM and 11:30 PM (Pakistan Time) daily.
         </p>
 
         <div style={{ marginBottom: '1rem' }}>
@@ -307,7 +307,7 @@ export default function GoogleSheetsAutoSync() {
       {/* Info */}
       <div style={{ ...cardStyle, backgroundColor: 'rgba(99, 102, 241, 0.05)', border: '1px solid var(--primary)' }}>
         <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-          ℹ️ <strong>Auto-sync runs daily at 11:30 PM (Pakistan Time).</strong> New clients added to your sheet are automatically assigned to associates and tasks are created from today to end of cycle. Deactivated clients lose only future tasks.
+          ℹ️ <strong>Auto-sync runs daily at 2 PM and 11:30 PM (Pakistan Time).</strong> New clients added to your sheet are automatically assigned to associates and tasks are created from today to end of cycle. Deactivated clients lose only future tasks.
         </p>
       </div>
     </div>

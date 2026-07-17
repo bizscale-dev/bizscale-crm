@@ -67,7 +67,7 @@ export default function LinkSyncPage() {
           <div>
             <h3 style={{ margin: 0, marginBottom: '0.5rem', color: 'var(--foreground)' }}>URL Configuration</h3>
             <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
-              <li><strong>Saved URL:</strong> Click &quot;Edit&quot; above, paste the sheet URL, then &quot;Save as Default&quot; to persist it for future syncs and the daily 11:30 PM (PKT) automation</li>
+              <li><strong>Saved URL:</strong> Click &quot;Edit&quot; above, paste the sheet URL, then &quot;Save as Default&quot; to persist it for future syncs and the daily 2 PM &amp; 11:30 PM (PKT) automation</li>
               <li><strong>Separate from client sync:</strong> This is its own setting, distinct from the Google Sheet used to sync new clients/associates/writers</li>
               <li><strong>Public Access:</strong> Sheet must be shared as &quot;Anyone with the link can view&quot;</li>
             </ul>
@@ -99,7 +99,7 @@ export default function LinkSyncPage() {
           <div>
             <h3 style={{ margin: 0, marginBottom: '0.5rem', color: 'var(--foreground)' }}>Daily Automation</h3>
             <p style={{ margin: 0 }}>
-              System automatically syncs at 11:30 PM (Pakistan Time) daily using the Settings-configured URLs — this includes both the regular SEO Associate sync above and the Web SEO Associate sync below — or you can manually trigger either anytime using the buttons above.
+              System automatically syncs at 2 PM and 11:30 PM (Pakistan Time) daily using the Settings-configured URLs — this includes both the regular SEO Associate sync above and the Web SEO Associate sync below — or you can manually trigger either anytime using the buttons above.
             </p>
           </div>
 
