@@ -10,6 +10,7 @@ export default async function TasksPage() {
 
   let seoTaskSummary = [];
   let writingTaskSummary = [];
+  let webSeoTaskSummary = [];
   let dailyTarget = 0; // 66 links per day for the whole team
 
   if (campaign) {
@@ -40,6 +41,17 @@ export default async function TasksPage() {
       GROUP BY wt.writer_id, wt.day_number, wt.post_type
       ORDER BY wt.day_number, u.name
     `).all(campaign.id);
+
+    webSeoTaskSummary = await db.prepare(`
+      SELECT u.id, u.name as associate_name, wst.day_number, wst.task_date, wst.post_type,
+        SUM(wst.target_count) as target, SUM(wst.completed_count) as completed,
+        COUNT(DISTINCT wst.client_id) as clients,
+        (SELECT COUNT(*) FROM web_clients WHERE assigned_associate_id = u.id AND campaign_id = ?) as assigned_clients
+      FROM webseo_tasks wst JOIN users u ON u.id = wst.associate_id
+      WHERE wst.campaign_id = ?
+      GROUP BY wst.associate_id, wst.day_number, wst.post_type
+      ORDER BY wst.day_number, u.name
+    `).all(campaign.id, campaign.id);
   }
 
   return (
@@ -127,6 +139,44 @@ export default async function TasksPage() {
                           <td style={{ padding: '0.75rem 0', fontWeight: '500' }}>{t.writer_name}</td>
                           <td style={{ padding: '0.75rem 0', textTransform: 'capitalize' }}>{t.post_type}</td>
                           <td style={{ padding: '0.75rem 0', color: 'var(--success)' }}>{t.target}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+                Web SEO Task Summary
+              </h2>
+              {webSeoTaskSummary.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)' }}>No Web SEO tasks generated yet.</p>
+              ) : (
+                <div style={{ overflowX: 'auto', maxHeight: '400px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--card-bg)' }}>
+                      <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                        <th style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>Day</th>
+                        <th style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>Date</th>
+                        <th style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>Associate</th>
+                        <th style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>Post Type</th>
+                        <th style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>Assigned Clients</th>
+                        <th style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>Target</th>
+                        <th style={{ padding: '0.75rem 0', whiteSpace: 'nowrap' }}>Completed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {webSeoTaskSummary.map((t, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>Day {t.day_number}</td>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>{t.task_date}</td>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '500', whiteSpace: 'nowrap' }}>{t.associate_name}</td>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>{t.post_type}</td>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>{t.assigned_clients}</td>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{t.target}</td>
+                          <td style={{ padding: '0.75rem 0', color: 'var(--success)', whiteSpace: 'nowrap' }}>{t.completed}</td>
                         </tr>
                       ))}
                     </tbody>
