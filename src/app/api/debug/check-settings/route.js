@@ -18,12 +18,14 @@ export async function GET(request) {
     const sheetUrl = await db.prepare("SELECT value FROM settings WHERE key = ?").get('google_sheets_url');
     const completedLinksUrl = await db.prepare("SELECT value FROM settings WHERE key = ?").get('completed_links_sheet_url');
     const webSeoCompletedLinksUrl = await db.prepare("SELECT value FROM settings WHERE key = ?").get('web_seo_completed_links_sheet_url');
+    const webClientsImportUrl = await db.prepare("SELECT value FROM settings WHERE key = ?").get('web_clients_import_sheet_url');
 
     return Response.json({
       success: true,
       googleSheetsUrl: sheetUrl?.value || 'NOT SET',
       completedLinksSheetUrl: completedLinksUrl?.value || 'NOT SET',
       webSeoCompletedLinksSheetUrl: webSeoCompletedLinksUrl?.value || 'NOT SET',
+      webClientsImportSheetUrl: webClientsImportUrl?.value || 'NOT SET',
       allSettings: allSettings.map(s => ({ key: s.key, value: s.value.substring(0, 50) + (s.value.length > 50 ? '...' : '') }))
     });
   } catch (err) {

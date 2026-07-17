@@ -167,3 +167,41 @@ export async function updateWebSeoCompletedLinksSheetUrl(prevState, formData) {
     return { error: error.message };
   }
 }
+
+// The sheet used by the Web Clients "Import" form (a client/associate roster sheet
+// with an "Active Clients" tab), distinct from the completed-links sheets above —
+// saved so the admin doesn't have to re-paste the same URL on every import.
+export async function updateWebClientsImportSheetUrl(prevState, formData) {
+  const db = await getDb();
+  const session = await verifySession();
+
+  if (!session) {
+    return { error: 'Not authenticated' };
+  }
+
+  const sheetUrl = formData.get('sheet_url')?.trim();
+
+  if (!sheetUrl) {
+    return { error: 'Google Sheets URL is required' };
+  }
+
+  if (!sheetUrl.includes('docs.google.com/spreadsheets')) {
+    return { error: 'Invalid Google Sheets URL' };
+  }
+
+  try {
+    const existing = await db.prepare("SELECT key FROM settings WHERE key = ?").get('web_clients_import_sheet_url');
+
+    if (existing) {
+      await db.prepare("UPDATE settings SET value = ? WHERE key = ?").run(sheetUrl, 'web_clients_import_sheet_url');
+    } else {
+      await db.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run('web_clients_import_sheet_url', sheetUrl);
+    }
+
+    revalidatePath('/admin/web-clients');
+    return { success: 'Web Clients import sheet URL saved successfully' };
+  } catch (error) {
+    console.error('Settings update error:', error);
+    return { error: error.message };
+  }
+}

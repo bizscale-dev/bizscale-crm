@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { importWebClientsFromGoogleSheet } from './actions';
+import { updateWebClientsImportSheetUrl } from '../settings/actions';
 import { useRouter } from 'next/navigation';
 
 export default function WebClientImport() {
@@ -11,7 +12,52 @@ export default function WebClientImport() {
   const [importError, setImportError] = useState(null);
   const [needsAuth, setNeedsAuth] = useState(false);
   const [sheetUrl, setSheetUrl] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(true);
   const router = useRouter();
+
+  const fetchSavedUrl = async () => {
+    try {
+      setIsLoadingSaved(true);
+      const res = await fetch('/api/debug/check-settings');
+      const data = await res.json();
+      if (data.webClientsImportSheetUrl && data.webClientsImportSheetUrl !== 'NOT SET') {
+        setSheetUrl(data.webClientsImportSheetUrl);
+      }
+    } catch (err) {
+      console.error('Error fetching saved import sheet URL:', err);
+    } finally {
+      setIsLoadingSaved(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSavedUrl();
+  }, []);
+
+  const handleSaveDefault = async () => {
+    if (!sheetUrl) {
+      setImportError('Enter a Google Sheet URL first');
+      return;
+    }
+    setIsSaving(true);
+    setImportError(null);
+    setImportMessage(null);
+    try {
+      const formData = new FormData();
+      formData.set('sheet_url', sheetUrl);
+      const result = await updateWebClientsImportSheetUrl(null, formData);
+      if (result.error) {
+        setImportError(result.error);
+      } else {
+        setImportMessage('Saved as default — this URL will be pre-filled next time.');
+      }
+    } catch (error) {
+      setImportError(error.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleImport = async (e) => {
     e.preventDefault();
@@ -42,7 +88,6 @@ export default function WebClientImport() {
         setImportError(result.error);
       } else {
         setImportMessage(result.message || 'Web clients imported successfully!');
-        setSheetUrl('');
         // Refresh page after 2 seconds
         setTimeout(() => {
           router.refresh();
@@ -126,25 +171,47 @@ export default function WebClientImport() {
             value={sheetUrl}
             onChange={(e) => setSheetUrl(e.target.value)}
             style={inputStyle}
+            disabled={isLoadingSaved}
             required
           />
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.5rem 0 0 0' }}>
-            Make sure the sheet is shared with the Google account connected in Settings
+            {isLoadingSaved
+              ? 'Loading saved default…'
+              : 'Pre-filled from your saved default — make sure the sheet is shared with the Google account connected in Settings.'}
           </p>
         </div>
 
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={isImporting}
-          style={{
-            padding: '0.75rem 1.5rem',
-            cursor: isImporting ? 'not-allowed' : 'pointer',
-            opacity: isImporting ? 0.6 : 1
-          }}
-        >
-          {isImporting ? 'Importing...' : 'Import Web Clients'}
-        </button>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={isImporting}
+            style={{
+              padding: '0.75rem 1.5rem',
+              cursor: isImporting ? 'not-allowed' : 'pointer',
+              opacity: isImporting ? 0.6 : 1
+            }}
+          >
+            {isImporting ? 'Importing...' : 'Import Web Clients'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSaveDefault}
+            disabled={isSaving}
+            className="btn"
+            style={{
+              padding: '0.75rem 1.5rem',
+              backgroundColor: 'transparent',
+              border: '1px solid var(--border)',
+              color: 'var(--foreground)',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
+              opacity: isSaving ? 0.6 : 1
+            }}
+          >
+            {isSaving ? 'Saving...' : 'Save as Default'}
+          </button>
+        </div>
       </form>
     </div>
   );
