@@ -121,15 +121,15 @@ export default async function WebSEOAssociatesPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Name</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Email</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Status</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Clients</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Guest Posts</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Web 2.0 Posts</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Total Progress</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>All-Time (Sheet)</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Action</th>
+                      <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Name</th>
+                      <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Email</th>
+                      <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Status</th>
+                      <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Clients</th>
+                      <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Guest Posts</th>
+                      <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Web 2.0 Posts</th>
+                      <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Total Progress</th>
+                      <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>All-Time (Sheet)</th>
+                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -140,9 +140,9 @@ export default async function WebSEOAssociatesPage() {
 
                       return (
                         <tr key={associate.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                          <td style={{ padding: '0.75rem 0', fontWeight: '500' }}>{associate.name}</td>
-                          <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)', fontSize: '0.75rem' }}>{associate.email}</td>
-                          <td style={{ padding: '0.75rem 0' }}>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '500', whiteSpace: 'nowrap' }}>{associate.name}</td>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{associate.email}</td>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>
                             <span style={{
                               padding: '0.25rem 0.5rem',
                               backgroundColor: 'rgba(34, 197, 94, 0.1)',
@@ -154,22 +154,22 @@ export default async function WebSEOAssociatesPage() {
                               active
                             </span>
                           </td>
-                          <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--primary)' }}>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>
                             {associate.assigned_clients || 0}
                           </td>
-                          <td style={{ padding: '0.75rem 0' }}>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>
                             <span style={{ fontWeight: '600', color: 'var(--success)' }}>
                               {associate.guestpost_completed || 0}
                             </span>
                             <span style={{ color: 'var(--text-muted)' }}> / {associate.guestpost_target || 0}</span>
                           </td>
-                          <td style={{ padding: '0.75rem 0' }}>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>
                             <span style={{ fontWeight: '600', color: 'var(--success)' }}>
                               {associate.web2_completed || 0}
                             </span>
                             <span style={{ color: 'var(--text-muted)' }}> / {associate.web2_target || 0}</span>
                           </td>
-                          <td style={{ padding: '0.75rem 0' }}>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <div style={{ width: '80px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
                                 <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: 'var(--primary)' }}></div>
@@ -177,10 +177,10 @@ export default async function WebSEOAssociatesPage() {
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{progressPercent}%</span>
                             </div>
                           </td>
-                          <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--success)' }}>
+                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--success)', whiteSpace: 'nowrap' }}>
                             {associate.lifetime_completed_links || 0}
                           </td>
-                          <td style={{ padding: '0.75rem 0' }}>
+                          <td style={{ padding: '0.75rem 0', whiteSpace: 'nowrap' }}>
                             <Link href={`/admin/web-seo-associates/${associate.id}`} style={{
                               padding: '0.4rem 0.75rem',
                               backgroundColor: 'var(--primary)',

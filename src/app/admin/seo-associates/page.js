@@ -41,16 +41,16 @@ export default async function SEOAssociatesPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Name</th>
-                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Email</th>
-                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Status</th>
-                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Total Clients</th>
-                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Total Tasks Per Client</th>
-                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Total Expected Links</th>
-                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Completed</th>
-                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>All-Time (Sheet)</th>
-                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Progress</th>
-                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Action</th>
+                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Name</th>
+                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Email</th>
+                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Status</th>
+                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Total Clients</th>
+                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Total Tasks Per Client</th>
+                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Total Expected Links</th>
+                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Completed</th>
+                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>All-Time (Sheet)</th>
+                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Progress</th>
+                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -59,9 +59,9 @@ export default async function SEOAssociatesPage() {
                   const progressPercent = expectedTotalLinks > 0 ? Math.round((associate.completed_tasks / expectedTotalLinks) * 100) : 0;
                   return (
                     <tr key={associate.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '0.75rem 0', fontWeight: '500' }}>{associate.name}</td>
-                      <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)' }}>{associate.email}</td>
-                      <td style={{ padding: '0.75rem 0' }}>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '500', whiteSpace: 'nowrap' }}>{associate.name}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{associate.email}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>
                         <span style={{
                           padding: '0.25rem 0.5rem',
                           backgroundColor: associate.is_active ? 'rgba(34, 197, 94, 0.1)' : 'rgba(156, 163, 175, 0.1)',
@@ -73,12 +73,12 @@ export default async function SEOAssociatesPage() {
                           {associate.is_active ? 'active' : 'inactive'}
                         </span>
                       </td>
-                      <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--primary)' }}>{associate.total_clients}</td>
-                      <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--success)' }}>{monthlyTargetPerClient}</td>
-                      <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--primary)' }}>{expectedTotalLinks}</td>
-                      <td style={{ padding: '0.75rem 0' }}>{associate.completed_tasks || 0}</td>
-                      <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--success)' }}>{associate.lifetime_completed_links || 0}</td>
-                      <td style={{ padding: '0.75rem 0' }}>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{associate.total_clients}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--success)', whiteSpace: 'nowrap' }}>{monthlyTargetPerClient}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{expectedTotalLinks}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>{associate.completed_tasks || 0}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--success)', whiteSpace: 'nowrap' }}>{associate.lifetime_completed_links || 0}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <div style={{ width: '80px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
                             <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: 'var(--primary)' }}></div>

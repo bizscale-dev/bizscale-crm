@@ -127,10 +127,7 @@ export default function ClientList({ clients, associates = [] }) {
             <th style={{ padding: '1rem 0' }}>Client Name</th>
             <th style={{ padding: '1rem 0' }}>Associate</th>
             <th style={{ padding: '1rem 0' }}>Writer</th>
-            <th style={{ padding: '1rem 0' }}>Website</th>
-            <th style={{ padding: '1rem 0' }}>Niche</th>
             <th style={{ padding: '1rem 0' }}>Status</th>
-            <th style={{ padding: '1rem 0' }}>Notes</th>
             <th style={{ padding: '1rem 0' }}>Actions</th>
           </tr>
         </thead>
@@ -146,20 +143,9 @@ export default function ClientList({ clients, associates = [] }) {
                 {c.assigned_writer || '—'}
               </td>
               <td style={{ padding: '1rem 0' }}>
-                {c.website ? (
-                  <a href={c.website} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>
-                    {c.website}
-                  </a>
-                ) : '—'}
-              </td>
-              <td style={{ padding: '1rem 0', color: 'var(--text-muted)' }}>{c.niche || '—'}</td>
-              <td style={{ padding: '1rem 0' }}>
                 <Badge tone={c.is_active ? 'success' : 'danger'}>
                   {c.is_active ? 'Active' : 'Deactivated'}
                 </Badge>
-              </td>
-              <td style={{ padding: '1rem 0', color: 'var(--text-muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {c.notes || '—'}
               </td>
               <td style={{ padding: '1rem 0' }}>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
