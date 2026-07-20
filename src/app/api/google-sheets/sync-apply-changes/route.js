@@ -2,6 +2,11 @@ import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { generateWriterTasks } from '@/lib/writerTaskGenerator';
 
+// 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
+// for why this matters (a killed function fails silently with no error surfaced). This
+// route is called internally as part of that chain.
+export const maxDuration = 60;
+
 export async function POST(request) {
   try {
     const db = await getDb();

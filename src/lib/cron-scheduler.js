@@ -148,45 +148,14 @@ export async function runSyncJob() {
       }
     }
 
-    // Sync completed links from Google Sheet
-    try {
-      console.log('[CRON] Syncing completed links...');
-      const completedLinksResponse = await fetch(`${baseUrl}/api/sync-completed-links`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-
-      if (completedLinksResponse.ok) {
-        const completedLinksData = await completedLinksResponse.json();
-        console.log('[CRON] Completed links sync result:', completedLinksData.message);
-        console.log(`[CRON] Synced ${completedLinksData.syncedCount} records from ${completedLinksData.syncedClients.length} clients`);
-      } else {
-        console.warn('[CRON] Completed links sync failed:', await completedLinksResponse.text());
-      }
-    } catch (completedLinksError) {
-      console.warn('[CRON] Could not sync completed links:', completedLinksError.message);
-    }
-
-    // Sync completed Web SEO Associate links (web2/guestpost) from Google Sheet
-    try {
-      console.log('[CRON] Syncing Web SEO completed links...');
-      const webSeoLinksResponse = await fetch(`${baseUrl}/api/sync-webseo-completed-links`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-
-      if (webSeoLinksResponse.ok) {
-        const webSeoLinksData = await webSeoLinksResponse.json();
-        console.log('[CRON] Web SEO completed links sync result:', webSeoLinksData.message);
-        console.log(`[CRON] Synced ${webSeoLinksData.syncedCount} records from ${webSeoLinksData.syncedClients.length} clients`);
-      } else {
-        console.warn('[CRON] Web SEO completed links sync failed:', await webSeoLinksResponse.text());
-      }
-    } catch (webSeoLinksError) {
-      console.warn('[CRON] Could not sync Web SEO completed links:', webSeoLinksError.message);
-    }
+    // Completed-links syncs (SEO and Web SEO) used to run here too, chained onto the
+    // end of this same function call. Removed: this whole chain (client sync, funnel
+    // progression, writer import, assignments) can run long on a cold start, and
+    // Vercel kills a serverless function that exceeds its execution time limit —
+    // silently, with no error surfaced — which meant the completed-links steps at the
+    // end sometimes never ran. They now have their own independent, staggered Vercel
+    // Cron triggers (see vercel.json: /api/sync-completed-links, /api/sync-webseo-completed-links),
+    // so a slow run of this chain can no longer block them.
 
     console.log('[CRON] All campaigns synced successfully');
   } catch (error) {

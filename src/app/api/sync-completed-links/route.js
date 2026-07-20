@@ -2,6 +2,10 @@ import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { parseGoogleSheetUrl, fetchGoogleSheetRows, parseCsv } from '@/lib/googleSheets';
 
+// 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
+// for why this matters (a killed function fails silently with no error surfaced).
+export const maxDuration = 60;
+
 /**
  * POST /api/sync-completed-links
  * 

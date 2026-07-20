@@ -6,6 +6,11 @@
 import { getDb, initDb } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 
+// 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
+// for why this matters (a killed function fails silently with no error surfaced). This
+// route is called internally as part of that chain.
+export const maxDuration = 60;
+
 export async function POST(request) {
   try {
     await initDb();

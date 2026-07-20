@@ -1,5 +1,12 @@
 import { runSyncJob } from '@/lib/cron-scheduler';
 
+// Vercel kills a serverless function once it exceeds its execution time limit —
+// silently, with no error surfaced to the caller — which is exactly what caused this
+// route's completed-links steps to sometimes never run before they were split into
+// their own cron triggers. 60s is the max allowed on Vercel's Hobby plan; raise this
+// if the project is ever upgraded to a plan with a higher ceiling.
+export const maxDuration = 60;
+
 /**
  * GET /api/cron/daily-sync
  *

@@ -7,6 +7,22 @@
     {
       "path": "/api/cron/daily-sync",
       "schedule": "30 18 * * *"
+    },
+    {
+      "path": "/api/sync-completed-links",
+      "schedule": "2 9 * * *"
+    },
+    {
+      "path": "/api/sync-completed-links",
+      "schedule": "32 18 * * *"
+    },
+    {
+      "path": "/api/sync-webseo-completed-links",
+      "schedule": "4 9 * * *"
+    },
+    {
+      "path": "/api/sync-webseo-completed-links",
+      "schedule": "34 18 * * *"
     }
   ]
 }

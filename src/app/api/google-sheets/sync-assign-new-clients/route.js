@@ -4,6 +4,11 @@ import { generateSEOTasks } from '@/lib/taskService';
 import { generateWriterTasks } from '@/lib/writerTaskGenerator';
 import { enrollClientInFunnel, runFunnelProgressionForCampaign } from '@/lib/funnel';
 
+// 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
+// for why this matters (a killed function fails silently with no error surfaced). This
+// route is called internally as part of that chain.
+export const maxDuration = 60;
+
 export async function POST(request) {
   try {
     await initDb(); // Ensure tables are created

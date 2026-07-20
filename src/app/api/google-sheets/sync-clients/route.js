@@ -2,6 +2,11 @@ import { getDb, initDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { parseGoogleSheetUrl, columnLetterToIndex } from '@/lib/googleSheets';
 
+// 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
+// for why this matters (a killed function fails silently with no error surfaced). This
+// route is called internally as part of that chain.
+export const maxDuration = 60;
+
 async function refreshAccessToken(refreshToken) {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
