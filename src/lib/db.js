@@ -189,6 +189,17 @@ async function runMigrations(raw) {
       UNIQUE(campaign_id, off_date),
       FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
     )`,
+    // One row per sync trigger run (manual or Vercel Cron) — lets the admin UI show
+    // "did last night's trigger actually run, and what happened" instead of that only
+    // being visible in Vercel's function logs.
+    `CREATE TABLE IF NOT EXISTS sync_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sync_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      summary TEXT,
+      details TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
   ];
 
   for (const sql of createTableStatements) {

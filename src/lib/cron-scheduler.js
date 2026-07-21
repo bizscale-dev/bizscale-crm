@@ -15,6 +15,8 @@ function getBaseUrl() {
  * self-schedules, since a serverless function can't keep an in-process timer alive.
  */
 export async function runSyncJob() {
+  const campaignResults = [];
+
   try {
     const db = await getDb();
     const baseUrl = getBaseUrl();
@@ -24,7 +26,7 @@ export async function runSyncJob() {
 
     if (campaigns.length === 0) {
       console.log('[CRON] No active campaigns, skipping sync');
-      return;
+      return { skipped: true, reason: 'No active campaigns', campaignResults };
     }
 
     console.log(`[CRON] Found ${campaigns.length} active campaign(s), syncing each one...`);
@@ -34,7 +36,7 @@ export async function runSyncJob() {
 
     if (!settings) {
       console.log('[CRON] No Google Sheets URL configured, skipping sync');
-      return;
+      return { skipped: true, reason: 'No Google Sheets URL configured', campaignResults };
     }
 
     const sheetUrl = settings.value;
@@ -143,8 +145,10 @@ export async function runSyncJob() {
         }
 
         console.log(`[CRON] Campaign sync completed: ${campaign.name}`);
+        campaignResults.push({ name: campaign.name, status: 'success' });
       } catch (campaignError) {
         console.error(`[CRON] Error syncing campaign ${campaign.name}:`, campaignError);
+        campaignResults.push({ name: campaign.name, status: 'error', error: campaignError.message });
       }
     }
 
@@ -158,8 +162,10 @@ export async function runSyncJob() {
     // so a slow run of this chain can no longer block them.
 
     console.log('[CRON] All campaigns synced successfully');
+    return { skipped: false, campaignResults };
   } catch (error) {
     console.error('[CRON] Error in sync job:', error);
+    return { skipped: false, campaignResults, error: error.message };
   }
 }
 

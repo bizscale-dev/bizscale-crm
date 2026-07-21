@@ -1,4 +1,5 @@
 import { runSyncJob } from '@/lib/cron-scheduler';
+import { logSyncRun } from '@/lib/syncLog';
 
 // Vercel kills a serverless function once it exceeds its execution time limit —
 // silently, with no error surfaced to the caller — which is exactly what caused this
@@ -26,10 +27,25 @@ export async function GET(request) {
 
   try {
     console.log('[CRON] Daily sync triggered at', new Date().toISOString());
-    await runSyncJob();
-    return Response.json({ success: true, triggeredAt: new Date().toISOString() });
+    const result = await runSyncJob();
+
+    if (result?.skipped) {
+      await logSyncRun('daily-sync', 'success', `Skipped: ${result.reason}`);
+    } else if (result?.error) {
+      await logSyncRun('daily-sync', 'error', result.error, { campaignResults: result.campaignResults });
+    } else {
+      const failed = (result?.campaignResults || []).filter(c => c.status === 'error');
+      const names = (result?.campaignResults || []).map(c => c.name).join(', ') || 'no campaigns';
+      const summary = failed.length > 0
+        ? `Synced with errors: ${names} (${failed.length} failed)`
+        : `Synced ${result?.campaignResults?.length || 0} campaign(s): ${names}`;
+      await logSyncRun('daily-sync', failed.length > 0 ? 'error' : 'success', summary, { campaignResults: result?.campaignResults });
+    }
+
+    return Response.json({ success: true, triggeredAt: new Date().toISOString(), result });
   } catch (err) {
     console.error('[CRON] Daily sync failed:', err);
+    await logSyncRun('daily-sync', 'error', err.message);
     return Response.json({ error: err.message }, { status: 500 });
   }
 }

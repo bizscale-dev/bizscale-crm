@@ -1,9 +1,28 @@
 import SyncLinksClient from './SyncLinksClient';
 import SyncWebSeoLinksClient from './SyncWebSeoLinksClient';
+import { getRecentSyncLogs } from '@/lib/syncLog';
 
 export const revalidate = 0;
 
-export default function LinkSyncPage() {
+const SYNC_TYPE_LABELS = {
+  'daily-sync': 'Daily Sync (Clients/Writers/Associates)',
+  'completed-links': 'SEO Completed Links',
+  'webseo-completed-links': 'Web SEO Completed Links',
+};
+
+function formatLogTime(isoString) {
+  // created_at is stored as UTC (SQLite CURRENT_TIMESTAMP) — render in Pakistan Time
+  // since that's the timezone the cron schedule and the rest of this page are described in.
+  return new Date(`${isoString.replace(' ', 'T')}Z`).toLocaleString('en-US', {
+    timeZone: 'Asia/Karachi',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+export default async function LinkSyncPage() {
+  const syncLogs = await getRecentSyncLogs(20);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <div className="card">
@@ -21,6 +40,59 @@ export default function LinkSyncPage() {
       <SyncLinksClient />
 
       <SyncWebSeoLinksClient />
+
+      <div className="card">
+        <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', margin: 0, marginBottom: '1rem' }}>
+          Recent Sync Activity
+        </h2>
+        <p style={{ color: 'var(--text-muted)', margin: 0, marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Every trigger run — the twice-daily automatic cron and any manual &quot;Fetch &amp; Update Now&quot; click — is logged here, so you can confirm a trigger actually ran and see what it did without needing to check Vercel&apos;s logs.
+        </p>
+
+        {syncLogs.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No sync runs recorded yet.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                  <th style={{ padding: '0.5rem 0.75rem', whiteSpace: 'nowrap' }}>Time (PKT)</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Trigger</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>Status</th>
+                  <th style={{ padding: '0.5rem 0.75rem' }}>What Happened</th>
+                </tr>
+              </thead>
+              <tbody>
+                {syncLogs.map((log) => (
+                  <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '0.5rem 0.75rem', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                      {formatLogTime(log.created_at)}
+                    </td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>
+                      {SYNC_TYPE_LABELS[log.sync_type] || log.sync_type}
+                    </td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>
+                      <span
+                        style={{
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: '1rem',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          color: log.status === 'success' ? '#2e7d32' : '#c62828',
+                          backgroundColor: log.status === 'success' ? 'rgba(46, 125, 50, 0.12)' : 'rgba(198, 40, 40, 0.12)',
+                        }}
+                      >
+                        {log.status === 'success' ? 'Success' : 'Error'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.5rem 0.75rem' }}>{log.summary}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div className="card">
         <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>

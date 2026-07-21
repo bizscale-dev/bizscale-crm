@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { parseGoogleSheetUrl, fetchGoogleSheetRows, parseCsv } from '@/lib/googleSheets';
+import { logSyncRun } from '@/lib/syncLog';
 
 // 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
 // for why this matters (a killed function fails silently with no error surfaced).
@@ -27,12 +28,20 @@ export const maxDuration = 60;
  */
 
 export async function POST(request) {
+  // Logs the failure to sync_logs (visible on /admin/link-sync) before returning it —
+  // early-exit failures like "no sheet URL configured" are exactly what that page needs
+  // to surface, since they'd otherwise only show up in Vercel's function logs.
+  const fail = async (error, status = 400) => {
+    await logSyncRun('completed-links', 'error', error);
+    return Response.json({ error }, { status });
+  };
+
   try {
     const db = await getDb();
     const campaign = await getActiveCampaign();
 
     if (!campaign) {
-      return Response.json({ error: 'No active campaign' }, { status: 400 });
+      return await fail('No active campaign');
     }
 
     // Get the Google Sheet URL from request body or settings
@@ -52,35 +61,31 @@ export async function POST(request) {
     }
 
     if (!sheetUrl) {
-      return Response.json({
-        error: 'No Google Sheet URL configured. Please set it in the Sync Completed Links page first.'
-      }, { status: 400 });
+      return await fail('No Google Sheet URL configured. Please set it in the Sync Completed Links page first.');
     }
 
     // Parse the sheet URL and get rows
     const sheetInfo = parseGoogleSheetUrl(sheetUrl);
     if (!sheetInfo) {
-      return Response.json({ error: 'Invalid Google Sheet URL format' }, { status: 400 });
+      return await fail('Invalid Google Sheet URL format');
     }
 
     let rows;
     try {
       rows = await fetchGoogleSheetRows(sheetInfo.exportUrl);
     } catch (err) {
-      return Response.json({ 
-        error: `Failed to fetch sheet: ${err.message}. Make sure the sheet is publicly accessible.` 
-      }, { status: 400 });
+      return await fail(`Failed to fetch sheet: ${err.message}. Make sure the sheet is publicly accessible.`);
     }
 
     if (rows.length < 2) {
-      return Response.json({ error: 'Sheet has no data rows' }, { status: 400 });
+      return await fail('Sheet has no data rows');
     }
 
     // Parse header row and find column indices by header names
     const headers = rows[0].map(h => h.trim());
-    
+
     console.log('[SYNC] Headers found:', headers);
-    
+
     // Find columns by name (more flexible matching)
     const clientNameIdx = headers.findIndex(h => h.toLowerCase().includes('client'));
     const web2Idx = headers.findIndex(h => h.toLowerCase().includes('web') && h.toLowerCase().includes('2'));
@@ -92,17 +97,13 @@ export async function POST(request) {
 
     // Validate we found the essential columns
     if (clientNameIdx === -1) {
-      return Response.json({ 
-        error: 'Could not find "Client Name" column. Found columns: ' + headers.join(', ') 
-      }, { status: 400 });
+      return await fail('Could not find "Client Name" column. Found columns: ' + headers.join(', '));
     }
 
-    if (web2Idx === -1 || guestPostIdx === -1 || pdfIdx === -1 || 
+    if (web2Idx === -1 || guestPostIdx === -1 || pdfIdx === -1 ||
         profileIdx === -1 || citationIdx === -1 || imageIdx === -1) {
       console.log('[SYNC] Missing columns:', { web2Idx, guestPostIdx, pdfIdx, profileIdx, citationIdx, imageIdx });
-      return Response.json({ 
-        error: 'Missing required link type columns. Found: ' + headers.join(', ')
-      }, { status: 400 });
+      return await fail('Missing required link type columns. Found: ' + headers.join(', '));
     }
 
     // Map of link types to column indices
@@ -235,9 +236,16 @@ export async function POST(request) {
 
     console.log(`[SYNC] Complete: ${syncedCount} records synced from ${syncedClients.length} clients`);
 
+    const summary = `Synced ${syncedCount} completed link records from ${syncedClients.length} clients`;
+    await logSyncRun('completed-links', 'success', summary, {
+      syncedCount,
+      clientCount: syncedClients.length,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+
     return Response.json({
       success: true,
-      message: `Synced ${syncedCount} completed link records from ${syncedClients.length} clients`,
+      message: summary,
       syncedCount,
       syncedClients,
       errors: errors.length > 0 ? errors : undefined,
@@ -245,6 +253,7 @@ export async function POST(request) {
     });
   } catch (err) {
     console.error('[SYNC] Error:', err);
+    await logSyncRun('completed-links', 'error', err.message);
     return Response.json({ error: `Sync error: ${err.message}` }, { status: 500 });
   }
 }
