@@ -34,7 +34,7 @@ export async function generateWebSeoTasks(campaignId) {
   const associates = await db.prepare(`
     SELECT DISTINCT u.id, u.name
     FROM users u
-    JOIN web_clients wc ON wc.assigned_associate_id = u.id AND wc.campaign_id = ?
+    JOIN web_clients wc ON wc.assigned_associate_id = u.id AND wc.campaign_id = ? AND wc.is_active = 1
     WHERE u.role = 'web_seo_associate' AND u.is_active = 1
     ORDER BY u.name
   `).all(campaignId);
@@ -45,7 +45,7 @@ export async function generateWebSeoTasks(campaignId) {
 
   for (const associate of associates) {
     const clients = await db.prepare(`
-      SELECT id FROM web_clients WHERE campaign_id = ? AND assigned_associate_id = ? ORDER BY id
+      SELECT id FROM web_clients WHERE campaign_id = ? AND assigned_associate_id = ? AND is_active = 1 ORDER BY id
     `).all(campaignId, associate.id);
 
     if (clients.length === 0) continue;

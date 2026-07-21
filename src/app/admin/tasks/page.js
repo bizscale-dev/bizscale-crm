@@ -46,7 +46,7 @@ export default async function TasksPage() {
       SELECT u.id, u.name as associate_name, wst.day_number, wst.task_date, wst.post_type,
         SUM(wst.target_count) as target, SUM(wst.completed_count) as completed,
         COUNT(DISTINCT wst.client_id) as clients,
-        (SELECT COUNT(*) FROM web_clients WHERE assigned_associate_id = u.id AND campaign_id = ?) as assigned_clients
+        (SELECT COUNT(*) FROM web_clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1) as assigned_clients
       FROM webseo_tasks wst JOIN users u ON u.id = wst.associate_id
       WHERE wst.campaign_id = ?
       GROUP BY wst.associate_id, wst.day_number, wst.post_type

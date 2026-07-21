@@ -33,7 +33,7 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel })
 
   if (campaign) {
     assignedClientsCount = (await db.prepare(`
-      SELECT COUNT(*) as c FROM web_clients WHERE campaign_id = ? AND assigned_associate_id = ?
+      SELECT COUNT(*) as c FROM web_clients WHERE campaign_id = ? AND assigned_associate_id = ? AND is_active = 1
     `).get(campaign.id, associateId)).c;
 
     todayTasks = await db.prepare(`

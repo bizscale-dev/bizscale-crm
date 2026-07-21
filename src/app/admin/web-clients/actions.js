@@ -152,15 +152,81 @@ export async function importWebClientsFromGoogleSheet(formData) {
 
     const db = await getDb();
     let importedCount = 0;
+    let reactivatedCount = 0;
     const errors = [];
+    // Every client name seen in this sheet import — used after the loop to find
+    // clients that used to be here but no longer are, so they can be deactivated
+    // (history/webseo_tasks preserved, not deleted) instead of silently staying
+    // active forever.
+    const seenClientNames = new Set();
 
     // First, log all available associates in the system
     const allAssociates = await db.prepare(`
-      SELECT id, name FROM users 
+      SELECT id, name FROM users
       WHERE role = 'web_seo_associate' AND is_active = 1
       ORDER BY name
     `).all();
     console.log('[importWebClientsFromGoogleSheet] Available associates:', allAssociates.map(a => a.name));
+
+    // Upserts one client from the sheet: creates it if new, reactivates it if it was
+    // previously removed, and assigns/updates its associate. Shared by both column
+    // pairs below since they're otherwise identical.
+    async function upsertClient(clientName, associateName, rowLabel) {
+      seenClientNames.add(clientName);
+      try {
+        const existing = await db.prepare(`
+          SELECT id, is_active FROM web_clients
+          WHERE campaign_id = ? AND name = ?
+        `).get(campaign.id, clientName);
+
+        let clientId;
+        if (!existing) {
+          await db.prepare(`
+            INSERT INTO web_clients (campaign_id, business_name, name, is_active)
+            VALUES (?, ?, ?, 1)
+          `).run(campaign.id, clientName, clientName);
+
+          const newClient = await db.prepare(`
+            SELECT id FROM web_clients
+            WHERE campaign_id = ? AND name = ?
+          `).get(campaign.id, clientName);
+          clientId = newClient.id;
+          importedCount++;
+          console.log(`[importWebClientsFromGoogleSheet] Imported (${rowLabel}): ${clientName}`);
+        } else {
+          clientId = existing.id;
+          if (!existing.is_active) {
+            await db.prepare('UPDATE web_clients SET is_active = 1 WHERE id = ?').run(clientId);
+            reactivatedCount++;
+            console.log(`[importWebClientsFromGoogleSheet] Reactivated (${rowLabel}): ${clientName}`);
+          }
+        }
+
+        // Assign associate if provided
+        if (associateName && clientId) {
+          console.log(`[importWebClientsFromGoogleSheet] Looking for associate: "${associateName}"`);
+          const associate = await db.prepare(`
+            SELECT id FROM users
+            WHERE LOWER(name) = LOWER(?) AND role = 'web_seo_associate' AND is_active = 1
+          `).get(associateName);
+
+          if (associate) {
+            await db.prepare(`
+              UPDATE web_clients
+              SET assigned_associate_id = ?
+              WHERE id = ?
+            `).run(associate.id, clientId);
+            console.log(`[importWebClientsFromGoogleSheet] ✓ Assigned ${associateName} to ${clientName}`);
+          } else {
+            console.log(`[importWebClientsFromGoogleSheet] ✗ Associate "${associateName}" not found in system`);
+            errors.push(`${rowLabel}: Associate "${associateName}" not found`);
+          }
+        }
+      } catch (err) {
+        console.error(`[importWebClientsFromGoogleSheet] Error processing ${rowLabel}:`, err.message);
+        errors.push(`${rowLabel}: ${err.message}`);
+      }
+    }
 
     // Parse data from Google Sheets
     // Pair 1: Column D (index 3) = Client Names → Column F (index 5) = Associate Names
@@ -171,118 +237,31 @@ export async function importWebClientsFromGoogleSheet(formData) {
         continue;
       }
 
-      // Process Pair 1: Column D + F
       const client1Name = (row[3] || '').trim();
       const associate1Name = (row[5] || '').trim();
-      console.log(`[importWebClientsFromGoogleSheet] Row ${i+1} Pair 1 - Client: "${client1Name}" | Associate: "${associate1Name}"`);
-      
       if (client1Name) {
-        try {
-          // Check if client already exists
-          const existing = await db.prepare(`
-            SELECT id FROM web_clients 
-            WHERE campaign_id = ? AND name = ?
-          `).get(campaign.id, client1Name);
-
-          let clientId;
-          if (!existing) {
-            await db.prepare(`
-              INSERT INTO web_clients (campaign_id, business_name, name)
-              VALUES (?, ?, ?)
-            `).run(campaign.id, client1Name, client1Name);
-            
-            const newClient = await db.prepare(`
-              SELECT id FROM web_clients 
-              WHERE campaign_id = ? AND name = ?
-            `).get(campaign.id, client1Name);
-            clientId = newClient.id;
-            importedCount++;
-            console.log(`[importWebClientsFromGoogleSheet] Imported (Pair 1): ${client1Name}`);
-          } else {
-            clientId = existing.id;
-          }
-
-          // Assign associate if provided
-          if (associate1Name && clientId) {
-            console.log(`[importWebClientsFromGoogleSheet] Looking for associate: "${associate1Name}"`);
-            const associate = await db.prepare(`
-              SELECT id FROM users 
-              WHERE LOWER(name) = LOWER(?) AND role = 'web_seo_associate' AND is_active = 1
-            `).get(associate1Name);
-
-            if (associate) {
-              await db.prepare(`
-                UPDATE web_clients 
-                SET assigned_associate_id = ?
-                WHERE id = ?
-              `).run(associate.id, clientId);
-              console.log(`[importWebClientsFromGoogleSheet] ✓ Assigned ${associate1Name} to ${client1Name}`);
-            } else {
-              console.log(`[importWebClientsFromGoogleSheet] ✗ Associate "${associate1Name}" not found in system`);
-              errors.push(`Row ${i+1} (Pair 1): Associate "${associate1Name}" not found`);
-            }
-          }
-        } catch (err) {
-          console.error(`[importWebClientsFromGoogleSheet] Error processing Pair 1 row ${i+1}:`, err.message);
-          errors.push(`Row ${i+1} (Pair 1): ${err.message}`);
-        }
+        await upsertClient(client1Name, associate1Name, `Row ${i + 1} (Pair 1)`);
       }
 
-      // Process Pair 2: Column L + N
       const client2Name = (row[11] || '').trim();
       const associate2Name = (row[13] || '').trim();
-      console.log(`[importWebClientsFromGoogleSheet] Row ${i+1} Pair 2 - Client: "${client2Name}" | Associate: "${associate2Name}"`);
-      
       if (client2Name) {
-        try {
-          // Check if client already exists
-          const existing = await db.prepare(`
-            SELECT id FROM web_clients 
-            WHERE campaign_id = ? AND name = ?
-          `).get(campaign.id, client2Name);
+        await upsertClient(client2Name, associate2Name, `Row ${i + 1} (Pair 2)`);
+      }
+    }
 
-          let clientId;
-          if (!existing) {
-            await db.prepare(`
-              INSERT INTO web_clients (campaign_id, business_name, name)
-              VALUES (?, ?, ?)
-            `).run(campaign.id, client2Name, client2Name);
-            
-            const newClient = await db.prepare(`
-              SELECT id FROM web_clients 
-              WHERE campaign_id = ? AND name = ?
-            `).get(campaign.id, client2Name);
-            clientId = newClient.id;
-            importedCount++;
-            console.log(`[importWebClientsFromGoogleSheet] Imported (Pair 2): ${client2Name}`);
-          } else {
-            clientId = existing.id;
-          }
-
-          // Assign associate if provided
-          if (associate2Name && clientId) {
-            console.log(`[importWebClientsFromGoogleSheet] Looking for associate: "${associate2Name}"`);
-            const associate = await db.prepare(`
-              SELECT id FROM users 
-              WHERE LOWER(name) = LOWER(?) AND role = 'web_seo_associate' AND is_active = 1
-            `).get(associate2Name);
-
-            if (associate) {
-              await db.prepare(`
-                UPDATE web_clients 
-                SET assigned_associate_id = ?
-                WHERE id = ?
-              `).run(associate.id, clientId);
-              console.log(`[importWebClientsFromGoogleSheet] ✓ Assigned ${associate2Name} to ${client2Name}`);
-            } else {
-              console.log(`[importWebClientsFromGoogleSheet] ✗ Associate "${associate2Name}" not found in system`);
-              errors.push(`Row ${i+1} (Pair 2): Associate "${associate2Name}" not found`);
-            }
-          }
-        } catch (err) {
-          console.error(`[importWebClientsFromGoogleSheet] Error processing Pair 2 row ${i+1}:`, err.message);
-          errors.push(`Row ${i+1} (Pair 2): ${err.message}`);
-        }
+    // Deactivate clients that used to be in this sheet but no longer are — keeps their
+    // row and webseo_tasks history intact (tracking preserved), just excludes them from
+    // future task generation and active-client counts.
+    let deactivatedCount = 0;
+    const currentlyActive = await db.prepare(`
+      SELECT id, name FROM web_clients WHERE campaign_id = ? AND is_active = 1
+    `).all(campaign.id);
+    for (const wc of currentlyActive) {
+      if (!seenClientNames.has(wc.name)) {
+        await db.prepare('UPDATE web_clients SET is_active = 0 WHERE id = ?').run(wc.id);
+        deactivatedCount++;
+        console.log(`[importWebClientsFromGoogleSheet] Deactivated (removed from sheet): ${wc.name}`);
       }
     }
 
@@ -297,7 +276,7 @@ export async function importWebClientsFromGoogleSheet(formData) {
     revalidatePath('/admin/web-seo-associates');
     revalidatePath('/admin');
 
-    let message = `Successfully imported ${importedCount} web client(s)`;
+    let message = `Synced ${importedCount} new, ${reactivatedCount} reactivated, ${deactivatedCount} deactivated web client(s)`;
     if (errors.length > 0) {
       message += `. (${errors.length} error(s): ${errors.join('; ')})`;
     }

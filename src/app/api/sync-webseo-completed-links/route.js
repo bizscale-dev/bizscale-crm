@@ -96,7 +96,7 @@ export async function POST(request) {
     const errors = [];
 
     const dbClients = await db.prepare(`
-      SELECT id, name, business_name, assigned_associate_id FROM web_clients WHERE campaign_id = ?
+      SELECT id, name, business_name, assigned_associate_id FROM web_clients WHERE campaign_id = ? AND is_active = 1
     `).all(campaign.id);
 
     console.log(`[WEBSEO SYNC] Found ${dbClients.length} web clients in database`);

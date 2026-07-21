@@ -62,10 +62,10 @@ export default async function WebClientsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
             <div className="card" style={{ borderLeft: `4px solid ${BRAND_COLOR}` }}>
               <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                Total Web Clients
+                Active Web Clients
               </h3>
               <div style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--foreground)' }}>
-                {webClients.length}
+                {webClients.filter(c => c.is_active).length}
               </div>
             </div>
             <div className="card" style={{ borderLeft: `4px solid ${BRAND_COLOR}` }}>
@@ -81,7 +81,15 @@ export default async function WebClientsPage() {
                 Assigned
               </h3>
               <div style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--foreground)' }}>
-                {webClients.filter(c => c.assigned_associate_id).length}
+                {webClients.filter(c => c.is_active && c.assigned_associate_id).length}
+              </div>
+            </div>
+            <div className="card" style={{ borderLeft: '4px solid var(--text-muted)' }}>
+              <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                Removed (from sheet)
+              </h3>
+              <div style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--foreground)' }}>
+                {webClients.filter(c => !c.is_active).length}
               </div>
             </div>
           </div>

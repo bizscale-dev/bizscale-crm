@@ -101,6 +101,10 @@ async function runMigrations(raw) {
     // refreshed on each sync run so associates with pre-existing sheet history can see
     // their real total immediately, instead of waiting for the rotation to reach them.
     "ALTER TABLE users ADD COLUMN lifetime_completed_links INTEGER DEFAULT 0",
+    // Web clients had no soft-delete flag at all until now — a client removed from
+    // the import sheet gets deactivated (history/webseo_tasks preserved) rather than
+    // deleted, matching the regular clients table's existing is_active pattern.
+    "ALTER TABLE web_clients ADD COLUMN is_active INTEGER DEFAULT 1",
   ];
 
   for (const sql of alterStatements) {
@@ -171,6 +175,7 @@ async function runMigrations(raw) {
       name TEXT NOT NULL,
       business_name TEXT NOT NULL,
       assigned_associate_id INTEGER,
+      is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
       FOREIGN KEY (assigned_associate_id) REFERENCES users(id) ON DELETE SET NULL

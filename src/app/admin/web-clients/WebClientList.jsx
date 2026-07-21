@@ -122,15 +122,21 @@ export default function WebClientList({ webClients, webAssociates, campaign }) {
               <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                 <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Business Name</th>
                 <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Client Name</th>
+                <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Status</th>
                 <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Assigned Associate</th>
                 <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredClients.map((client) => (
-                <tr key={client.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                <tr key={client.id} style={{ borderBottom: '1px solid var(--border)', opacity: client.is_active ? 1 : 0.55 }}>
                   <td style={{ padding: '0.75rem 0', fontWeight: '600' }}>{client.business_name}</td>
                   <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)' }}>{client.name}</td>
+                  <td style={{ padding: '0.75rem 0' }}>
+                    <Badge tone={client.is_active ? 'success' : 'neutral'}>
+                      {client.is_active ? 'Active' : 'Removed from sheet'}
+                    </Badge>
+                  </td>
                   <td style={{ padding: '0.75rem 0' }}>
                     {client.assigned_associate_name ? (
                       <Badge tone="brand">{client.assigned_associate_name}</Badge>

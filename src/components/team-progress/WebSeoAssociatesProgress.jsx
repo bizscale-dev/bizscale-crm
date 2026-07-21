@@ -16,7 +16,7 @@ export default async function WebSeoAssociatesProgress({ basePath } = {}) {
     SELECT u.id, u.name, u.email,
       SUM(wt.target_count) as total_target,
       SUM(wt.completed_count) as total_completed,
-      (SELECT COUNT(DISTINCT wc.id) FROM web_clients wc WHERE wc.assigned_associate_id = u.id AND wc.campaign_id = ?) as assigned_clients
+      (SELECT COUNT(DISTINCT wc.id) FROM web_clients wc WHERE wc.assigned_associate_id = u.id AND wc.campaign_id = ? AND wc.is_active = 1) as assigned_clients
     FROM users u
     LEFT JOIN webseo_tasks wt ON wt.associate_id = u.id AND wt.campaign_id = ?
     WHERE u.role = 'web_seo_associate'
