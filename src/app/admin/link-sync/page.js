@@ -8,6 +8,7 @@ const SYNC_TYPE_LABELS = {
   'daily-sync': 'Daily Sync (Clients/Writers/Associates)',
   'completed-links': 'SEO Completed Links',
   'webseo-completed-links': 'Web SEO Completed Links',
+  'web-clients': 'Web Clients (Add/Remove)',
 };
 
 function formatLogTime(isoString) {
@@ -171,7 +172,7 @@ export default async function LinkSyncPage() {
           <div>
             <h3 style={{ margin: 0, marginBottom: '0.5rem', color: 'var(--foreground)' }}>Daily Automation</h3>
             <p style={{ margin: 0 }}>
-              System automatically syncs at 2 PM and 11:30 PM (Pakistan Time) daily using the Settings-configured URLs — this includes both the regular SEO Associate sync above and the Web SEO Associate sync below — or you can manually trigger either anytime using the buttons above.
+              System automatically syncs at 2 PM and 11:30 PM (Pakistan Time) daily using the Settings-configured URLs — this includes the main Client sheet (SEO clients added/removed, funnel progression), the regular SEO Associate completed-links sync above, the Web SEO Associate completed-links sync below, and the Web Clients sheet (Web SEO clients added/removed). Each runs a couple minutes apart to avoid overlapping. You can also manually trigger the completed-links syncs anytime using the buttons above, or the Web Clients import from Admin → Web Clients.
             </p>
           </div>
 
