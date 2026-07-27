@@ -28,6 +28,7 @@ export default async function WriterDetail({ id, backHref, backLabel }) {
   let todayTasks = [], overallStats = null, recentLogs = [], upcomingDays = [], weeklyBreakdown = [], weeklySummary = [];
   let todayClientsById = {}, allWriterClients = [];
   let cumulativeByClientType = {};
+  let todayWebTasks = [], webOverallStats = null, webWeeklySummary = [];
 
   if (campaign) {
     todayTasks = await db.prepare(`
@@ -116,12 +117,56 @@ export default async function WriterDetail({ id, backHref, backLabel }) {
       WHERE c.assigned_writer_id = ? AND c.campaign_id = ? AND c.is_active = 1
       ORDER BY c.name
     `).all(writerId, campaign.id);
+
+    // Web Tasks — mirrors this writer's assigned Web SEO Associate's schedule (see
+    // web_writing_tasks generation in webSeoTaskGenerator.js).
+    todayWebTasks = await db.prepare(`
+      SELECT wwt.*, wc.business_name, wc.name as client_name
+      FROM web_writing_tasks wwt
+      JOIN web_clients wc ON wc.id = wwt.client_id
+      WHERE wwt.writer_id = ? AND wwt.campaign_id = ? AND wwt.task_date = ? AND wc.is_active = 1
+      ORDER BY wwt.post_type
+    `).all(writerId, campaign.id, today);
+
+    webOverallStats = await db.prepare(`
+      SELECT SUM(target_count) as target, SUM(completed_count) as completed
+      FROM web_writing_tasks WHERE writer_id = ? AND campaign_id = ?
+    `).get(writerId, campaign.id);
+
+    const webWeeksSchedule = [
+      { week: 1, days: '1-5' },
+      { week: 2, days: '6-10' },
+      { week: 3, days: '11-15' },
+      { week: 4, days: '16' },
+    ];
+    for (const schedule of webWeeksSchedule) {
+      const dayStart = parseInt(schedule.days.split('-')[0]);
+      const dayEnd = parseInt(schedule.days.split('-')[1] || schedule.days);
+
+      const weekStats = await db.prepare(`
+        SELECT SUM(target_count) as target, SUM(completed_count) as completed
+        FROM web_writing_tasks
+        WHERE writer_id = ? AND campaign_id = ? AND day_number >= ? AND day_number <= ?
+      `).get(writerId, campaign.id, dayStart, dayEnd);
+
+      webWeeklySummary.push({
+        week: schedule.week,
+        dayRange: `Day ${schedule.days}`,
+        target: weekStats?.target || 0,
+        completed: weekStats?.completed || 0,
+      });
+    }
   }
 
   const todayTarget = todayTasks.reduce((s, t) => s + t.target_count, 0);
   const todayCompleted = todayTasks.reduce((s, t) => s + t.completed_count, 0);
   const overallPercent = overallStats?.target > 0 ? Math.round((overallStats.completed / overallStats.target) * 100) : 0;
   const todayPercent = todayTarget > 0 ? Math.round((todayCompleted / todayTarget) * 100) : 0;
+
+  const todayWebTarget = todayWebTasks.reduce((s, t) => s + t.target_count, 0);
+  const todayWebCompleted = todayWebTasks.reduce((s, t) => s + t.completed_count, 0);
+  const webOverallPercent = webOverallStats?.target > 0 ? Math.round((webOverallStats.completed / webOverallStats.target) * 100) : 0;
+  const todayWebPercent = todayWebTarget > 0 ? Math.round((todayWebCompleted / todayWebTarget) * 100) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -156,6 +201,8 @@ export default async function WriterDetail({ id, backHref, backLabel }) {
             <StatCard title="Today's Posts Target" value={todayTarget} sub={`${todayCompleted} completed (${todayPercent}%)`} color="var(--success)" />
             <StatCard title="Overall Posts Target" value={overallStats?.target || 0} sub={`${overallStats?.completed || 0} completed (${overallPercent}%)`} color="var(--primary)" />
             <StatCard title="Upcoming Days" value={upcomingDays.length} sub="days with tasks remaining" color="#f59e0b" />
+            <StatCard title="Today's Web Tasks" value={todayWebTarget} sub={`${todayWebCompleted} completed (${todayWebPercent}%)`} color={BRAND_COLOR} />
+            <StatCard title="Overall Web Tasks" value={webOverallStats?.target || 0} sub={`${webOverallStats?.completed || 0} completed (${webOverallPercent}%)`} color={BRAND_COLOR} />
           </div>
 
           {/* Today's Clients - Assigned vs Not Assigned */}
@@ -273,6 +320,33 @@ export default async function WriterDetail({ id, backHref, backLabel }) {
             )}
           </div>
 
+          {/* Today's Web Tasks */}
+          {todayWebTasks.length > 0 && (
+            <div className="card">
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+                Today&apos;s Web Tasks — {today}
+              </h2>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+                {todayWebTasks.map(task => {
+                  const pct = task.target_count > 0 ? Math.round((task.completed_count / task.target_count) * 100) : 0;
+                  const done = task.completed_count >= task.target_count;
+                  return (
+                    <div key={task.id} style={{ padding: '1rem', border: `1px solid ${done ? 'var(--success)' : 'var(--border)'}`, borderRadius: '0.5rem', minWidth: '180px', flex: '1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                        <span style={{ fontWeight: '600' }}>{task.business_name || task.client_name} — {POST_TYPE_LABELS[task.post_type] || task.post_type}</span>
+                        {done && <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}>✓ Done</span>}
+                      </div>
+                      <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.25rem' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', backgroundColor: done ? 'var(--success)' : BRAND_COLOR }}></div>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{task.completed_count} / {task.target_count} posts</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Weekly Summary & Goals */}
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
@@ -321,6 +395,53 @@ export default async function WriterDetail({ id, backHref, backLabel }) {
               </table>
             </div>
           </div>
+
+          {/* Web Tasks Weekly Summary */}
+          {webWeeklySummary.some(ws => ws.target > 0) && (
+            <div className="card">
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+                Web Tasks Weekly Summary
+              </h2>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                      <th style={{ padding: '0.75rem 0' }}>Week</th>
+                      <th style={{ padding: '0.75rem 0' }}>Days</th>
+                      <th style={{ padding: '0.75rem 0' }}>Posts Target</th>
+                      <th style={{ padding: '0.75rem 0' }}>Completed</th>
+                      <th style={{ padding: '0.75rem 0' }}>Progress</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {webWeeklySummary.map((ws) => {
+                      const pct = ws.target > 0 ? Math.round((ws.completed / ws.target) * 100) : 0;
+                      return (
+                        <tr key={ws.week} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '0.75rem 0', fontWeight: '600' }}>Week {ws.week}</td>
+                          <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)' }}>{ws.dayRange}</td>
+                          <td style={{ padding: '0.75rem 0' }}>
+                            <strong style={{ color: BRAND_COLOR }}>{ws.target}</strong>
+                          </td>
+                          <td style={{ padding: '0.75rem 0', color: pct === 100 ? BRAND_COLOR : 'var(--text-muted)' }}>
+                            {ws.completed}
+                          </td>
+                          <td style={{ padding: '0.75rem 0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <div style={{ width: '60px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
+                                <div style={{ width: `${pct}%`, height: '100%', backgroundColor: BRAND_COLOR }}></div>
+                              </div>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pct}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Weekly Breakdown */}
           {weeklyBreakdown.length > 0 && (

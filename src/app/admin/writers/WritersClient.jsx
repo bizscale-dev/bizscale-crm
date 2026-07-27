@@ -153,6 +153,7 @@ export default function WritersClient({ writers, writerStats, campaign, webSeoAs
                 <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Status</th>
                 <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Assigned Clients</th>
                 <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Posts Progress</th>
+                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Web Tasks Progress</th>
                 <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Web Tasks — Mirrors Associate</th>
               </tr>
             </thead>
@@ -161,6 +162,9 @@ export default function WritersClient({ writers, writerStats, campaign, webSeoAs
                 const stats = getStatForWriter(writer.id);
                 const progress = stats.total_target_posts > 0
                   ? Math.round((stats.total_completed_posts / stats.total_target_posts) * 100)
+                  : 0;
+                const webProgress = stats.web_target_posts > 0
+                  ? Math.round((stats.web_completed_posts / stats.web_target_posts) * 100)
                   : 0;
 
                 return (
@@ -198,6 +202,20 @@ export default function WritersClient({ writers, writerStats, campaign, webSeoAs
                         </div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                           {stats.total_completed_posts || 0} / {stats.total_target_posts || 0}
+                        </span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '0.75rem 0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+                        <div style={{ width: '80px', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${webProgress}%`,
+                            height: '100%',
+                            backgroundColor: webProgress === 100 ? BRAND_COLOR : 'var(--primary)'
+                          }}></div>
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          {stats.web_completed_posts || 0} / {stats.web_target_posts || 0}
                         </span>
                       </div>
                     </td>
