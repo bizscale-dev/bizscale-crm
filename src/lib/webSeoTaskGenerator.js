@@ -39,6 +39,23 @@ export async function generateWebSeoTasks(campaignId) {
     ORDER BY u.name
   `).all(campaignId);
 
+  // Regeneration wipes and rebuilds every task row (needed since adding/removing a
+  // client shifts batch assignments), which would otherwise reset completed_count to 0
+  // for every already-passed visit — the completed-links sync only ever writes to
+  // *today's* row, so a wiped past visit can never be refilled. Snapshot existing
+  // progress first, keyed by (client, day, post type) — that combination stays stable
+  // across regenerations since new clients are appended to a batch rather than inserted
+  // into existing slots — so it can be re-applied to the freshly generated rows below.
+  const priorCompleted = new Map();
+  const priorRows = await db.prepare(`
+    SELECT client_id, day_number, post_type, completed_count
+    FROM webseo_tasks
+    WHERE campaign_id = ? AND completed_count > 0
+  `).all(campaignId);
+  for (const row of priorRows) {
+    priorCompleted.set(`${row.client_id}|${row.day_number}|${row.post_type}`, row.completed_count);
+  }
+
   await db.prepare('DELETE FROM webseo_tasks WHERE campaign_id = ?').run(campaignId);
 
   const rows = [];
@@ -82,6 +99,7 @@ export async function generateWebSeoTasks(campaignId) {
           visitDays.forEach((visit, vIdx) => {
             const count = perVisitBase + (vIdx < extraVisits ? 1 : 0);
             if (count > 0) {
+              const priorKey = `${client.id}|${visit.dayNumber}|${postType}`;
               rows.push({
                 campaign_id: campaignId,
                 client_id: client.id,
@@ -90,6 +108,7 @@ export async function generateWebSeoTasks(campaignId) {
                 task_date: visit.dateStr,
                 post_type: postType,
                 target_count: count,
+                completed_count: priorCompleted.get(priorKey) || 0,
               });
             }
           });
@@ -100,12 +119,12 @@ export async function generateWebSeoTasks(campaignId) {
 
   if (rows.length > 0) {
     const insertSql = `
-      INSERT INTO webseo_tasks (campaign_id, client_id, associate_id, day_number, task_date, post_type, target_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO webseo_tasks (campaign_id, client_id, associate_id, day_number, task_date, post_type, target_count, completed_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
     await db.batch(rows.map(r => ({
       sql: insertSql,
-      args: [r.campaign_id, r.client_id, r.associate_id, r.day_number, r.task_date, r.post_type, r.target_count],
+      args: [r.campaign_id, r.client_id, r.associate_id, r.day_number, r.task_date, r.post_type, r.target_count, r.completed_count],
     })));
   }
 

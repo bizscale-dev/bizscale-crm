@@ -63,6 +63,23 @@ export async function generateSEOTasks(campaignId) {
     image: campaign.image_target || 9,
   };
 
+  // Regeneration wipes and rebuilds every task row (needed since adding/removing a
+  // client shifts the rotation), which would otherwise reset completed_count to 0 for
+  // every already-passed day — the completed-links sync only ever writes to *today's*
+  // row, so a wiped past day can never be refilled. Snapshot existing progress first,
+  // keyed by (client, day, link type) — that combination stays stable across
+  // regenerations since new clients are appended rather than inserted into existing
+  // rotation slots — so it can be re-applied to the freshly generated rows below.
+  const priorCompleted = new Map();
+  const priorRows = await db.prepare(`
+    SELECT client_id, day_number, link_type, completed_count
+    FROM seo_tasks
+    WHERE campaign_id = ? AND completed_count > 0
+  `).all(campaignId);
+  for (const row of priorRows) {
+    priorCompleted.set(`${row.client_id}|${row.day_number}|${row.link_type}`, row.completed_count);
+  }
+
   // Clear existing tasks for this campaign
   await db.prepare('DELETE FROM seo_tasks WHERE campaign_id = ?').run(campaignId);
 
@@ -159,6 +176,7 @@ export async function generateSEOTasks(campaignId) {
         // Each link type gets its daily target for this client on this day
         for (const [linkType, dailyTarget] of Object.entries(dailyLinkTargets)) {
           if (dailyTarget > 0) {
+            const priorKey = `${client.id}|${currentWorkday}|${linkType}`;
             allTasks.push({
               campaign_id: campaignId,
               associate_id: associate.user_id,
@@ -166,7 +184,8 @@ export async function generateSEOTasks(campaignId) {
               day_number: currentWorkday,
               task_date: taskDateStr,
               link_type: linkType,
-              target_count: dailyTarget
+              target_count: dailyTarget,
+              completed_count: priorCompleted.get(priorKey) || 0
             });
           }
         }
@@ -177,12 +196,12 @@ export async function generateSEOTasks(campaignId) {
   // Insert all tasks atomically
   if (allTasks.length > 0) {
     const insertSql = `
-      INSERT INTO seo_tasks (campaign_id, associate_id, client_id, day_number, task_date, link_type, target_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO seo_tasks (campaign_id, associate_id, client_id, day_number, task_date, link_type, target_count, completed_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
     await db.batch(allTasks.map(t => ({
       sql: insertSql,
-      args: [t.campaign_id, t.associate_id, t.client_id, t.day_number, t.task_date, t.link_type, t.target_count],
+      args: [t.campaign_id, t.associate_id, t.client_id, t.day_number, t.task_date, t.link_type, t.target_count, t.completed_count],
     })));
   }
 
