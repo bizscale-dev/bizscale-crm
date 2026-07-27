@@ -135,8 +135,13 @@ export default async function WebSEOAssociatesPage() {
                   <tbody>
                     {webSeoStats.map((associate) => {
                       const totalTarget = (associate.guestpost_target || 0) + (associate.web2_target || 0);
-                      const totalCompleted = (associate.guestpost_completed || 0) + (associate.web2_completed || 0);
-                      const progressPercent = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0;
+                      // webseo_tasks rows get wiped and rebuilt from scratch on every client
+                      // sync (see webSeoTaskGenerator.js), so guestpost/web2_completed only
+                      // reflect the current rotation cycle, not real history.
+                      // lifetime_completed_links is a running total from the sheet that's
+                      // never reset — use that for overall progress (same number shown in
+                      // All-Time (Sheet)) instead.
+                      const progressPercent = totalTarget > 0 ? Math.round(((associate.lifetime_completed_links || 0) / totalTarget) * 100) : 0;
 
                       return (
                         <tr key={associate.id} style={{ borderBottom: '1px solid var(--border)' }}>

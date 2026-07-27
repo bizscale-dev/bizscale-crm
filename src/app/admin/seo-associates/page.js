@@ -56,7 +56,13 @@ export default async function SEOAssociatesPage() {
               <tbody>
                 {associates.map((associate) => {
                   const expectedTotalLinks = associate.total_clients * monthlyTargetPerClient;
-                  const progressPercent = expectedTotalLinks > 0 ? Math.round((associate.completed_tasks / expectedTotalLinks) * 100) : 0;
+                  // seo_tasks rows (and their completed_count) get wiped and rebuilt from
+                  // scratch every time a new client is onboarded (see taskService.js's
+                  // generateSEOTasks), so completed_tasks only reflects the current
+                  // rotation cycle, not the associate's real history. lifetime_completed_links
+                  // is a running total from the sheet that's never reset — use that for the
+                  // overall progress percentage instead (same number shown in All-Time (Sheet)).
+                  const progressPercent = expectedTotalLinks > 0 ? Math.round(((associate.lifetime_completed_links || 0) / expectedTotalLinks) * 100) : 0;
                   return (
                     <tr key={associate.id} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '500', whiteSpace: 'nowrap' }}>{associate.name}</td>
