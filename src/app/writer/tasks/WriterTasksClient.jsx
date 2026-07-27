@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { logPost, deletePost } from '../actions';
+import { logPost, deletePost, logWebPost, deleteWebPost } from '../actions';
 
 const POST_TYPE_LABELS = { guestpost: 'Guest Post', web2: 'Web 2.0', pdf: 'PDF Submission' };
 
@@ -15,7 +15,7 @@ const inputStyle = {
   color: 'var(--foreground)'
 };
 
-export default function WriterTasksClient({ tasksByClient, availableDates, selectedDate, today }) {
+export default function WriterTasksClient({ tasksByClient, webTasksByClient = [], availableDates, selectedDate, today }) {
   const router = useRouter();
 
   const handleDateChange = (e) => {
@@ -56,17 +56,38 @@ export default function WriterTasksClient({ tasksByClient, availableDates, selec
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {client.tasks.map(task => (
-                <TaskCard key={task.id} task={task} />
+                <TaskCard key={task.id} task={task} logAction={logPost} deleteAction={deletePost} />
               ))}
             </div>
           </div>
         ))
       )}
+
+      {webTasksByClient.length > 0 && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '0.5rem 0' }}>
+            <h2 style={{ fontSize: '1.1rem', margin: 0 }}>Web Tasks</h2>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Posts for your assigned Web SEO Associate&apos;s clients</span>
+          </div>
+          {webTasksByClient.map(client => (
+            <div key={`web-${client.client_id}`} className="card">
+              <div style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>{client.client_name}</h3>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {client.tasks.map(task => (
+                  <TaskCard key={task.id} task={task} logAction={logWebPost} deleteAction={deleteWebPost} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
 
-function TaskCard({ task }) {
+function TaskCard({ task, logAction, deleteAction }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   // Logs are ordered newest-first (see page.js query), so logs[0] is the "top of
@@ -87,7 +108,7 @@ function TaskCard({ task }) {
         // Unchecking box `index` removes everything back down to that level.
         const toRemove = logs.slice(0, completedCount - index);
         for (const log of toRemove) {
-          await deletePost(log.id);
+          await deleteAction(log.id);
         }
       } else {
         // Checking box `index` adds enough posts to reach that level.
@@ -97,7 +118,7 @@ function TaskCard({ task }) {
           formData.set('title', `${label} #${i + 1}`);
           formData.set('url', '');
           formData.set('word_count', '');
-          await logPost(null, formData);
+          await logAction(null, formData);
         }
       }
       router.refresh();

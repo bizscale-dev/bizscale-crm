@@ -13,15 +13,21 @@ export default async function WritersPage() {
   let writerStats = [];
   let writersDashboard = [];
 
+  let webSeoAssociates = [];
+
   if (campaign) {
     writers = await db.prepare(`
-      SELECT u.id, u.name, u.email, u.is_active,
+      SELECT u.id, u.name, u.email, u.is_active, u.mirrors_web_associate_id,
         COALESCE(wa.daily_post_target, 70) as daily_post_target
       FROM users u
       LEFT JOIN writer_assignments wa ON wa.user_id = u.id AND wa.campaign_id = ?
       WHERE u.role = 'writer'
       ORDER BY u.name
     `).all(campaign.id);
+
+    webSeoAssociates = await db.prepare(`
+      SELECT id, name FROM users WHERE role = 'web_seo_associate' AND is_active = 1 ORDER BY name
+    `).all();
 
     writerStats = await db.prepare(`
       SELECT u.id, u.name,
@@ -204,7 +210,7 @@ export default async function WritersPage() {
           </div>
 
           {/* Detailed Writer Management */}
-          <WritersClient writers={writers} writerStats={writerStats} campaign={campaign} />
+          <WritersClient writers={writers} writerStats={writerStats} campaign={campaign} webSeoAssociates={webSeoAssociates} />
         </>
       )}
     </div>

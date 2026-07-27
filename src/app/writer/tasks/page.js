@@ -14,6 +14,7 @@ export default async function WriterTasksPage({ searchParams }) {
   const date = searchParams?.date || today;
 
   let tasks = [], availableDates = [];
+  let webTasks = [], webAvailableDates = [];
 
   if (campaign) {
     // Only show tasks for active clients assigned to this writer
@@ -33,6 +34,25 @@ export default async function WriterTasksPage({ searchParams }) {
       WHERE wt.writer_id = ? AND wt.campaign_id = ? AND c.is_active = 1
       ORDER BY wt.task_date
     `).all(userId, campaign.id);
+
+    // Web Tasks — mirrors this writer's assigned Web SEO Associate's schedule (see
+    // web_writing_tasks generation in webSeoTaskGenerator.js). Shown as a separate
+    // section on this same page rather than its own nav tab.
+    webTasks = await db.prepare(`
+      SELECT wwt.*, wc.name as client_name, wc.business_name
+      FROM web_writing_tasks wwt
+      JOIN web_clients wc ON wc.id = wwt.client_id
+      WHERE wwt.writer_id = ? AND wwt.campaign_id = ? AND wwt.task_date = ? AND wc.is_active = 1
+      ORDER BY wc.business_name, wwt.post_type
+    `).all(userId, campaign.id, date);
+
+    webAvailableDates = await db.prepare(`
+      SELECT DISTINCT wwt.task_date, wwt.day_number
+      FROM web_writing_tasks wwt
+      JOIN web_clients wc ON wc.id = wwt.client_id
+      WHERE wwt.writer_id = ? AND wwt.campaign_id = ? AND wc.is_active = 1
+      ORDER BY wwt.task_date
+    `).all(userId, campaign.id);
   }
 
   // Fetch each task's own logged posts so the writer can see/delete what they've logged
@@ -46,6 +66,19 @@ export default async function WriterTasksPage({ searchParams }) {
     logs.forEach(log => {
       if (!logsByTask[log.task_id]) logsByTask[log.task_id] = [];
       logsByTask[log.task_id].push(log);
+    });
+  }
+
+  const webLogsByTask = {};
+  if (webTasks.length > 0) {
+    const webTaskIds = webTasks.map(t => t.id);
+    const placeholders = webTaskIds.map(() => '?').join(',');
+    const webLogs = await db.prepare(`
+      SELECT * FROM web_writing_logs WHERE task_id IN (${placeholders}) ORDER BY created_at DESC
+    `).all(...webTaskIds);
+    webLogs.forEach(log => {
+      if (!webLogsByTask[log.task_id]) webLogsByTask[log.task_id] = [];
+      webLogsByTask[log.task_id].push(log);
     });
   }
 
@@ -63,6 +96,24 @@ export default async function WriterTasksPage({ searchParams }) {
     tasksByClient[t.client_id].tasks.push({ ...t, logs: logsByTask[t.id] || [] });
   });
 
+  const webTasksByClient = {};
+  webTasks.forEach(t => {
+    if (!webTasksByClient[t.client_id]) {
+      webTasksByClient[t.client_id] = {
+        client_id: t.client_id,
+        client_name: t.business_name || t.client_name,
+        tasks: [],
+      };
+    }
+    webTasksByClient[t.client_id].tasks.push({ ...t, logs: webLogsByTask[t.id] || [] });
+  });
+
+  // Union of both task types' scheduled dates, so the date selector covers whichever
+  // has tasks on a given day even if the writer's regular and web schedules diverge.
+  const allDatesMap = new Map();
+  [...availableDates, ...webAvailableDates].forEach(d => allDatesMap.set(d.task_date, d));
+  const combinedAvailableDates = Array.from(allDatesMap.values()).sort((a, b) => a.task_date.localeCompare(b.task_date));
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       {!campaign ? (
@@ -70,7 +121,8 @@ export default async function WriterTasksPage({ searchParams }) {
       ) : (
         <WriterTasksClient
           tasksByClient={Object.values(tasksByClient)}
-          availableDates={availableDates}
+          webTasksByClient={Object.values(webTasksByClient)}
+          availableDates={combinedAvailableDates}
           selectedDate={date}
           today={today}
         />

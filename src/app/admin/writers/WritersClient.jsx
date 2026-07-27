@@ -1,13 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { regenerateWriterTasks, clearWriterTasks } from './actions';
+import { useState, useTransition } from 'react';
+import { regenerateWriterTasks, clearWriterTasks, setWriterMirrorsAssociate } from './actions';
 
 const BRAND_COLOR = '#16b293';
 
-export default function WritersClient({ writers, writerStats, campaign }) {
+export default function WritersClient({ writers, writerStats, campaign, webSeoAssociates = [] }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
+  const [isPending, startTransition] = useTransition();
+
+  const handleMirrorChange = (writerId, associateId) => {
+    startTransition(async () => {
+      const result = await setWriterMirrorsAssociate(writerId, associateId ? parseInt(associateId, 10) : null);
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error });
+      } else {
+        window.location.reload();
+      }
+    });
+  };
 
   const handleRegenerateTasks = async () => {
     if (!confirm('Regenerate writer tasks? This will recalculate all client rotations.')) return;
@@ -141,12 +153,13 @@ export default function WritersClient({ writers, writerStats, campaign }) {
                 <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Status</th>
                 <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Assigned Clients</th>
                 <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Posts Progress</th>
+                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Web Tasks — Mirrors Associate</th>
               </tr>
             </thead>
             <tbody>
               {writers.map(writer => {
                 const stats = getStatForWriter(writer.id);
-                const progress = stats.total_target_posts > 0 
+                const progress = stats.total_target_posts > 0
                   ? Math.round((stats.total_completed_posts / stats.total_target_posts) * 100)
                   : 0;
 
@@ -177,9 +190,9 @@ export default function WritersClient({ writers, writerStats, campaign }) {
                     <td style={{ padding: '0.75rem 0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
                         <div style={{ width: '80px', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-                          <div style={{ 
-                            width: `${progress}%`, 
-                            height: '100%', 
+                          <div style={{
+                            width: `${progress}%`,
+                            height: '100%',
                             backgroundColor: progress === 100 ? BRAND_COLOR : 'var(--primary)'
                           }}></div>
                         </div>
@@ -187,6 +200,26 @@ export default function WritersClient({ writers, writerStats, campaign }) {
                           {stats.total_completed_posts || 0} / {stats.total_target_posts || 0}
                         </span>
                       </div>
+                    </td>
+                    <td style={{ padding: '0.75rem 0', textAlign: 'center' }}>
+                      <select
+                        defaultValue={writer.mirrors_web_associate_id || ''}
+                        disabled={isPending}
+                        onChange={(e) => handleMirrorChange(writer.id, e.target.value)}
+                        style={{
+                          padding: '0.35rem 0.5rem',
+                          borderRadius: '0.375rem',
+                          border: '1px solid var(--border)',
+                          backgroundColor: 'var(--background)',
+                          color: 'var(--foreground)',
+                          fontSize: '0.8rem',
+                        }}
+                      >
+                        <option value="">None</option>
+                        {webSeoAssociates.map(a => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
                     </td>
                   </tr>
                 );

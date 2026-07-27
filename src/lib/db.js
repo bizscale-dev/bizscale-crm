@@ -105,6 +105,10 @@ async function runMigrations(raw) {
     // the import sheet gets deactivated (history/webseo_tasks preserved) rather than
     // deleted, matching the regular clients table's existing is_active pattern.
     "ALTER TABLE web_clients ADD COLUMN is_active INTEGER DEFAULT 1",
+    // Which Web SEO Associate a writer mirrors — set only for writers doing "Web Tasks"
+    // (writing the actual posts for a Web SEO Associate's client roster). Null for
+    // writers not doing this.
+    "ALTER TABLE users ADD COLUMN mirrors_web_associate_id INTEGER",
   ];
 
   for (const sql of alterStatements) {
@@ -199,6 +203,36 @@ async function runMigrations(raw) {
       summary TEXT,
       details TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    // A writer's mirrored copy of a Web SEO Associate's task schedule — same client
+    // (web_clients), day, and post type as the associate's webseo_tasks row, generated
+    // alongside it in generateWebSeoTasks. completed_count here is the writer's own
+    // independent progress (they log their own posts via web_writing_logs), separate
+    // from the associate's completed_count.
+    `CREATE TABLE IF NOT EXISTS web_writing_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      client_id INTEGER NOT NULL,
+      writer_id INTEGER NOT NULL,
+      associate_id INTEGER NOT NULL,
+      day_number INTEGER NOT NULL,
+      task_date DATE NOT NULL,
+      post_type TEXT NOT NULL,
+      target_count INTEGER DEFAULT 1,
+      completed_count INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS web_writing_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      url TEXT,
+      word_count INTEGER,
+      notes TEXT,
+      logged_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (task_id) REFERENCES web_writing_tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (logged_by) REFERENCES users(id)
     )`,
   ];
 
