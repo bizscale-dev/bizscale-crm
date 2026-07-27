@@ -94,7 +94,6 @@ export async function deletePost(logId) {
     await db.prepare('UPDATE writing_tasks SET completed_count = ? WHERE id = ?').run(logCount, log.task_id);
 
     revalidatePath('/writer/tasks');
-    revalidatePath('/writer/logs');
     revalidatePath('/writer');
     return { success: true };
   } catch (err) {

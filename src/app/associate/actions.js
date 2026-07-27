@@ -93,7 +93,6 @@ export async function deleteLink(logId) {
     await db.prepare('UPDATE seo_tasks SET completed_count = ? WHERE id = ?').run(logCount, log.task_id);
 
     revalidatePath('/associate/tasks');
-    revalidatePath('/associate/logs');
     revalidatePath('/associate');
     return { success: true };
   } catch (err) {
