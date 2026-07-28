@@ -1,6 +1,5 @@
 import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
-import { generateWriterTasks } from '@/lib/writerTaskGenerator';
 
 // 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
 // for why this matters (a killed function fails silently with no error surfaced). This
@@ -185,54 +184,14 @@ export async function POST(request) {
       console.log('[sync-apply] No writer assignments provided');
     }
 
-    // AUTO-GENERATE WRITER TASKS if writers have clients assigned
-    // Check if we should generate tasks:
-    // 1. If writers were just assigned (results.writersAssigned > 0)
-    // 2. OR if writerAssignments were provided (which might update existing assignments)
-    // 3. OR if there are already writers in the campaign with clients
-    const shouldGenerateWriterTasks = results.writersAssigned > 0 || (writerAssignments && Object.keys(writerAssignments).length > 0);
-    
-    if (shouldGenerateWriterTasks) {
-      try {
-        // Check if there are any writers assigned to this campaign
-        const writersInCampaign = await db.prepare(`
-          SELECT COUNT(DISTINCT user_id) as count FROM writer_assignments WHERE campaign_id = ?
-        `).get(campaign.id);
-        
-        console.log(`[sync-apply] Writers in campaign: ${writersInCampaign.count}`);
-
-        if (writersInCampaign.count > 0) {
-          // Check if there are clients assigned to these writers
-          const clientsWithWriters = await db.prepare(`
-            SELECT COUNT(*) as count FROM clients WHERE campaign_id = ? AND assigned_writer_id IS NOT NULL AND is_active = 1
-          `).get(campaign.id);
-          
-          console.log(`[sync-apply] Clients with writers: ${clientsWithWriters.count}`);
-
-          if (clientsWithWriters.count > 0) {
-            console.log(`[sync-apply] Attempting to generate writer tasks for campaign ${campaign.id}`);
-            const taskResult = await generateWriterTasks(campaign.id);
-            results.writerTasksGenerated = true;
-            console.log('[sync-apply] Writer tasks auto-generated:', taskResult.message);
-          } else {
-            console.log('[sync-apply] No clients assigned to writers, skipping task generation');
-          }
-        } else {
-          console.log('[sync-apply] No writers in campaign, skipping task generation');
-        }
-      } catch (err) {
-        console.error('[sync-apply] Error generating writer tasks:', err.message, err.stack);
-        // Don't fail the sync if tasks can't be generated, but report the error
-        results.writerTaskGenerationError = err.message;
-      }
-    } else {
-      console.log('[sync-apply] No writers to assign, skipping task generation');
-    }
+    // Writer task generation is no longer driven by this sync — writers now get
+    // their tasks from the GBP-Off Page / Web-Off Page sheets directly (see
+    // src/lib/writerOffpageSync.js, on its own cron trigger).
 
     return Response.json({
       success: true,
       results,
-      message: `Applied changes: ${results.deactivated} deactivated, ${results.reactivated} reactivated, ${results.associatesAssigned} clients to associates, ${results.writersAssigned} clients to writers${results.writerTasksGenerated ? ', writer tasks generated' : ''}${results.writerTaskGenerationError ? ` (Error: ${results.writerTaskGenerationError})` : ''}`,
+      message: `Applied changes: ${results.deactivated} deactivated, ${results.reactivated} reactivated, ${results.associatesAssigned} clients to associates, ${results.writersAssigned} clients to writers`,
     });
   } catch (error) {
     console.error('Apply changes error:', error);

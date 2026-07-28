@@ -52,7 +52,6 @@ export default function CampaignList({ campaigns, activeCampaignId }) {
             <th style={thStyle}>Status</th>
             <th style={thStyle}>Start Date</th>
             <th style={thStyle}>Days</th>
-            <th style={thStyle}>Writer App.</th>
             <th style={thStyle}>Actions</th>
           </tr>
         </thead>
@@ -81,7 +80,6 @@ export default function CampaignList({ campaigns, activeCampaignId }) {
                 </td>
                 <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>{c.start_date || '—'}</td>
                 <td style={tdStyle}>{c.total_days}</td>
-                <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>Approach {c.writer_approach}</td>
                 <td style={tdStyle}>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {c.status !== 'active' && (

@@ -205,3 +205,41 @@ export async function updateWebClientsImportSheetUrl(prevState, formData) {
     return { error: error.message };
   }
 }
+
+// The sheet writers' GBP-Off Page / Web-Off Page task tabs live in (dynamically
+// named by current month/year, see src/lib/writerOffpageSync.js) — one spreadsheet,
+// both tabs looked up by name at sync time.
+export async function updateWriterOffpageSheetUrl(prevState, formData) {
+  const db = await getDb();
+  const session = await verifySession();
+
+  if (!session) {
+    return { error: 'Not authenticated' };
+  }
+
+  const sheetUrl = formData.get('sheet_url')?.trim();
+
+  if (!sheetUrl) {
+    return { error: 'Google Sheets URL is required' };
+  }
+
+  if (!sheetUrl.includes('docs.google.com/spreadsheets')) {
+    return { error: 'Invalid Google Sheets URL' };
+  }
+
+  try {
+    const existing = await db.prepare("SELECT key FROM settings WHERE key = ?").get('writer_offpage_sheet_url');
+
+    if (existing) {
+      await db.prepare("UPDATE settings SET value = ? WHERE key = ?").run(sheetUrl, 'writer_offpage_sheet_url');
+    } else {
+      await db.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run('writer_offpage_sheet_url', sheetUrl);
+    }
+
+    revalidatePath('/admin/writers');
+    return { success: 'Writer GBP/Web-Off Page sheet URL saved successfully' };
+  } catch (error) {
+    console.error('Settings update error:', error);
+    return { error: error.message };
+  }
+}

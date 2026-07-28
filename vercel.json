@@ -31,6 +31,14 @@
     {
       "path": "/api/cron/sync-web-clients",
       "schedule": "36 18 * * *"
+    },
+    {
+      "path": "/api/cron/sync-writer-offpage",
+      "schedule": "8 9 * * *"
+    },
+    {
+      "path": "/api/cron/sync-writer-offpage",
+      "schedule": "38 18 * * *"
     }
   ]
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState, useMemo } from 'react';
+import { useActionState, useState } from 'react';
 import LinkTargetsFields from '@/components/LinkTargetsFields';
 import { createCampaign, updateCampaign } from './actions';
 
@@ -32,11 +32,6 @@ export default function CampaignForm({ mode = 'create', initialData = null, onSu
       image: 9
     };
   });
-
-  // Calculate monthly posts per client
-  const monthlyPostsPerClient = useMemo(() => {
-    return linkTargets.web2 + linkTargets.guestpost + linkTargets.pdf;
-  }, [linkTargets]);
 
   return (
     <form action={formAction}>
@@ -81,34 +76,6 @@ export default function CampaignForm({ mode = 'create', initialData = null, onSu
 
       <Section title="Link Targets Per Client" subtitle={`Monthly quota per client — currently ${Object.values(linkTargets).reduce((a, b) => a + b, 0)} links/month`}>
         <LinkTargetsFields initialData={initialData} onTargetsChange={setLinkTargets} />
-      </Section>
-
-      <Section title="Content Settings" subtitle={`Writer quotas — ${monthlyPostsPerClient} web2/guestpost/pdf posts per client per month`}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
-          <Field label="Posts per Client (Monthly)" hint="Total posts each client needs per month">
-            <input type="number" name="posts_per_client" defaultValue={initialData?.posts_per_client || 21} min="1" style={inputStyle} />
-          </Field>
-          <Field label="Writer Clients Per Day" hint="Number of clients each writer works on per day (rotation cycle)">
-            <input type="number" name="writer_clients_per_day" defaultValue={initialData?.writer_clients_per_day || 8} min="1" style={inputStyle} />
-          </Field>
-          <Field label="Team Daily Posts Target" hint="Total posts for all writers per day combined">
-            <input type="number" name="writers_daily_target" defaultValue={initialData?.writers_daily_target || 105} min="1" style={inputStyle} />
-          </Field>
-          <Field
-            label="Writer Approach"
-            hint={
-              <>
-                Approach 1: Each week has a mix of all 3 types with different ratios<br />
-                Approach 2: Each week focuses on one content type only
-              </>
-            }
-          >
-            <select name="writer_approach" defaultValue={initialData?.writer_approach || 1} style={inputStyle}>
-              <option value="1">Approach 1 — Mix weekly (GP/W2/PDF mix each week)</option>
-              <option value="2">Approach 2 — One type/week (One type per week)</option>
-            </select>
-          </Field>
-        </div>
       </Section>
 
       <Section title="Web SEO Associates Settings" subtitle="Quotas used by the separate Web SEO Associate track">

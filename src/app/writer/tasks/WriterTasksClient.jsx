@@ -1,10 +1,6 @@
 'use client';
 
-import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { logPost, deletePost, logWebPost, deleteWebPost } from '../actions';
-
-const POST_TYPE_LABELS = { guestpost: 'Guest Post', web2: 'Web 2.0', pdf: 'PDF Submission' };
 
 const inputStyle = {
   width: '100%',
@@ -15,7 +11,15 @@ const inputStyle = {
   color: 'var(--foreground)'
 };
 
-export default function WriterTasksClient({ tasksByClient, webTasksByClient = [], availableDates, selectedDate, today }) {
+export default function WriterTasksClient({
+  gbpTasksByClient = [],
+  weboffTasksByClient = [],
+  gbpPendingByClient = [],
+  weboffPendingByClient = [],
+  availableDates,
+  selectedDate,
+  today,
+}) {
   const router = useRouter();
 
   const handleDateChange = (e) => {
@@ -34,9 +38,97 @@ export default function WriterTasksClient({ tasksByClient, webTasksByClient = []
             </option>
           ))}
         </select>
-        <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-          {tasksByClient.length} client(s) scheduled
+      </div>
+
+      <PendingSection
+        title="Pending Tasks — GBP-Off Page"
+        pendingByClient={gbpPendingByClient}
+      />
+
+      <PendingSection
+        title="Pending Tasks — Web-Off Page"
+        pendingByClient={weboffPendingByClient}
+      />
+
+      <OffpageSection
+        title="GBP-Off Page Tasks"
+        subtitle="Marked Done directly in the Google Sheet — this is a live progress mirror"
+        tasksByClient={gbpTasksByClient}
+        selectedDate={selectedDate}
+      />
+
+      <OffpageSection
+        title="Web-Off Page Tasks"
+        subtitle="Marked Done directly in the Google Sheet — this is a live progress mirror"
+        tasksByClient={weboffTasksByClient}
+        selectedDate={selectedDate}
+      />
+    </div>
+  );
+}
+
+// Tasks whose scheduled day has already passed but are still not fully done —
+// surfaced separately so they don't just silently disappear once their day is over.
+function PendingSection({ title, pendingByClient }) {
+  if (pendingByClient.length === 0) return null;
+
+  const totalCount = pendingByClient.reduce((s, c) => s + c.tasks.length, 0);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '0.5rem 0' }}>
+        <h2 style={{ fontSize: '1.1rem', margin: 0, color: '#f59e0b' }}>{title}</h2>
+        <span style={{
+          fontSize: '0.75rem', fontWeight: '600', color: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.12)', padding: '0.15rem 0.5rem', borderRadius: '1rem',
+        }}>
+          {totalCount} overdue
         </span>
+      </div>
+
+      {pendingByClient.map(client => (
+        <div key={client.client_id} className="card" style={{ border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+          <div style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>{client.client_name}</h3>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+            {client.tasks.map(task => (
+              <PendingTaskCard key={task.id} task={task} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PendingTaskCard({ task }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.6rem',
+      padding: '0.65rem 1rem',
+      minWidth: '200px',
+      flex: '1',
+      border: '1px solid rgba(245, 158, 11, 0.4)',
+      borderRadius: '0.5rem',
+      backgroundColor: 'rgba(245, 158, 11, 0.06)',
+    }}>
+      <span style={{ fontWeight: '600', fontSize: '0.9rem', flex: 1 }}>{task.category}</span>
+      <span style={{ fontSize: '0.7rem', fontWeight: '600', color: '#f59e0b', whiteSpace: 'nowrap' }}>
+        Due {task.task_date}
+      </span>
+    </div>
+  );
+}
+
+function OffpageSection({ title, subtitle, tasksByClient, selectedDate }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '0.5rem 0' }}>
+        <h2 style={{ fontSize: '1.1rem', margin: 0 }}>{title}</h2>
+        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{subtitle}</span>
       </div>
 
       {tasksByClient.length === 0 ? (
@@ -54,119 +146,54 @@ export default function WriterTasksClient({ tasksByClient, webTasksByClient = []
                 </a>
               )}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
               {client.tasks.map(task => (
-                <TaskCard key={task.id} task={task} logAction={logPost} deleteAction={deletePost} />
+                <ReadOnlyTaskCard key={task.id} task={task} />
               ))}
             </div>
           </div>
         ))
       )}
-
-      {webTasksByClient.length > 0 && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '0.5rem 0' }}>
-            <h2 style={{ fontSize: '1.1rem', margin: 0 }}>Web Tasks</h2>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Posts for your assigned Web SEO Associate&apos;s clients</span>
-          </div>
-          {webTasksByClient.map(client => (
-            <div key={`web-${client.client_id}`} className="card">
-              <div style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>{client.client_name}</h3>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {client.tasks.map(task => (
-                  <TaskCard key={task.id} task={task} logAction={logWebPost} deleteAction={deleteWebPost} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </>
-      )}
     </div>
   );
 }
 
-function TaskCard({ task, logAction, deleteAction }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  // Logs are ordered newest-first (see page.js query), so logs[0] is the "top of
-  // the stack" to remove when unchecking. Read straight from the `task` prop — a
-  // fresh copy arrives via router.refresh() after each mutation below.
-  const logs = task.logs;
-
-  const completedCount = logs.length;
-  const pct = task.target_count > 0 ? Math.round((completedCount / task.target_count) * 100) : 0;
-  const done = completedCount >= task.target_count;
-  const label = POST_TYPE_LABELS[task.post_type] || task.post_type;
-
-  const handleToggle = (index) => {
-    const checked = index < completedCount;
-
-    startTransition(async () => {
-      if (checked) {
-        // Unchecking box `index` removes everything back down to that level.
-        const toRemove = logs.slice(0, completedCount - index);
-        for (const log of toRemove) {
-          await deleteAction(log.id);
-        }
-      } else {
-        // Checking box `index` adds enough posts to reach that level.
-        for (let i = completedCount; i <= index; i++) {
-          const formData = new FormData();
-          formData.set('taskId', task.id);
-          formData.set('title', `${label} #${i + 1}`);
-          formData.set('url', '');
-          formData.set('word_count', '');
-          await logAction(null, formData);
-        }
-      }
-      router.refresh();
-    });
-  };
+// Read-only — the Google Sheet's Status column is the only place these get marked
+// Done (see writerOffpageSync.js), so this just displays live progress, no logging UI.
+function ReadOnlyTaskCard({ task }) {
+  const done = task.completed_count >= task.target_count;
 
   return (
     <div style={{
-      padding: '1rem',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.6rem',
+      padding: '0.65rem 1rem',
+      minWidth: '200px',
+      flex: '1',
       border: `1px solid ${done ? 'var(--success)' : 'var(--border)'}`,
       borderRadius: '0.5rem',
-      backgroundColor: 'var(--background)'
+      backgroundColor: done ? 'rgba(34, 197, 94, 0.08)' : 'var(--background)',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-        <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>{label}</span>
-        {done && <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: '600' }}>✓ Done</span>}
-      </div>
-      <div style={{ marginBottom: '0.75rem' }}>
-        <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
-          <div style={{ width: `${pct}%`, height: '100%', backgroundColor: done ? 'var(--success)' : 'var(--primary)' }}></div>
-        </div>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-          {completedCount} / {task.target_count} posts ({pct}%)
-        </span>
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
-        {Array.from({ length: task.target_count }).map((_, index) => {
-          const checked = index < completedCount;
-          return (
-            <label
-              key={index}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem',
-                cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.6 : 1
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                disabled={isPending}
-                onChange={() => handleToggle(index)}
-              />
-              #{index + 1}
-            </label>
-          );
-        })}
-      </div>
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '22px',
+        height: '22px',
+        borderRadius: '50%',
+        flexShrink: 0,
+        backgroundColor: done ? 'var(--success)' : 'var(--border)',
+        color: done ? 'white' : 'var(--text-muted)',
+        fontSize: '0.75rem',
+        fontWeight: 'bold',
+      }}>
+        {done ? '✓' : ''}
+      </span>
+      <span style={{ fontWeight: '600', fontSize: '0.9rem', flex: 1 }}>{task.category}</span>
+      <span style={{ fontSize: '0.7rem', fontWeight: '600', color: done ? 'var(--success)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+        {done ? 'Complete' : 'Pending'}
+      </span>
     </div>
   );
 }

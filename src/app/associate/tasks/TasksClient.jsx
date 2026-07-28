@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function TasksClient({ tasksByClient, availableDates, selectedDate, today, linkTypeLabels }) {
+export default function TasksClient({ tasksByClient, pendingByClient = [], availableDates, selectedDate, today, linkTypeLabels }) {
   const router = useRouter();
 
   const handleDateChange = (e) => {
@@ -26,6 +26,8 @@ export default function TasksClient({ tasksByClient, availableDates, selectedDat
           {tasksByClient.length} client(s) scheduled
         </span>
       </div>
+
+      <PendingSection pendingByClient={pendingByClient} linkTypeLabels={linkTypeLabels} />
 
       {tasksByClient.length === 0 ? (
         <div className="card">
@@ -70,6 +72,53 @@ export default function TasksClient({ tasksByClient, availableDates, selectedDat
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+// Tasks whose scheduled day has already passed but are still not fully done —
+// surfaced separately so they don't just silently disappear once their day is over.
+function PendingSection({ pendingByClient, linkTypeLabels }) {
+  if (pendingByClient.length === 0) return null;
+
+  const totalCount = pendingByClient.reduce((s, c) => s + c.tasks.length, 0);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <h2 style={{ fontSize: '1.1rem', margin: 0, color: '#f59e0b' }}>Pending Tasks</h2>
+        <span style={{
+          fontSize: '0.75rem', fontWeight: '600', color: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.12)', padding: '0.15rem 0.5rem', borderRadius: '1rem',
+        }}>
+          {totalCount} overdue
+        </span>
+      </div>
+
+      {pendingByClient.map(client => (
+        <div key={client.client_id} className="card" style={{ border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+          <div style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>{client.client_name}</h3>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+            {client.tasks.map(task => (
+              <div key={task.id} style={{
+                padding: '0.75rem 1rem', border: '1px solid rgba(245, 158, 11, 0.4)',
+                borderRadius: '0.5rem', minWidth: '160px', flex: '1',
+                backgroundColor: 'rgba(245, 158, 11, 0.06)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <span style={{ fontWeight: '600', fontSize: '0.875rem' }}>{linkTypeLabels[task.link_type] || task.link_type}</span>
+                  <span style={{ fontSize: '0.7rem', fontWeight: '600', color: '#f59e0b' }}>Due {task.task_date}</span>
+                </div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {task.completed_count} / {task.target_count} completed
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

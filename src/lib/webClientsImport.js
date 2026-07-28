@@ -2,7 +2,9 @@ import { getDb } from './db';
 import { getActiveCampaign } from './services';
 import { generateWebSeoTasks } from './webSeoTaskGenerator';
 
-async function getValidAccessToken() {
+// Exported for reuse by other Google Sheets integrations that need named-tab access
+// via OAuth (e.g. writerOffpageSync.js) rather than the public CSV-export method.
+export async function getValidAccessToken() {
   const db = await getDb();
 
   try {

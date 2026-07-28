@@ -1,6 +1,7 @@
 'use server';
 
 import { getDb } from '@/lib/db';
+import { runWriterOffpageSync } from '@/lib/writerOffpageSync';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
@@ -58,6 +59,15 @@ export async function createCampaign(prevState, formData) {
       } catch (err) {
         // Already assigned or other error, continue
       }
+    }
+
+    // Pull the writer GBP/Web-Off Page task sheets right away so a freshly created
+    // campaign doesn't sit empty until the next twice-daily cron run. Best-effort —
+    // a missing/unreachable sheet shouldn't block campaign creation itself.
+    try {
+      await runWriterOffpageSync(campaignId);
+    } catch (syncErr) {
+      console.error('[createCampaign] Writer off-page sync failed:', syncErr.message);
     }
 
     revalidatePath('/admin/campaign');
@@ -144,7 +154,11 @@ export async function deleteCampaign(id) {
     
     // Delete all writer_assignments
     await db.prepare('DELETE FROM writer_assignments WHERE campaign_id = ?').run(id);
-    
+
+    // Delete writer GBP/Web-Off Page tasks and assignments
+    await db.prepare('DELETE FROM writer_offpage_tasks WHERE campaign_id = ?').run(id);
+    await db.prepare('DELETE FROM writer_offpage_assignments WHERE campaign_id = ?').run(id);
+
     // Delete all clients
     await db.prepare('DELETE FROM clients WHERE campaign_id = ?').run(id);
     

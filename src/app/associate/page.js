@@ -17,7 +17,7 @@ export default async function AssociateDashboard() {
   const campaign = await getActiveCampaign();
   const today = new Date().toISOString().split('T')[0];
 
-  let todayTasks = [], overallStats = null, recentLogs = [], upcomingDays = [], weeklySummary = [];
+  let todayTasks = [], overallStats = null, recentLogs = [], upcomingDays = [], pendingTasks = [], weeklySummary = [];
   let totalExpectedLinks = 0;
   let dailyTarget = 0;
   let funnelClients = [];
@@ -99,6 +99,17 @@ export default async function AssociateDashboard() {
       ORDER BY st.task_date LIMIT 7
     `).all(userId, campaign.id, today);
 
+    // Pending — the task's scheduled day has already passed but it's still not
+    // fully done (writer/associate hasn't logged enough links to hit the target yet).
+    pendingTasks = await db.prepare(`
+      SELECT st.*, c.name as client_name, c.website
+      FROM seo_tasks st
+      JOIN clients c ON c.id = st.client_id
+      WHERE st.associate_id = ? AND st.campaign_id = ?
+        AND st.task_date < ? AND st.completed_count < st.target_count AND c.is_active = 1
+      ORDER BY st.task_date DESC, c.sort_order, st.link_type
+    `).all(userId, campaign.id, today);
+
     // Calculate weekly summary - 16 days total divided into 4 weeks
     // Week 1: Days 1-5 (4 workdays) = 4 × 66 = 264
     // Week 2: Days 6-10 (4 workdays) = 264
@@ -143,6 +154,14 @@ export default async function AssociateDashboard() {
     tasksByClient[t.client_id].tasks.push(t);
   });
 
+  const pendingByClient = {};
+  pendingTasks.forEach(t => {
+    if (!pendingByClient[t.client_id]) {
+      pendingByClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, tasks: [] };
+    }
+    pendingByClient[t.client_id].tasks.push(t);
+  });
+
   const todayTarget = dailyTarget; // Use calculated daily target (66 for Mohib)
   const todayCompleted = todayTasks.reduce((s, t) => s + t.completed_count, 0);
   const overallPercent = totalExpectedLinks > 0 ? Math.round((overallStats?.completed / totalExpectedLinks) * 100) : 0;
@@ -163,7 +182,39 @@ export default async function AssociateDashboard() {
             <StatCard title="Overall Target" value={totalExpectedLinks} sub={`${overallStats?.completed || 0} completed (${overallPercent}%)`} color="var(--success)" />
             <StatCard title="Upcoming Days" value={upcomingDays.length} sub="remaining days with tasks" color="#f59e0b" />
             <StatCard title="Recent Logs" value={recentLogs.length} sub="links logged recently" color="#8b5cf6" />
+            <StatCard title="Pending Tasks" value={pendingTasks.length} sub="overdue, not yet completed" color="#f59e0b" />
           </div>
+
+          {/* Pending (overdue) tasks */}
+          {Object.values(pendingByClient).length > 0 && (
+            <div className="card" style={{ border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+                <h2 style={{ fontSize: '1.25rem', margin: 0, color: '#f59e0b' }}>Pending Tasks</h2>
+                <span style={{
+                  fontSize: '0.75rem', fontWeight: '600', color: '#f59e0b',
+                  backgroundColor: 'rgba(245, 158, 11, 0.12)', padding: '0.15rem 0.5rem', borderRadius: '1rem',
+                }}>
+                  {pendingTasks.length} overdue
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {Object.values(pendingByClient).map(client => (
+                  <div key={client.client_id} style={{ padding: '1rem', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '0.5rem', backgroundColor: 'rgba(245, 158, 11, 0.03)' }}>
+                    <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600' }}>{client.client_name}</h3>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {client.tasks.map(task => (
+                        <div key={task.id} style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--background)', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '0.5rem', fontSize: '0.875rem' }}>
+                          <span style={{ fontWeight: '500' }}>{LINK_TYPE_LABELS[task.link_type] || task.link_type}</span>
+                          <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>{task.completed_count}/{task.target_count}</span>
+                          <span style={{ marginLeft: '0.5rem', color: '#f59e0b', fontSize: '0.75rem' }}>Due {task.task_date}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Today's Tasks by Client */}
           <div className="card">

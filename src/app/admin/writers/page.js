@@ -12,12 +12,11 @@ export default async function WritersPage() {
   let writers = [];
   let writerStats = [];
   let writersDashboard = [];
-
-  let webSeoAssociates = [];
+  let writerOffpageSheetUrl = '';
 
   if (campaign) {
     writers = await db.prepare(`
-      SELECT u.id, u.name, u.email, u.is_active, u.mirrors_web_associate_id,
+      SELECT u.id, u.name, u.email, u.is_active,
         COALESCE(wa.daily_post_target, 70) as daily_post_target
       FROM users u
       LEFT JOIN writer_assignments wa ON wa.user_id = u.id AND wa.campaign_id = ?
@@ -25,18 +24,20 @@ export default async function WritersPage() {
       ORDER BY u.name
     `).all(campaign.id);
 
-    webSeoAssociates = await db.prepare(`
-      SELECT id, name FROM users WHERE role = 'web_seo_associate' AND is_active = 1 ORDER BY name
-    `).all();
+    const sheetSetting = await db.prepare("SELECT value FROM settings WHERE key = ?").get('writer_offpage_sheet_url');
+    writerOffpageSheetUrl = sheetSetting?.value || '';
 
+    // GBP-Off Page / Web-Off Page — sourced from the Google Sheet tabs (see
+    // src/lib/writerOffpageSync.js). Assigned clients come from
+    // writer_offpage_assignments, not the old clients.assigned_writer_id.
     writerStats = await db.prepare(`
       SELECT u.id, u.name,
-        (SELECT COUNT(*) FROM clients WHERE assigned_writer_id = u.id AND campaign_id = ?) as assigned_clients,
-        (SELECT COUNT(DISTINCT day_number) FROM writing_tasks WHERE writer_id = u.id AND campaign_id = ?) as scheduled_days,
-        (SELECT SUM(target_count) FROM writing_tasks WHERE writer_id = u.id AND campaign_id = ?) as total_target_posts,
-        (SELECT SUM(completed_count) FROM writing_tasks WHERE writer_id = u.id AND campaign_id = ?) as total_completed_posts,
-        (SELECT SUM(target_count) FROM web_writing_tasks WHERE writer_id = u.id AND campaign_id = ?) as web_target_posts,
-        (SELECT SUM(completed_count) FROM web_writing_tasks WHERE writer_id = u.id AND campaign_id = ?) as web_completed_posts
+        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_assigned_clients,
+        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_target,
+        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_completed,
+        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_assigned_clients,
+        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_target,
+        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_completed
       FROM users u
       WHERE u.role = 'writer' AND u.is_active = 1
       ORDER BY u.name
@@ -45,12 +46,12 @@ export default async function WritersPage() {
     // Dashboard data with additional info
     writersDashboard = await db.prepare(`
       SELECT u.id, u.name, u.email, u.is_active,
-        (SELECT COUNT(*) FROM clients WHERE assigned_writer_id = u.id AND campaign_id = ?) as assigned_clients,
-        (SELECT COUNT(DISTINCT day_number) FROM writing_tasks WHERE writer_id = u.id AND campaign_id = ?) as scheduled_days,
-        (SELECT SUM(target_count) FROM writing_tasks WHERE writer_id = u.id AND campaign_id = ?) as total_target_posts,
-        (SELECT SUM(completed_count) FROM writing_tasks WHERE writer_id = u.id AND campaign_id = ?) as total_completed_posts,
-        (SELECT SUM(target_count) FROM web_writing_tasks WHERE writer_id = u.id AND campaign_id = ?) as web_target_posts,
-        (SELECT SUM(completed_count) FROM web_writing_tasks WHERE writer_id = u.id AND campaign_id = ?) as web_completed_posts
+        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_assigned_clients,
+        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_target,
+        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_completed,
+        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_assigned_clients,
+        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_target,
+        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_completed
       FROM users u
       WHERE u.role = 'writer'
       ORDER BY u.name
@@ -58,34 +59,23 @@ export default async function WritersPage() {
   }
 
   // Get campaign-level stats
-  const campaignStats = campaign ? await db.prepare(`
-    SELECT
-      COUNT(DISTINCT day_number) as scheduled_days,
-      COUNT(*) as total_tasks,
-      SUM(target_count) as total_target_posts,
-      SUM(completed_count) as total_completed_posts
-    FROM writing_tasks
-    WHERE campaign_id = ?
-  `).get(campaign.id) : { scheduled_days: 0, total_tasks: 0, total_target_posts: 0, total_completed_posts: 0 };
+  const gbpCampaignStats = campaign ? await db.prepare(`
+    SELECT SUM(target_count) as total_target_posts, SUM(completed_count) as total_completed_posts
+    FROM writer_offpage_tasks WHERE campaign_id = ? AND task_type = 'gbp'
+  `).get(campaign.id) : { total_target_posts: 0, total_completed_posts: 0 };
 
-  const webCampaignStats = campaign ? await db.prepare(`
-    SELECT
-      SUM(target_count) as total_target_posts,
-      SUM(completed_count) as total_completed_posts
-    FROM web_writing_tasks
-    WHERE campaign_id = ?
+  const weboffCampaignStats = campaign ? await db.prepare(`
+    SELECT SUM(target_count) as total_target_posts, SUM(completed_count) as total_completed_posts
+    FROM writer_offpage_tasks WHERE campaign_id = ? AND task_type = 'weboff'
   `).get(campaign.id) : { total_target_posts: 0, total_completed_posts: 0 };
 
   const stats = {
     totalWriters: writers.filter(w => w.is_active).length,
-    totalTasks: campaignStats.scheduled_days || 0,
-    totalTargetPosts: campaignStats.total_target_posts || 0,
-    totalCompletedPosts: campaignStats.total_completed_posts || 0,
-    webTargetPosts: webCampaignStats.total_target_posts || 0,
-    webCompletedPosts: webCampaignStats.total_completed_posts || 0,
+    gbpTargetPosts: gbpCampaignStats.total_target_posts || 0,
+    gbpCompletedPosts: gbpCampaignStats.total_completed_posts || 0,
+    weboffTargetPosts: weboffCampaignStats.total_target_posts || 0,
+    weboffCompletedPosts: weboffCampaignStats.total_completed_posts || 0,
   };
-
-  const postsPerClient = campaign?.posts_per_client || 21;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -108,34 +98,18 @@ export default async function WritersPage() {
             </div>
             <div className="card" style={{ borderLeft: '4px solid #16b293' }}>
               <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                Total Tasks
+                GBP-Off Completed
               </h3>
               <div style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--foreground)' }}>
-                {stats.totalTasks}
+                {stats.gbpCompletedPosts} / {stats.gbpTargetPosts}
               </div>
             </div>
             <div className="card" style={{ borderLeft: '4px solid #16b293' }}>
               <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                Target Posts
+                Web-Off Completed
               </h3>
               <div style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--foreground)' }}>
-                {stats.totalTargetPosts}
-              </div>
-            </div>
-            <div className="card" style={{ borderLeft: '4px solid #16b293' }}>
-              <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                Completed Posts
-              </h3>
-              <div style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--foreground)' }}>
-                {stats.totalCompletedPosts} / {stats.totalTargetPosts}
-              </div>
-            </div>
-            <div className="card" style={{ borderLeft: '4px solid #16b293' }}>
-              <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                Web Tasks Completed
-              </h3>
-              <div style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--foreground)' }}>
-                {stats.webCompletedPosts} / {stats.webTargetPosts}
+                {stats.weboffCompletedPosts} / {stats.weboffTargetPosts}
               </div>
             </div>
           </div>
@@ -157,21 +131,17 @@ export default async function WritersPage() {
                       <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Name</th>
                       <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Email</th>
                       <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Status</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Assigned Clients</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Posts per Client</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Expected Posts</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Completed</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Progress</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Web Tasks</th>
-                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Web Progress</th>
+                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>GBP Clients</th>
+                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>GBP Progress</th>
+                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Web-Off Clients</th>
+                      <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Web-Off Progress</th>
                       <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {writersDashboard.map((writer) => {
-                      const expectedPosts = (writer.assigned_clients || 0) * postsPerClient;
-                      const progressPercent = writer.total_target_posts > 0 ? Math.round((writer.total_completed_posts / writer.total_target_posts) * 100) : 0;
-                      const webProgressPercent = writer.web_target_posts > 0 ? Math.round((writer.web_completed_posts / writer.web_target_posts) * 100) : 0;
+                      const gbpProgressPercent = writer.gbp_target > 0 ? Math.round((writer.gbp_completed / writer.gbp_target) * 100) : 0;
+                      const weboffProgressPercent = writer.weboff_target > 0 ? Math.round((writer.weboff_completed / writer.weboff_target) * 100) : 0;
                       return (
                         <tr key={writer.id} style={{ borderBottom: '1px solid var(--border)' }}>
                           <td style={{ padding: '0.75rem 0', fontWeight: '500' }}>{writer.name}</td>
@@ -189,34 +159,29 @@ export default async function WritersPage() {
                             </span>
                           </td>
                           <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--primary)' }}>
-                            {writer.assigned_clients || 0}
-                          </td>
-                          <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--success)' }}>
-                            {postsPerClient}
-                          </td>
-                          <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--primary)' }}>
-                            {expectedPosts}
-                          </td>
-                          <td style={{ padding: '0.75rem 0' }}>
-                            {writer.total_completed_posts || 0}
+                            {writer.gbp_assigned_clients || 0}
                           </td>
                           <td style={{ padding: '0.75rem 0' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <div style={{ width: '80px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
-                                <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: 'var(--primary)' }}></div>
+                                <div style={{ width: `${gbpProgressPercent}%`, height: '100%', backgroundColor: 'var(--primary)' }}></div>
                               </div>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{progressPercent}%</span>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                {writer.gbp_completed || 0}/{writer.gbp_target || 0} ({gbpProgressPercent}%)
+                              </span>
                             </div>
                           </td>
-                          <td style={{ padding: '0.75rem 0' }}>
-                            {writer.web_completed_posts || 0} / {writer.web_target_posts || 0}
+                          <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--success)' }}>
+                            {writer.weboff_assigned_clients || 0}
                           </td>
                           <td style={{ padding: '0.75rem 0' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <div style={{ width: '80px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
-                                <div style={{ width: `${webProgressPercent}%`, height: '100%', backgroundColor: '#16b293' }}></div>
+                                <div style={{ width: `${weboffProgressPercent}%`, height: '100%', backgroundColor: 'var(--success)' }}></div>
                               </div>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{webProgressPercent}%</span>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                {writer.weboff_completed || 0}/{writer.weboff_target || 0} ({weboffProgressPercent}%)
+                              </span>
                             </div>
                           </td>
                           <td style={{ padding: '0.75rem 0' }}>
@@ -246,7 +211,11 @@ export default async function WritersPage() {
           </div>
 
           {/* Detailed Writer Management */}
-          <WritersClient writers={writers} writerStats={writerStats} campaign={campaign} webSeoAssociates={webSeoAssociates} />
+          <WritersClient
+            writers={writers}
+            writerStats={writerStats}
+            writerOffpageSheetUrl={writerOffpageSheetUrl}
+          />
         </>
       )}
     </div>

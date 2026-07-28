@@ -3,8 +3,63 @@ import { getActiveCampaign } from '@/lib/services';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
 
-const BRAND_COLOR = '#16b293'; // Teal green
-const POST_TYPE_LABELS = { guestpost: 'Guest Post', web2: 'Web 2.0', pdf: 'PDF Submission' };
+const WEEKS_SCHEDULE = [
+  { week: 1, days: '1-5' },
+  { week: 2, days: '6-10' },
+  { week: 3, days: '11-15' },
+  { week: 4, days: '16' },
+];
+
+async function loadOffpageStats(db, writerId, campaignId, taskType, today) {
+  const todayTasks = await db.prepare(`
+    SELECT wot.*, c.name as client_name
+    FROM writer_offpage_tasks wot
+    JOIN clients c ON c.id = wot.client_id
+    WHERE wot.writer_id = ? AND wot.campaign_id = ? AND wot.task_type = ? AND wot.task_date = ? AND c.is_active = 1
+    ORDER BY c.name, wot.category
+  `).all(writerId, campaignId, taskType, today);
+
+  // Pending — the task's scheduled day has already passed but it's still not fully
+  // done (the sheet's Status column hasn't caught up to Done for it yet).
+  const pendingTasks = await db.prepare(`
+    SELECT wot.*, c.name as client_name
+    FROM writer_offpage_tasks wot
+    JOIN clients c ON c.id = wot.client_id
+    WHERE wot.writer_id = ? AND wot.campaign_id = ? AND wot.task_type = ?
+      AND wot.task_date < ? AND wot.completed_count < wot.target_count AND c.is_active = 1
+    ORDER BY wot.task_date DESC, c.name, wot.category
+  `).all(writerId, campaignId, taskType, today);
+
+  const overallStats = await db.prepare(`
+    SELECT SUM(target_count) as target, SUM(completed_count) as completed
+    FROM writer_offpage_tasks WHERE writer_id = ? AND campaign_id = ? AND task_type = ?
+  `).get(writerId, campaignId, taskType);
+
+  const assignedClients = await db.prepare(`
+    SELECT COUNT(*) as count FROM writer_offpage_assignments WHERE writer_id = ? AND campaign_id = ? AND task_type = ?
+  `).get(writerId, campaignId, taskType);
+
+  const weeklySummary = [];
+  for (const schedule of WEEKS_SCHEDULE) {
+    const dayStart = parseInt(schedule.days.split('-')[0]);
+    const dayEnd = parseInt(schedule.days.split('-')[1] || schedule.days);
+
+    const weekStats = await db.prepare(`
+      SELECT SUM(target_count) as target, SUM(completed_count) as completed
+      FROM writer_offpage_tasks
+      WHERE writer_id = ? AND campaign_id = ? AND task_type = ? AND day_number >= ? AND day_number <= ?
+    `).get(writerId, campaignId, taskType, dayStart, dayEnd);
+
+    weeklySummary.push({
+      week: schedule.week,
+      dayRange: `Day ${schedule.days}`,
+      target: weekStats?.target || 0,
+      completed: weekStats?.completed || 0,
+    });
+  }
+
+  return { todayTasks, pendingTasks, overallStats, weeklySummary, assignedClientCount: assignedClients?.count || 0 };
+}
 
 export default async function WriterDetail({ id, backHref, backLabel }) {
   const db = await getDb();
@@ -25,148 +80,25 @@ export default async function WriterDetail({ id, backHref, backLabel }) {
     );
   }
 
-  let todayTasks = [], overallStats = null, recentLogs = [], upcomingDays = [], weeklyBreakdown = [], weeklySummary = [];
-  let todayClientsById = {}, allWriterClients = [];
-  let cumulativeByClientType = {};
-  let todayWebTasks = [], webOverallStats = null, webWeeklySummary = [];
+  let gbp = { todayTasks: [], pendingTasks: [], overallStats: null, weeklySummary: [], assignedClientCount: 0 };
+  let weboff = { todayTasks: [], pendingTasks: [], overallStats: null, weeklySummary: [], assignedClientCount: 0 };
 
   if (campaign) {
-    todayTasks = await db.prepare(`
-      SELECT * FROM writing_tasks
-      WHERE writer_id = ? AND campaign_id = ? AND task_date = ?
-      ORDER BY post_type
-    `).all(writerId, campaign.id, today);
-
-    // Cumulative target/completed per client+post_type, from campaign start through
-    // today — so the numbers on each client's card grow day over day instead of
-    // repeating the same day-only slice, which otherwise looks unchanged and confusing.
-    const cumulativeRows = await db.prepare(`
-      SELECT client_id, post_type, SUM(target_count) as target, SUM(completed_count) as completed
-      FROM writing_tasks
-      WHERE writer_id = ? AND campaign_id = ? AND task_date <= ?
-      GROUP BY client_id, post_type
-    `).all(writerId, campaign.id, today);
-    for (const row of cumulativeRows) {
-      if (!cumulativeByClientType[row.client_id]) cumulativeByClientType[row.client_id] = {};
-      cumulativeByClientType[row.client_id][row.post_type] = { target: row.target, completed: row.completed };
-    }
-
-    overallStats = await db.prepare(`
-      SELECT SUM(target_count) as target, SUM(completed_count) as completed
-      FROM writing_tasks WHERE writer_id = ? AND campaign_id = ?
-    `).get(writerId, campaign.id);
-
-    recentLogs = await db.prepare(`
-      SELECT wl.*, wt.post_type, wt.task_date
-      FROM writing_logs wl
-      JOIN writing_tasks wt ON wt.id = wl.task_id
-      WHERE wl.logged_by = ? AND wt.campaign_id = ?
-      ORDER BY wl.created_at DESC LIMIT 20
-    `).all(writerId, campaign.id);
-
-    upcomingDays = await db.prepare(`
-      SELECT DISTINCT task_date, day_number, week_number,
-        SUM(target_count) as target, SUM(completed_count) as completed
-      FROM writing_tasks
-      WHERE writer_id = ? AND campaign_id = ? AND task_date >= ?
-      GROUP BY task_date
-      ORDER BY task_date LIMIT 7
-    `).all(writerId, campaign.id, today);
-
-    weeklyBreakdown = await db.prepare(`
-      SELECT week_number, post_type,
-        SUM(target_count) as target, SUM(completed_count) as completed
-      FROM writing_tasks
-      WHERE writer_id = ? AND campaign_id = ?
-      GROUP BY week_number, post_type
-      ORDER BY week_number, post_type
-    `).all(writerId, campaign.id);
-
-    const weeksInCampaign = Math.ceil(campaign.total_days / 5);
-    for (let week = 1; week <= weeksInCampaign; week++) {
-      const dayStart = (week - 1) * 5 + 1;
-      const dayEnd = Math.min(week * 5, campaign.total_days);
-
-      const weekStats = await db.prepare(`
-        SELECT
-          SUM(target_count) as target,
-          SUM(completed_count) as completed
-        FROM writing_tasks
-        WHERE writer_id = ? AND campaign_id = ? AND day_number >= ? AND day_number <= ?
-      `).get(writerId, campaign.id, dayStart, dayEnd);
-
-      weeklySummary.push({
-        week,
-        dayRange: `Day ${dayStart}-${dayEnd}`,
-        target: weekStats.target || 0,
-        completed: weekStats.completed || 0
-      });
-    }
-
-    // Pre-fetch client names needed by the JSX below, so the render pass itself
-    // stays synchronous (React can't await inside .map() callbacks).
-    const todayClientIds = [...new Set(todayTasks.map(t => t.client_id))];
-    if (todayClientIds.length > 0) {
-      const placeholders = todayClientIds.map(() => '?').join(',');
-      const rows = await db.prepare(`SELECT id, name FROM clients WHERE id IN (${placeholders})`).all(...todayClientIds);
-      for (const r of rows) todayClientsById[r.id] = r;
-    }
-
-    allWriterClients = await db.prepare(`
-      SELECT DISTINCT c.id, c.name FROM clients c
-      WHERE c.assigned_writer_id = ? AND c.campaign_id = ? AND c.is_active = 1
-      ORDER BY c.name
-    `).all(writerId, campaign.id);
-
-    // Web Tasks — mirrors this writer's assigned Web SEO Associate's schedule (see
-    // web_writing_tasks generation in webSeoTaskGenerator.js).
-    todayWebTasks = await db.prepare(`
-      SELECT wwt.*, wc.business_name, wc.name as client_name
-      FROM web_writing_tasks wwt
-      JOIN web_clients wc ON wc.id = wwt.client_id
-      WHERE wwt.writer_id = ? AND wwt.campaign_id = ? AND wwt.task_date = ? AND wc.is_active = 1
-      ORDER BY wwt.post_type
-    `).all(writerId, campaign.id, today);
-
-    webOverallStats = await db.prepare(`
-      SELECT SUM(target_count) as target, SUM(completed_count) as completed
-      FROM web_writing_tasks WHERE writer_id = ? AND campaign_id = ?
-    `).get(writerId, campaign.id);
-
-    const webWeeksSchedule = [
-      { week: 1, days: '1-5' },
-      { week: 2, days: '6-10' },
-      { week: 3, days: '11-15' },
-      { week: 4, days: '16' },
-    ];
-    for (const schedule of webWeeksSchedule) {
-      const dayStart = parseInt(schedule.days.split('-')[0]);
-      const dayEnd = parseInt(schedule.days.split('-')[1] || schedule.days);
-
-      const weekStats = await db.prepare(`
-        SELECT SUM(target_count) as target, SUM(completed_count) as completed
-        FROM web_writing_tasks
-        WHERE writer_id = ? AND campaign_id = ? AND day_number >= ? AND day_number <= ?
-      `).get(writerId, campaign.id, dayStart, dayEnd);
-
-      webWeeklySummary.push({
-        week: schedule.week,
-        dayRange: `Day ${schedule.days}`,
-        target: weekStats?.target || 0,
-        completed: weekStats?.completed || 0,
-      });
-    }
+    // GBP-Off Page / Web-Off Page — read-only, sourced from the Google Sheet tabs
+    // (see src/lib/writerOffpageSync.js). Writers mark work Done in the sheet itself.
+    gbp = await loadOffpageStats(db, writerId, campaign.id, 'gbp', today);
+    weboff = await loadOffpageStats(db, writerId, campaign.id, 'weboff', today);
   }
 
-  const todayTarget = todayTasks.reduce((s, t) => s + t.target_count, 0);
-  const todayCompleted = todayTasks.reduce((s, t) => s + t.completed_count, 0);
-  const overallPercent = overallStats?.target > 0 ? Math.round((overallStats.completed / overallStats.target) * 100) : 0;
-  const todayPercent = todayTarget > 0 ? Math.round((todayCompleted / todayTarget) * 100) : 0;
+  const gbpTodayTarget = gbp.todayTasks.reduce((s, t) => s + t.target_count, 0);
+  const gbpTodayCompleted = gbp.todayTasks.reduce((s, t) => s + t.completed_count, 0);
+  const gbpOverallPercent = gbp.overallStats?.target > 0 ? Math.round((gbp.overallStats.completed / gbp.overallStats.target) * 100) : 0;
+  const gbpTodayPercent = gbpTodayTarget > 0 ? Math.round((gbpTodayCompleted / gbpTodayTarget) * 100) : 0;
 
-  const todayWebTarget = todayWebTasks.reduce((s, t) => s + t.target_count, 0);
-  const todayWebCompleted = todayWebTasks.reduce((s, t) => s + t.completed_count, 0);
-  const webOverallPercent = webOverallStats?.target > 0 ? Math.round((webOverallStats.completed / webOverallStats.target) * 100) : 0;
-  const todayWebPercent = todayWebTarget > 0 ? Math.round((todayWebCompleted / todayWebTarget) * 100) : 0;
+  const weboffTodayTarget = weboff.todayTasks.reduce((s, t) => s + t.target_count, 0);
+  const weboffTodayCompleted = weboff.todayTasks.reduce((s, t) => s + t.completed_count, 0);
+  const weboffOverallPercent = weboff.overallStats?.target > 0 ? Math.round((weboff.overallStats.completed / weboff.overallStats.target) * 100) : 0;
+  const weboffTodayPercent = weboffTodayTarget > 0 ? Math.round((weboffTodayCompleted / weboffTodayTarget) * 100) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -198,326 +130,209 @@ export default async function WriterDetail({ id, backHref, backLabel }) {
         <>
           {/* Stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-            <StatCard title="Today's Posts Target" value={todayTarget} sub={`${todayCompleted} completed (${todayPercent}%)`} color="var(--success)" />
-            <StatCard title="Overall Posts Target" value={overallStats?.target || 0} sub={`${overallStats?.completed || 0} completed (${overallPercent}%)`} color="var(--primary)" />
-            <StatCard title="Upcoming Days" value={upcomingDays.length} sub="days with tasks remaining" color="#f59e0b" />
-            <StatCard title="Today's Web Tasks" value={todayWebTarget} sub={`${todayWebCompleted} completed (${todayWebPercent}%)`} color={BRAND_COLOR} />
-            <StatCard title="Overall Web Tasks" value={webOverallStats?.target || 0} sub={`${webOverallStats?.completed || 0} completed (${webOverallPercent}%)`} color={BRAND_COLOR} />
+            <StatCard title="GBP-Off Assigned Clients" value={gbp.assignedClientCount} sub="from the GBP-Off Page sheet" color="var(--primary)" />
+            <StatCard title="Overall GBP-Off Tasks" value={gbp.overallStats?.target || 0} sub={`${gbp.overallStats?.completed || 0} completed (${gbpOverallPercent}%)`} color="var(--primary)" />
+            <StatCard title="Web-Off Assigned Clients" value={weboff.assignedClientCount} sub="from the Web-Off Page sheet" color="var(--success)" />
+            <StatCard title="Overall Web-Off Tasks" value={weboff.overallStats?.target || 0} sub={`${weboff.overallStats?.completed || 0} completed (${weboffOverallPercent}%)`} color="var(--success)" />
+            <StatCard title="Pending GBP-Off Tasks" value={gbp.pendingTasks.length} sub="overdue, not yet marked Done" color="#f59e0b" />
+            <StatCard title="Pending Web-Off Tasks" value={weboff.pendingTasks.length} sub="overdue, not yet marked Done" color="#f59e0b" />
           </div>
 
-          {/* Today's Clients - Assigned vs Not Assigned */}
-          <div className="card">
-            <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-              Today&apos;s Clients — {today}
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-              {/* Clients assigned for today */}
-              <div>
-                <h3 style={{ fontSize: '0.875rem', color: 'var(--success)', fontWeight: '600', marginBottom: '1rem', textTransform: 'uppercase' }}>
-                  ✓ Assigned for Today ({todayTasks.length > 0 ? [...new Set(todayTasks.map(t => t.client_id))].length : 0})
-                </h3>
-                {todayTasks.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No clients scheduled for today.</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {[...new Map(todayTasks.map(t => [t.client_id, t])).values()].map(task => {
-                      const clientTasks = todayTasks
-                        .filter(t => t.client_id === task.client_id)
-                        .map(t => {
-                          const cumulative = cumulativeByClientType[t.client_id]?.[t.post_type];
-                          return {
-                            ...t,
-                            target_count: cumulative?.target ?? t.target_count,
-                            completed_count: cumulative?.completed ?? t.completed_count,
-                          };
-                        });
-                      const totalTarget = clientTasks.reduce((s, t) => s + t.target_count, 0);
-                      const totalCompleted = clientTasks.reduce((s, t) => s + t.completed_count, 0);
-                      const pct = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0;
+          {/* Pending (overdue) tasks */}
+          <PendingTasksCard title="Pending GBP-Off Page Tasks" tasks={gbp.pendingTasks} />
+          <PendingTasksCard title="Pending Web-Off Page Tasks" tasks={weboff.pendingTasks} />
 
-                      const client = todayClientsById[task.client_id] || { name: 'Unknown' };
-                      return (
-                        <div key={task.client_id} style={{ padding: '0.75rem', backgroundColor: 'rgba(34, 197, 94, 0.05)', border: '1px solid rgba(34, 197, 94, 0.2)', borderRadius: '0.5rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                            <span style={{ fontWeight: '500', color: 'var(--foreground)' }}>{client.name}</span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{totalCompleted}/{totalTarget}</span>
-                          </div>
-                          <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
-                            <div style={{ width: `${pct}%`, height: '100%', backgroundColor: 'var(--success)' }}></div>
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                            {clientTasks.map(t => (
-                              <span key={t.id} style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem', backgroundColor: 'rgba(22, 178, 147, 0.1)', color: BRAND_COLOR, borderRadius: '0.25rem', fontWeight: '500' }}>
-                                {POST_TYPE_LABELS[t.post_type] || t.post_type}: {t.completed_count}/{t.target_count}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+          {/* Today's GBP-Off Tasks */}
+          <TodayTasksCard title="Today's GBP-Off Page Tasks" today={today} tasks={gbp.todayTasks} />
 
-              {/* Clients NOT assigned for today */}
-              <div>
-                <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: '600', marginBottom: '1rem', textTransform: 'uppercase' }}>
-                  ✗ Not Assigned for Today
-                </h3>
-                {todayTasks.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Check scheduling or contact admin.</p>
-                ) : (() => {
-                  const assignedTodayIds = new Set(todayTasks.map(t => t.client_id));
-                  const notAssignedToday = allWriterClients.filter(c => !assignedTodayIds.has(c.id));
+          {/* Today's Web-Off Tasks */}
+          <TodayTasksCard title="Today's Web-Off Page Tasks" today={today} tasks={weboff.todayTasks} />
 
-                  return notAssignedToday.length === 0 ? (
-                    <p style={{ color: 'var(--success)', fontSize: '0.875rem', fontWeight: '500' }}>All assigned clients are on today&apos;s schedule! 🎉</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {notAssignedToday.slice(0, 10).map(client => (
-                        <div key={client.id} style={{ padding: '0.5rem 0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '0.25rem', fontSize: '0.875rem', color: 'var(--foreground)' }}>
-                          {client.name}
-                        </div>
-                      ))}
-                      {notAssignedToday.length > 10 && (
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                          +{notAssignedToday.length - 10} more clients
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
+          {/* GBP-Off Page Weekly Summary */}
+          <WeeklySummaryCard title="GBP-Off Page Weekly Summary" weeklySummary={gbp.weeklySummary} color="var(--primary)" />
 
-          {/* Today's Tasks */}
-          <div className="card">
-            <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-              Today&apos;s Writing Tasks — {today}
-            </h2>
-            {todayTasks.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)' }}>No tasks scheduled for today.</p>
-            ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-                {todayTasks.map(task => {
-                  const pct = task.target_count > 0 ? Math.round((task.completed_count / task.target_count) * 100) : 0;
-                  const done = task.completed_count >= task.target_count;
-                  return (
-                    <div key={task.id} style={{ padding: '1rem', border: `1px solid ${done ? 'var(--success)' : 'var(--border)'}`, borderRadius: '0.5rem', minWidth: '180px', flex: '1' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                        <span style={{ fontWeight: '600' }}>{POST_TYPE_LABELS[task.post_type] || task.post_type}</span>
-                        {done && <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}>✓ Done</span>}
-                      </div>
-                      <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.25rem' }}>
-                        <div style={{ width: `${pct}%`, height: '100%', backgroundColor: done ? 'var(--success)' : 'var(--primary)' }}></div>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{task.completed_count} / {task.target_count} posts</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Today's Web Tasks */}
-          {todayWebTasks.length > 0 && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-                Today&apos;s Web Tasks — {today}
-              </h2>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-                {todayWebTasks.map(task => {
-                  const pct = task.target_count > 0 ? Math.round((task.completed_count / task.target_count) * 100) : 0;
-                  const done = task.completed_count >= task.target_count;
-                  return (
-                    <div key={task.id} style={{ padding: '1rem', border: `1px solid ${done ? 'var(--success)' : 'var(--border)'}`, borderRadius: '0.5rem', minWidth: '180px', flex: '1' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                        <span style={{ fontWeight: '600' }}>{task.business_name || task.client_name} — {POST_TYPE_LABELS[task.post_type] || task.post_type}</span>
-                        {done && <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}>✓ Done</span>}
-                      </div>
-                      <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.25rem' }}>
-                        <div style={{ width: `${pct}%`, height: '100%', backgroundColor: done ? 'var(--success)' : BRAND_COLOR }}></div>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{task.completed_count} / {task.target_count} posts</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Weekly Summary & Goals */}
-          <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-              <Logo width={32} height={32} />
-              <h2 style={{ fontSize: '1.25rem', margin: 0, color: 'var(--foreground)' }}>
-                Weekly Summary & Goals
-              </h2>
-            </div>
-
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                    <th style={{ padding: '0.75rem 0' }}>Week</th>
-                    <th style={{ padding: '0.75rem 0' }}>Days</th>
-                    <th style={{ padding: '0.75rem 0' }}>Posts Target</th>
-                    <th style={{ padding: '0.75rem 0' }}>Completed</th>
-                    <th style={{ padding: '0.75rem 0' }}>Progress</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {weeklySummary.map((ws) => {
-                    const pct = ws.target > 0 ? Math.round((ws.completed / ws.target) * 100) : 0;
-                    return (
-                      <tr key={ws.week} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '0.75rem 0', fontWeight: '600' }}>Week {ws.week}</td>
-                        <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)' }}>{ws.dayRange}</td>
-                        <td style={{ padding: '0.75rem 0' }}>
-                          <strong style={{ color: BRAND_COLOR }}>{ws.target}</strong>
-                        </td>
-                        <td style={{ padding: '0.75rem 0', color: pct === 100 ? BRAND_COLOR : 'var(--text-muted)' }}>
-                          {ws.completed}
-                        </td>
-                        <td style={{ padding: '0.75rem 0' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <div style={{ width: '60px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
-                              <div style={{ width: `${pct}%`, height: '100%', backgroundColor: BRAND_COLOR }}></div>
-                            </div>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pct}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Web Tasks Weekly Summary */}
-          {webWeeklySummary.some(ws => ws.target > 0) && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-                Web Tasks Weekly Summary
-              </h2>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '0.75rem 0' }}>Week</th>
-                      <th style={{ padding: '0.75rem 0' }}>Days</th>
-                      <th style={{ padding: '0.75rem 0' }}>Posts Target</th>
-                      <th style={{ padding: '0.75rem 0' }}>Completed</th>
-                      <th style={{ padding: '0.75rem 0' }}>Progress</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {webWeeklySummary.map((ws) => {
-                      const pct = ws.target > 0 ? Math.round((ws.completed / ws.target) * 100) : 0;
-                      return (
-                        <tr key={ws.week} style={{ borderBottom: '1px solid var(--border)' }}>
-                          <td style={{ padding: '0.75rem 0', fontWeight: '600' }}>Week {ws.week}</td>
-                          <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)' }}>{ws.dayRange}</td>
-                          <td style={{ padding: '0.75rem 0' }}>
-                            <strong style={{ color: BRAND_COLOR }}>{ws.target}</strong>
-                          </td>
-                          <td style={{ padding: '0.75rem 0', color: pct === 100 ? BRAND_COLOR : 'var(--text-muted)' }}>
-                            {ws.completed}
-                          </td>
-                          <td style={{ padding: '0.75rem 0' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <div style={{ width: '60px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
-                                <div style={{ width: `${pct}%`, height: '100%', backgroundColor: BRAND_COLOR }}></div>
-                              </div>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pct}%</span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Weekly Breakdown */}
-          {weeklyBreakdown.length > 0 && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-                Weekly Breakdown
-              </h2>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '0.75rem 0' }}>Week</th>
-                      <th style={{ padding: '0.75rem 0' }}>Post Type</th>
-                      <th style={{ padding: '0.75rem 0' }}>Target</th>
-                      <th style={{ padding: '0.75rem 0' }}>Completed</th>
-                      <th style={{ padding: '0.75rem 0' }}>Progress</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {weeklyBreakdown.map((w, i) => {
-                      const pct = w.target > 0 ? Math.round((w.completed / w.target) * 100) : 0;
-                      return (
-                        <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                          <td style={{ padding: '0.75rem 0' }}>Week {w.week_number}</td>
-                          <td style={{ padding: '0.75rem 0' }}>{POST_TYPE_LABELS[w.post_type] || w.post_type}</td>
-                          <td style={{ padding: '0.75rem 0' }}>{w.target}</td>
-                          <td style={{ padding: '0.75rem 0' }}>{w.completed}</td>
-                          <td style={{ padding: '0.75rem 0' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <div style={{ width: '100px', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-                                <div style={{ width: `${pct}%`, height: '100%', backgroundColor: 'var(--success)' }}></div>
-                              </div>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{pct}%</span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Recent Logs */}
-          {recentLogs.length > 0 && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>Recent Posts</h2>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '0.75rem 0' }}>Date</th>
-                      <th style={{ padding: '0.75rem 0' }}>Type</th>
-                      <th style={{ padding: '0.75rem 0' }}>Title</th>
-                      <th style={{ padding: '0.75rem 0' }}>URL</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentLogs.map(log => (
-                      <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)' }}>{log.task_date}</td>
-                        <td style={{ padding: '0.75rem 0' }}>{POST_TYPE_LABELS[log.post_type] || log.post_type}</td>
-                        <td style={{ padding: '0.75rem 0', fontWeight: '500' }}>{log.title}</td>
-                        <td style={{ padding: '0.75rem 0', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {log.url ? <a href={log.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>{log.url}</a> : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+          {/* Web-Off Page Weekly Summary */}
+          <WeeklySummaryCard title="Web-Off Page Weekly Summary" weeklySummary={weboff.weeklySummary} color="var(--success)" />
         </>
       )}
+    </div>
+  );
+}
+
+// Groups the flat task list by client so a client's name is shown once, with all
+// of their tasks for the day listed underneath it, instead of repeating the name
+// on every single task card.
+function TodayTasksCard({ title, today, tasks }) {
+  const byClient = [];
+  const indexByClient = new Map();
+  for (const task of tasks) {
+    if (!indexByClient.has(task.client_id)) {
+      indexByClient.set(task.client_id, byClient.length);
+      byClient.push({ client_id: task.client_id, client_name: task.client_name, tasks: [] });
+    }
+    byClient[indexByClient.get(task.client_id)].tasks.push(task);
+  }
+
+  return (
+    <div className="card">
+      <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+        {title} — {today}
+      </h2>
+      {byClient.length === 0 ? (
+        <p style={{ color: 'var(--text-muted)' }}>No tasks scheduled for today.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {byClient.map(client => (
+            <div key={client.client_id}>
+              <h3 style={{ margin: '0 0 0.6rem 0', fontSize: '0.95rem', fontWeight: '600' }}>{client.client_name}</h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                {client.tasks.map(task => (
+                  <OffpageTaskCard key={task.id} task={task} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Groups pending (overdue, still incomplete) tasks by client and shows the date
+// each was originally due, so they don't just silently disappear once their
+// scheduled day has passed.
+function PendingTasksCard({ title, tasks }) {
+  if (tasks.length === 0) return null;
+
+  const byClient = [];
+  const indexByClient = new Map();
+  for (const task of tasks) {
+    if (!indexByClient.has(task.client_id)) {
+      indexByClient.set(task.client_id, byClient.length);
+      byClient.push({ client_id: task.client_id, client_name: task.client_name, tasks: [] });
+    }
+    byClient[indexByClient.get(task.client_id)].tasks.push(task);
+  }
+
+  return (
+    <div className="card" style={{ border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+        <h2 style={{ fontSize: '1.25rem', margin: 0, color: '#f59e0b' }}>{title}</h2>
+        <span style={{
+          fontSize: '0.75rem', fontWeight: '600', color: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.12)', padding: '0.15rem 0.5rem', borderRadius: '1rem',
+        }}>
+          {tasks.length} overdue
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        {byClient.map(client => (
+          <div key={client.client_id}>
+            <h3 style={{ margin: '0 0 0.6rem 0', fontSize: '0.95rem', fontWeight: '600' }}>{client.client_name}</h3>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+              {client.tasks.map(task => (
+                <div key={task.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '0.6rem',
+                  padding: '0.5rem 0.85rem', minWidth: '160px',
+                  border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '0.5rem',
+                  backgroundColor: 'rgba(245, 158, 11, 0.06)',
+                }}>
+                  <span style={{ fontWeight: '600', fontSize: '0.85rem' }}>{task.category}</span>
+                  <span style={{ fontSize: '0.7rem', fontWeight: '600', color: '#f59e0b', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
+                    Due {task.task_date}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OffpageTaskCard({ task }) {
+  const done = task.completed_count >= task.target_count;
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.6rem',
+      padding: '0.5rem 0.85rem',
+      minWidth: '160px',
+      border: `1px solid ${done ? 'var(--success)' : 'var(--border)'}`,
+      borderRadius: '0.5rem',
+      backgroundColor: done ? 'rgba(34, 197, 94, 0.08)' : 'transparent',
+    }}>
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '20px',
+        height: '20px',
+        borderRadius: '50%',
+        flexShrink: 0,
+        backgroundColor: done ? 'var(--success)' : 'var(--border)',
+        color: done ? 'white' : 'var(--text-muted)',
+        fontSize: '0.7rem',
+        fontWeight: 'bold',
+      }}>
+        {done ? '✓' : ''}
+      </span>
+      <span style={{ fontWeight: '600', fontSize: '0.85rem' }}>{task.category}</span>
+      <span style={{ fontSize: '0.7rem', fontWeight: '600', color: done ? 'var(--success)' : 'var(--text-muted)', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
+        {done ? 'Complete' : 'Pending'}
+      </span>
+    </div>
+  );
+}
+
+function WeeklySummaryCard({ title, weeklySummary, color }) {
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+        <Logo width={32} height={32} />
+        <h2 style={{ fontSize: '1.25rem', margin: 0, color: 'var(--foreground)' }}>{title}</h2>
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+              <th style={{ padding: '0.75rem 0' }}>Week</th>
+              <th style={{ padding: '0.75rem 0' }}>Days</th>
+              <th style={{ padding: '0.75rem 0' }}>Target</th>
+              <th style={{ padding: '0.75rem 0' }}>Completed</th>
+              <th style={{ padding: '0.75rem 0' }}>Progress</th>
+            </tr>
+          </thead>
+          <tbody>
+            {weeklySummary.map((ws) => {
+              const pct = ws.target > 0 ? Math.round((ws.completed / ws.target) * 100) : 0;
+              return (
+                <tr key={ws.week} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '0.75rem 0', fontWeight: '600' }}>Week {ws.week}</td>
+                  <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)' }}>{ws.dayRange}</td>
+                  <td style={{ padding: '0.75rem 0' }}>
+                    <strong style={{ color }}>{ws.target}</strong>
+                  </td>
+                  <td style={{ padding: '0.75rem 0', color: pct === 100 ? color : 'var(--text-muted)' }}>
+                    {ws.completed}
+                  </td>
+                  <td style={{ padding: '0.75rem 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{ width: '60px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', backgroundColor: color }}></div>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pct}%</span>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

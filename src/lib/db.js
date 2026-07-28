@@ -109,6 +109,10 @@ async function runMigrations(raw) {
     // (writing the actual posts for a Web SEO Associate's client roster). Null for
     // writers not doing this.
     "ALTER TABLE users ADD COLUMN mirrors_web_associate_id INTEGER",
+    // Rotation pace for the GBP-Off Page / Web-Off Page writer task sheets (see
+    // writerOffpageSync.js) — how many clients per writer get featured per working day.
+    "ALTER TABLE campaigns ADD COLUMN gbp_writer_clients_per_day INTEGER DEFAULT 8",
+    "ALTER TABLE campaigns ADD COLUMN weboff_writer_clients_per_day INTEGER DEFAULT 6",
   ];
 
   for (const sql of alterStatements) {
@@ -233,6 +237,37 @@ async function runMigrations(raw) {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (task_id) REFERENCES web_writing_tasks(id) ON DELETE CASCADE,
       FOREIGN KEY (logged_by) REFERENCES users(id)
+    )`,
+    // Persistent, incrementally-maintained writer<->client assignment for the
+    // GBP-Off Page / Web-Off Page writer sheets (see writerOffpageSync.js) — separate
+    // per task_type since the two tabs have different, only partially overlapping
+    // client rosters. Only touched by adding new clients / removing gone ones on each
+    // sync, never wiped wholesale, so a client stays with the same writer over time.
+    `CREATE TABLE IF NOT EXISTS writer_offpage_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      task_type TEXT NOT NULL CHECK(task_type IN ('gbp','weboff')),
+      client_id INTEGER NOT NULL,
+      writer_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(campaign_id, task_type, client_id)
+    )`,
+    // One row per (writer, client, category) block, wiped and rebuilt every sync —
+    // completed_count is always re-derived live from the sheet's current Status
+    // column values (the sheet is the sole source of truth for completion), so
+    // there's no prior-progress-loss risk from wiping, unlike seo_tasks/webseo_tasks.
+    `CREATE TABLE IF NOT EXISTS writer_offpage_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      writer_id INTEGER NOT NULL,
+      client_id INTEGER NOT NULL,
+      task_type TEXT NOT NULL CHECK(task_type IN ('gbp','weboff')),
+      category TEXT NOT NULL,
+      day_number INTEGER NOT NULL,
+      task_date DATE NOT NULL,
+      target_count INTEGER DEFAULT 0,
+      completed_count INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
   ];
 

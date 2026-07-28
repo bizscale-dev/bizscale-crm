@@ -5,6 +5,17 @@ import TasksClient from './TasksClient';
 
 export const revalidate = 0; // Disable caching for real-time data
 
+function groupByClient(tasks) {
+  const byClient = {};
+  tasks.forEach(t => {
+    if (!byClient[t.client_id]) {
+      byClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, website: t.website, tasks: [] };
+    }
+    byClient[t.client_id].tasks.push(t);
+  });
+  return Object.values(byClient);
+}
+
 export default async function AssociateTasksPage({ searchParams }) {
   const db = await getDb();
   const session = await verifySession();
@@ -13,7 +24,7 @@ export default async function AssociateTasksPage({ searchParams }) {
   const today = new Date().toISOString().split('T')[0];
   const date = searchParams?.date || today;
 
-  let tasks = [], availableDates = [];
+  let tasks = [], availableDates = [], pendingTasks = [];
 
   if (campaign) {
     // Only show tasks for active clients
@@ -34,16 +45,18 @@ export default async function AssociateTasksPage({ searchParams }) {
       WHERE st.associate_id = ? AND st.campaign_id = ? AND c.is_active = 1
       ORDER BY st.task_date
     `).all(userId, campaign.id);
-  }
 
-  // Group tasks by client
-  const tasksByClient = {};
-  tasks.forEach(t => {
-    if (!tasksByClient[t.client_id]) {
-      tasksByClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, website: t.website, tasks: [] };
-    }
-    tasksByClient[t.client_id].tasks.push(t);
-  });
+    // Pending — the task's scheduled day has already passed (relative to today, not
+    // whichever date is currently selected) but it's still not fully done.
+    pendingTasks = await db.prepare(`
+      SELECT st.*, c.name as client_name, c.website
+      FROM seo_tasks st
+      JOIN clients c ON c.id = st.client_id
+      WHERE st.associate_id = ? AND st.campaign_id = ?
+        AND st.task_date < ? AND st.completed_count < st.target_count AND c.is_active = 1
+      ORDER BY st.task_date DESC, c.sort_order, st.link_type
+    `).all(userId, campaign.id, today);
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -51,7 +64,8 @@ export default async function AssociateTasksPage({ searchParams }) {
         <div className="card"><p style={{ color: 'var(--danger)', margin: 0 }}>No active campaign. Please contact your admin.</p></div>
       ) : (
         <TasksClient
-          tasksByClient={Object.values(tasksByClient)}
+          tasksByClient={groupByClient(tasks)}
+          pendingByClient={groupByClient(pendingTasks)}
           availableDates={availableDates}
           selectedDate={date}
           today={today}

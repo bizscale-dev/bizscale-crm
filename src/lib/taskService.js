@@ -3,25 +3,6 @@ import { getDb } from './db';
 import { LINK_TYPES } from './services';
 import { getOffDaysSet, getWorkingDays } from './offDays';
 
-// Writer task type distribution per week
-function getWriterWeekDistribution(approach, weekNumber) {
-  if (approach === 1) {
-    const patterns = [
-      { guestpost: 2, web2: 3, pdf: 2 },
-      { guestpost: 3, web2: 2, pdf: 2 },
-      { guestpost: 2, web2: 2, pdf: 3 }
-    ];
-    return patterns[(weekNumber - 1) % patterns.length];
-  } else {
-    const patterns = [
-      { guestpost: 7, web2: 0, pdf: 0 },
-      { guestpost: 0, web2: 7, pdf: 0 },
-      { guestpost: 0, web2: 0, pdf: 7 }
-    ];
-    return patterns[(weekNumber - 1) % patterns.length];
-  }
-}
-
 export async function generateSEOTasks(campaignId) {
   const db = await getDb();
   const campaign = await db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
@@ -208,87 +189,6 @@ export async function generateSEOTasks(campaignId) {
   return allTasks.length;
 }
 
-export async function generateWritingTasks(campaignId) {
-  const db = await getDb();
-  const campaign = await db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
-  if (!campaign) throw new Error('Campaign not found');
-
-  const writers = await db.prepare(`
-    SELECT wa.*, u.name
-    FROM writer_assignments wa
-    JOIN users u ON u.id = wa.user_id
-    WHERE wa.campaign_id = ?
-  `).all(campaignId);
-
-  if (writers.length === 0) throw new Error('No writers assigned to this campaign');
-
-  // Get active clients count to calculate daily target per client
-  const activeClientCount = (await db.prepare(`
-    SELECT COUNT(*) as count FROM clients WHERE campaign_id = ? AND is_active = 1
-  `).get(campaignId)).count;
-
-  if (activeClientCount === 0) throw new Error('No active clients found for this campaign');
-
-  const totalDays = campaign.total_days;
-  const daysPerWeek = 5;
-  const offDays = await getOffDaysSet(campaignId);
-  const workingDays = getWorkingDays(campaign.start_date || moment().format('YYYY-MM-DD'), totalDays, offDays);
-  const monthlyPostsPerClient = campaign.writers_daily_target || 21; // This now stores monthly posts per client
-
-  // Calculate daily posts needed per writer to meet monthly targets
-  // Total monthly posts needed = monthlyPostsPerClient * activeClientCount
-  // Daily posts per writer = (monthlyPostsPerClient * activeClientCount) / totalDays / numberOfWriters
-  const totalMonthlyPostsNeeded = monthlyPostsPerClient * activeClientCount;
-  const dailyPostsPerWriterToMeetTarget = Math.ceil(totalMonthlyPostsNeeded / totalDays);
-
-  // Clear existing writing tasks
-  await db.prepare('DELETE FROM writing_tasks WHERE campaign_id = ?').run(campaignId);
-
-  const allTasks = [];
-
-  for (const writer of writers) {
-    // Each writer gets an equal share of the daily posts needed
-    const dailyTarget = Math.ceil(dailyPostsPerWriterToMeetTarget / writers.length);
-
-    for (const { dayNumber: currentWorkday, dateStr: taskDate } of workingDays) {
-      const weekNumber = Math.floor((currentWorkday - 1) / daysPerWeek) + 1;
-      const dist = getWriterWeekDistribution(campaign.writer_approach || 1, weekNumber);
-      const totalWeekPosts = Object.values(dist).reduce((a, b) => a + b, 0);
-
-      if (totalWeekPosts === 0) continue;
-
-      Object.entries(dist).forEach(([postType, weekCount]) => {
-        if (weekCount === 0) return;
-        const dailyCount = Math.round(dailyTarget * (weekCount / totalWeekPosts));
-        if (dailyCount > 0) {
-          allTasks.push({
-            campaign_id: campaignId,
-            writer_id: writer.user_id,
-            week_number: weekNumber,
-            day_number: currentWorkday,
-            task_date: taskDate,
-            post_type: postType,
-            target_count: dailyCount
-          });
-        }
-      });
-    }
-  }
-
-  if (allTasks.length > 0) {
-    const insertSql = `
-      INSERT INTO writing_tasks (campaign_id, writer_id, week_number, day_number, task_date, post_type, target_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-    await db.batch(allTasks.map(t => ({
-      sql: insertSql,
-      args: [t.campaign_id, t.writer_id, t.week_number, t.day_number, t.task_date, t.post_type, t.target_count],
-    })));
-  }
-
-  return allTasks.length;
-}
-
 // Get today's SEO tasks for an associate
 export async function getAssociateTodayTasks(associateId, campaignId, date) {
   const db = await getDb();
@@ -303,18 +203,4 @@ export async function getAssociateTodayTasks(associateId, campaignId, date) {
     WHERE st.associate_id = ? AND st.campaign_id = ? AND st.task_date = ?
     ORDER BY c.sort_order, st.link_type
   `).all(associateId, campaignId, taskDate);
-}
-
-// Get today's writing tasks for a writer
-export async function getWriterTodayTasks(writerId, campaignId, date) {
-  const db = await getDb();
-  const taskDate = date || moment().format('YYYY-MM-DD');
-
-  return db.prepare(`
-    SELECT wt.*, u.name as writer_name
-    FROM writing_tasks wt
-    JOIN users u ON u.id = wt.writer_id
-    WHERE wt.writer_id = ? AND wt.campaign_id = ? AND wt.task_date = ?
-    ORDER BY wt.post_type
-  `).all(writerId, campaignId, taskDate);
 }

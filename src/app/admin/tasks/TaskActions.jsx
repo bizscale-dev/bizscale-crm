@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { generateSEO, generateWriting, generateWebSeo, generateAll, clearSEO, clearWriting, clearWebSeo } from './actions';
+import { generateSEO, generateWebSeo, generateAll, clearSEO, clearWriting, clearWebSeo } from './actions';
 
 export default function TaskActions() {
   const [loading, setLoading] = useState(false);
@@ -48,12 +48,6 @@ export default function TaskActions() {
           disabled={loading}
           className="btn" style={{ backgroundColor: 'var(--primary)', color: 'white' }}>
           Generate SEO Tasks
-        </button>
-        <button
-          onClick={() => handleAction(generateWriting, 'Generate Writing tasks? This will overwrite existing writing tasks.')}
-          disabled={loading}
-          className="btn" style={{ backgroundColor: 'var(--success)', color: 'white' }}>
-          Generate Writing Tasks
         </button>
         <button
           onClick={() => handleAction(generateWebSeo, 'Generate Web SEO Associate tasks? This will overwrite the existing batch-rotation schedule.')}

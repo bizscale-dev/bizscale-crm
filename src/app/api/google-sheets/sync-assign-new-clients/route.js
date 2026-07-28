@@ -1,7 +1,6 @@
 import { getDb, initDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { generateSEOTasks } from '@/lib/taskService';
-import { generateWriterTasks } from '@/lib/writerTaskGenerator';
 import { enrollClientInFunnel, runFunnelProgressionForCampaign } from '@/lib/funnel';
 
 // 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
@@ -260,14 +259,9 @@ export async function POST(request) {
       );
     }
 
-    // Fifth pass: regenerate all WRITER tasks for the campaign
-    try {
-      const writerTaskResult = await generateWriterTasks(campaign.id);
-      console.log(`Generated writer tasks for campaign:`, writerTaskResult.message);
-    } catch (err) {
-      console.error('Failed to generate writer tasks:', err.message);
-      // Don't fail - SEO tasks were created successfully
-    }
+    // Writer task generation is no longer driven by this sync — writers now get
+    // their tasks from the GBP-Off Page / Web-Off Page sheets directly (see
+    // src/lib/writerOffpageSync.js, on its own cron trigger).
 
     return Response.json({
       success: true,

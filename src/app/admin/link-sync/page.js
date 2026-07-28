@@ -9,6 +9,7 @@ const SYNC_TYPE_LABELS = {
   'completed-links': 'SEO Completed Links',
   'webseo-completed-links': 'Web SEO Completed Links',
   'web-clients': 'Web Clients (Add/Remove)',
+  'writer-offpage': 'Writer GBP/Web-Off Tasks',
 };
 
 function formatLogTime(isoString) {

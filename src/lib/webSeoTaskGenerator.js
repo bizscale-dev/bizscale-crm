@@ -28,7 +28,7 @@ export async function generateWebSeoTasks(campaignId) {
   }
 
   // total_days means working days — the calendar range extends past weekends/off-days
-  // as needed to fit all of them, same as generateSEOTasks/generateWriterTasks.
+  // as needed to fit all of them, same as generateSEOTasks/writerOffpageSync.
   const workingDays = getWorkingDays(campaign.start_date, totalDays, offDays);
 
   const associates = await db.prepare(`
@@ -56,36 +56,9 @@ export async function generateWebSeoTasks(campaignId) {
     priorCompleted.set(`${row.client_id}|${row.day_number}|${row.post_type}`, row.completed_count);
   }
 
-  // Writers doing "Web Tasks" mirror one Web SEO Associate's exact schedule (same
-  // client, day, post type, target count) so they can write the actual posts for that
-  // associate's clients. Their completed_count is tracked independently (their own
-  // logging via web_writing_logs), so it gets the same snapshot-and-restore treatment
-  // as the associate's rows above, just in its own table/map.
-  const writersByAssociate = new Map();
-  const mirrorWriters = await db.prepare(`
-    SELECT id, mirrors_web_associate_id FROM users
-    WHERE role = 'writer' AND is_active = 1 AND mirrors_web_associate_id IS NOT NULL
-  `).all();
-  for (const w of mirrorWriters) {
-    if (!writersByAssociate.has(w.mirrors_web_associate_id)) writersByAssociate.set(w.mirrors_web_associate_id, []);
-    writersByAssociate.get(w.mirrors_web_associate_id).push(w.id);
-  }
-
-  const priorWriterCompleted = new Map();
-  const priorWriterRows = await db.prepare(`
-    SELECT writer_id, client_id, day_number, post_type, completed_count
-    FROM web_writing_tasks
-    WHERE campaign_id = ? AND completed_count > 0
-  `).all(campaignId);
-  for (const row of priorWriterRows) {
-    priorWriterCompleted.set(`${row.writer_id}|${row.client_id}|${row.day_number}|${row.post_type}`, row.completed_count);
-  }
-
   await db.prepare('DELETE FROM webseo_tasks WHERE campaign_id = ?').run(campaignId);
-  await db.prepare('DELETE FROM web_writing_tasks WHERE campaign_id = ?').run(campaignId);
 
   const rows = [];
-  const writerRows = [];
 
   for (const associate of associates) {
     const clients = await db.prepare(`
@@ -137,21 +110,6 @@ export async function generateWebSeoTasks(campaignId) {
                 target_count: count,
                 completed_count: priorCompleted.get(priorKey) || 0,
               });
-
-              for (const writerId of writersByAssociate.get(associate.id) || []) {
-                const priorWriterKey = `${writerId}|${client.id}|${visit.dayNumber}|${postType}`;
-                writerRows.push({
-                  campaign_id: campaignId,
-                  client_id: client.id,
-                  writer_id: writerId,
-                  associate_id: associate.id,
-                  day_number: visit.dayNumber,
-                  task_date: visit.dateStr,
-                  post_type: postType,
-                  target_count: count,
-                  completed_count: priorWriterCompleted.get(priorWriterKey) || 0,
-                });
-              }
             }
           });
         }
@@ -170,16 +128,5 @@ export async function generateWebSeoTasks(campaignId) {
     })));
   }
 
-  if (writerRows.length > 0) {
-    const insertWriterSql = `
-      INSERT INTO web_writing_tasks (campaign_id, client_id, writer_id, associate_id, day_number, task_date, post_type, target_count, completed_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    await db.batch(writerRows.map(r => ({
-      sql: insertWriterSql,
-      args: [r.campaign_id, r.client_id, r.writer_id, r.associate_id, r.day_number, r.task_date, r.post_type, r.target_count, r.completed_count],
-    })));
-  }
-
-  return { success: true, taskCount: rows.length, associateCount: associates.length, writerTaskCount: writerRows.length };
+  return { success: true, taskCount: rows.length, associateCount: associates.length };
 }

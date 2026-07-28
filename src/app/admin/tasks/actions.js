@@ -2,7 +2,7 @@
 
 import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
-import { generateSEOTasks, generateWritingTasks } from '@/lib/taskService';
+import { generateSEOTasks } from '@/lib/taskService';
 import { generateWebSeoTasks } from '@/lib/webSeoTaskGenerator';
 import { revalidatePath } from 'next/cache';
 
@@ -19,28 +19,14 @@ export async function generateSEO() {
   }
 }
 
-export async function generateWriting() {
-  const campaign = await getActiveCampaign();
-  if (!campaign) return { error: 'No active campaign' };
-
-  try {
-    const count = await generateWritingTasks(campaign.id);
-    revalidatePath('/admin/tasks');
-    return { success: `${count} writing tasks generated` };
-  } catch (err) {
-    return { error: err.message };
-  }
-}
-
 export async function generateAll() {
   const campaign = await getActiveCampaign();
   if (!campaign) return { error: 'No active campaign' };
 
   try {
     const seoCount = await generateSEOTasks(campaign.id);
-    const wCount = await generateWritingTasks(campaign.id);
     revalidatePath('/admin/tasks');
-    return { success: `${seoCount + wCount} tasks generated (SEO & Writing)` };
+    return { success: `${seoCount} SEO tasks generated` };
   } catch (err) {
     return { error: err.message };
   }

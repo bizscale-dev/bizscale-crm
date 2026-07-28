@@ -1,29 +1,52 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { regenerateWriterTasks, clearWriterTasks, setWriterMirrorsAssociate } from './actions';
+import { useState } from 'react';
+import { regenerateWriterTasks, clearWriterTasks } from './actions';
+import { updateWriterOffpageSheetUrl } from '../settings/actions';
 
 const BRAND_COLOR = '#16b293';
 
-export default function WritersClient({ writers, writerStats, campaign, webSeoAssociates = [] }) {
+const inputStyle = {
+  width: '100%',
+  padding: '0.5rem 0.75rem',
+  borderRadius: '0.5rem',
+  border: '1px solid var(--border)',
+  backgroundColor: 'var(--background)',
+  color: 'var(--foreground)'
+};
+
+export default function WritersClient({ writers, writerStats, writerOffpageSheetUrl = '' }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
-  const [isPending, startTransition] = useTransition();
+  const [sheetUrl, setSheetUrl] = useState(writerOffpageSheetUrl);
+  const [isSavingUrl, setIsSavingUrl] = useState(false);
 
-  const handleMirrorChange = (writerId, associateId) => {
-    startTransition(async () => {
-      const result = await setWriterMirrorsAssociate(writerId, associateId ? parseInt(associateId, 10) : null);
+  const handleSaveSheetUrl = async () => {
+    if (!sheetUrl) {
+      setMessage({ type: 'error', text: 'Enter a Google Sheet URL first' });
+      return;
+    }
+    setIsSavingUrl(true);
+    setMessage(null);
+    try {
+      const formData = new FormData();
+      formData.set('sheet_url', sheetUrl);
+      const result = await updateWriterOffpageSheetUrl(null, formData);
       if (result.error) {
         setMessage({ type: 'error', text: result.error });
       } else {
-        window.location.reload();
+        setMessage({ type: 'success', text: result.success });
       }
-    });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setIsSavingUrl(false);
+    }
   };
 
   const handleRegenerateTasks = async () => {
-    if (!confirm('Regenerate writer tasks? This will recalculate all client rotations.')) return;
-    
+    if (!confirm('Sync GBP-Off Page / Web-Off Page tasks now? This re-reads the sheet and rebuilds task rows.')) return;
+
     setLoading(true);
     setMessage(null);
     try {
@@ -43,8 +66,8 @@ export default function WritersClient({ writers, writerStats, campaign, webSeoAs
   };
 
   const handleClearTasks = async () => {
-    if (!confirm('Clear all writer tasks? This cannot be undone.')) return;
-    
+    if (!confirm('Clear all GBP-Off/Web-Off writer tasks? This cannot be undone.')) return;
+
     setLoading(true);
     setMessage(null);
     try {
@@ -84,26 +107,49 @@ export default function WritersClient({ writers, writerStats, campaign, webSeoAs
         </div>
       )}
 
+      {/* GBP-Off Page / Web-Off Page Sheet */}
+      <div className="card">
+        <h3 style={{ marginTop: 0, marginBottom: '0.75rem' }}>Writer GBP-Off Page / Web-Off Page Sheet</h3>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
+          One spreadsheet containing both tabs (named by current month/year, e.g. &quot;{new Date().toLocaleString('en-US', { month: 'long' })} {new Date().getFullYear()} GBP-Off Page&quot;). Writers mark work Done directly in the sheet — this app only mirrors progress.
+        </p>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1, minWidth: '260px' }}>
+            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '500' }}>Google Sheet URL</label>
+            <input
+              type="url"
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+              value={sheetUrl}
+              onChange={(e) => setSheetUrl(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+          <button onClick={handleSaveSheetUrl} disabled={isSavingUrl} className="btn" style={{ backgroundColor: 'transparent', border: '1px solid var(--border)', color: 'var(--foreground)', cursor: isSavingUrl ? 'not-allowed' : 'pointer' }}>
+            {isSavingUrl ? 'Saving...' : 'Save as Default'}
+          </button>
+        </div>
+      </div>
+
       {/* Action Buttons */}
       <div className="card" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <button
           onClick={handleRegenerateTasks}
           disabled={loading}
           className="btn btn-primary"
-          style={{ 
+          style={{
             backgroundColor: BRAND_COLOR,
             color: 'white',
             border: 'none',
             cursor: 'pointer'
           }}
         >
-          {loading ? 'Processing...' : '🔄 Regenerate Writer Tasks'}
+          {loading ? 'Processing...' : '🔄 Sync Now'}
         </button>
         <button
           onClick={handleClearTasks}
           disabled={loading}
           className="btn"
-          style={{ 
+          style={{
             backgroundColor: 'transparent',
             border: `1px solid var(--border)`,
             color: 'var(--danger)',
@@ -112,31 +158,6 @@ export default function WritersClient({ writers, writerStats, campaign, webSeoAs
         >
           🗑️ Clear All Tasks
         </button>
-      </div>
-
-      {/* Campaign Settings Info */}
-      <div className="card" style={{ backgroundColor: 'rgba(22, 178, 147, 0.05)', border: `1px solid ${BRAND_COLOR}` }}>
-        <h3 style={{ marginTop: 0, marginBottom: '1rem', color: BRAND_COLOR }}>Campaign Configuration</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-          <div>
-            <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>Posts per Client/Month</p>
-            <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600', color: BRAND_COLOR }}>
-              {campaign.posts_per_client || 21}
-            </p>
-          </div>
-          <div>
-            <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>Clients per Day (Rotation)</p>
-            <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600', color: BRAND_COLOR }}>
-              {campaign.writer_clients_per_day || 8}
-            </p>
-          </div>
-          <div>
-            <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>Team Daily Target</p>
-            <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600', color: BRAND_COLOR }}>
-              {campaign.writers_daily_target || 105} posts/day
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* Writers List */}
@@ -151,20 +172,20 @@ export default function WritersClient({ writers, writerStats, campaign, webSeoAs
                 <th style={{ padding: '0.75rem 0', fontWeight: '600' }}>Writer Name</th>
                 <th style={{ padding: '0.75rem 0', fontWeight: '600' }}>Email</th>
                 <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Status</th>
-                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Assigned Clients</th>
-                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Posts Progress</th>
-                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Web Tasks Progress</th>
-                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Web Tasks — Mirrors Associate</th>
+                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>GBP Clients</th>
+                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>GBP Progress</th>
+                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Web-Off Clients</th>
+                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Web-Off Progress</th>
               </tr>
             </thead>
             <tbody>
               {writers.map(writer => {
                 const stats = getStatForWriter(writer.id);
-                const progress = stats.total_target_posts > 0
-                  ? Math.round((stats.total_completed_posts / stats.total_target_posts) * 100)
+                const gbpProgress = stats.gbp_target > 0
+                  ? Math.round((stats.gbp_completed / stats.gbp_target) * 100)
                   : 0;
-                const webProgress = stats.web_target_posts > 0
-                  ? Math.round((stats.web_completed_posts / stats.web_target_posts) * 100)
+                const weboffProgress = stats.weboff_target > 0
+                  ? Math.round((stats.weboff_completed / stats.weboff_target) * 100)
                   : 0;
 
                 return (
@@ -189,55 +210,38 @@ export default function WritersClient({ writers, writerStats, campaign, webSeoAs
                       </span>
                     </td>
                     <td style={{ padding: '0.75rem 0', textAlign: 'center', fontWeight: '500' }}>
-                      {stats.assigned_clients || 0}
+                      {stats.gbp_assigned_clients || 0}
                     </td>
                     <td style={{ padding: '0.75rem 0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
                         <div style={{ width: '80px', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
                           <div style={{
-                            width: `${progress}%`,
+                            width: `${gbpProgress}%`,
                             height: '100%',
-                            backgroundColor: progress === 100 ? BRAND_COLOR : 'var(--primary)'
+                            backgroundColor: gbpProgress === 100 ? BRAND_COLOR : 'var(--primary)'
                           }}></div>
                         </div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                          {stats.total_completed_posts || 0} / {stats.total_target_posts || 0}
+                          {stats.gbp_completed || 0} / {stats.gbp_target || 0}
                         </span>
                       </div>
+                    </td>
+                    <td style={{ padding: '0.75rem 0', textAlign: 'center', fontWeight: '500' }}>
+                      {stats.weboff_assigned_clients || 0}
                     </td>
                     <td style={{ padding: '0.75rem 0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
                         <div style={{ width: '80px', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
                           <div style={{
-                            width: `${webProgress}%`,
+                            width: `${weboffProgress}%`,
                             height: '100%',
-                            backgroundColor: webProgress === 100 ? BRAND_COLOR : 'var(--primary)'
+                            backgroundColor: weboffProgress === 100 ? BRAND_COLOR : 'var(--success)'
                           }}></div>
                         </div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                          {stats.web_completed_posts || 0} / {stats.web_target_posts || 0}
+                          {stats.weboff_completed || 0} / {stats.weboff_target || 0}
                         </span>
                       </div>
-                    </td>
-                    <td style={{ padding: '0.75rem 0', textAlign: 'center' }}>
-                      <select
-                        defaultValue={writer.mirrors_web_associate_id || ''}
-                        disabled={isPending}
-                        onChange={(e) => handleMirrorChange(writer.id, e.target.value)}
-                        style={{
-                          padding: '0.35rem 0.5rem',
-                          borderRadius: '0.375rem',
-                          border: '1px solid var(--border)',
-                          backgroundColor: 'var(--background)',
-                          color: 'var(--foreground)',
-                          fontSize: '0.8rem',
-                        }}
-                      >
-                        <option value="">None</option>
-                        {webSeoAssociates.map(a => (
-                          <option key={a.id} value={a.id}>{a.name}</option>
-                        ))}
-                      </select>
                     </td>
                   </tr>
                 );
