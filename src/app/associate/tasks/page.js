@@ -22,7 +22,8 @@ export default async function AssociateTasksPage({ searchParams }) {
   const userId = session.userId;
   const campaign = await getActiveCampaign();
   const today = new Date().toISOString().split('T')[0];
-  const date = searchParams?.date || today;
+  const resolvedSearchParams = await searchParams;
+  const date = resolvedSearchParams?.date || today;
 
   let tasks = [], availableDates = [], pendingTasks = [];
 

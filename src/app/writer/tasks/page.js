@@ -63,7 +63,8 @@ export default async function WriterTasksPage({ searchParams }) {
   const userId = session.userId;
   const writerCampaign = await getActiveWriterCampaign();
   const today = new Date().toISOString().split('T')[0];
-  const date = searchParams?.date || today;
+  const resolvedSearchParams = await searchParams;
+  const date = resolvedSearchParams?.date || today;
 
   let gbp = { tasksByClient: [], availableDates: [], pendingTasksByClient: [] };
   let weboff = { tasksByClient: [], availableDates: [], pendingTasksByClient: [] };
