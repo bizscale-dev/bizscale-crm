@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+import { getActiveCampaign, getActiveWriterCampaign } from '@/lib/services';
+import { listOffDays } from '@/lib/writerCampaignOffDays';
 import Link from 'next/link';
 import WritersClient from './WritersClient';
 
@@ -8,11 +9,13 @@ export const revalidate = 0;
 export default async function WritersPage() {
   const db = await getDb();
   const campaign = await getActiveCampaign();
+  const writerCampaign = await getActiveWriterCampaign();
 
   let writers = [];
   let writerStats = [];
   let writersDashboard = [];
   let writerOffpageSheetUrl = '';
+  let writerCampaignOffDays = [];
 
   if (campaign) {
     writers = await db.prepare(`
@@ -23,51 +26,55 @@ export default async function WritersPage() {
       WHERE u.role = 'writer'
       ORDER BY u.name
     `).all(campaign.id);
+  }
 
-    const sheetSetting = await db.prepare("SELECT value FROM settings WHERE key = ?").get('writer_offpage_sheet_url');
-    writerOffpageSheetUrl = sheetSetting?.value || '';
+  const sheetSetting = await db.prepare("SELECT value FROM settings WHERE key = ?").get('writer_offpage_sheet_url');
+  writerOffpageSheetUrl = sheetSetting?.value || '';
 
+  if (writerCampaign) {
     // GBP-Off Page / Web-Off Page — sourced from the Google Sheet tabs (see
     // src/lib/writerOffpageSync.js). Assigned clients come from
     // writer_offpage_assignments, not the old clients.assigned_writer_id.
     writerStats = await db.prepare(`
       SELECT u.id, u.name,
-        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_assigned_clients,
-        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_target,
-        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_completed,
-        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_assigned_clients,
-        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_target,
-        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_completed
+        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'gbp') as gbp_assigned_clients,
+        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'gbp') as gbp_target,
+        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'gbp') as gbp_completed,
+        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'weboff') as weboff_assigned_clients,
+        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'weboff') as weboff_target,
+        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'weboff') as weboff_completed
       FROM users u
       WHERE u.role = 'writer' AND u.is_active = 1
       ORDER BY u.name
-    `).all(campaign.id, campaign.id, campaign.id, campaign.id, campaign.id, campaign.id);
+    `).all(writerCampaign.id, writerCampaign.id, writerCampaign.id, writerCampaign.id, writerCampaign.id, writerCampaign.id);
 
     // Dashboard data with additional info
     writersDashboard = await db.prepare(`
       SELECT u.id, u.name, u.email, u.is_active,
-        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_assigned_clients,
-        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_target,
-        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'gbp') as gbp_completed,
-        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_assigned_clients,
-        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_target,
-        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND campaign_id = ? AND task_type = 'weboff') as weboff_completed
+        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'gbp') as gbp_assigned_clients,
+        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'gbp') as gbp_target,
+        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'gbp') as gbp_completed,
+        (SELECT COUNT(*) FROM writer_offpage_assignments WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'weboff') as weboff_assigned_clients,
+        (SELECT SUM(target_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'weboff') as weboff_target,
+        (SELECT SUM(completed_count) FROM writer_offpage_tasks WHERE writer_id = u.id AND writer_campaign_id = ? AND task_type = 'weboff') as weboff_completed
       FROM users u
       WHERE u.role = 'writer'
       ORDER BY u.name
-    `).all(campaign.id, campaign.id, campaign.id, campaign.id, campaign.id, campaign.id);
+    `).all(writerCampaign.id, writerCampaign.id, writerCampaign.id, writerCampaign.id, writerCampaign.id, writerCampaign.id);
+
+    writerCampaignOffDays = await listOffDays(writerCampaign.id);
   }
 
-  // Get campaign-level stats
-  const gbpCampaignStats = campaign ? await db.prepare(`
+  // Get writer-campaign-level stats
+  const gbpCampaignStats = writerCampaign ? await db.prepare(`
     SELECT SUM(target_count) as total_target_posts, SUM(completed_count) as total_completed_posts
-    FROM writer_offpage_tasks WHERE campaign_id = ? AND task_type = 'gbp'
-  `).get(campaign.id) : { total_target_posts: 0, total_completed_posts: 0 };
+    FROM writer_offpage_tasks WHERE writer_campaign_id = ? AND task_type = 'gbp'
+  `).get(writerCampaign.id) : { total_target_posts: 0, total_completed_posts: 0 };
 
-  const weboffCampaignStats = campaign ? await db.prepare(`
+  const weboffCampaignStats = writerCampaign ? await db.prepare(`
     SELECT SUM(target_count) as total_target_posts, SUM(completed_count) as total_completed_posts
-    FROM writer_offpage_tasks WHERE campaign_id = ? AND task_type = 'weboff'
-  `).get(campaign.id) : { total_target_posts: 0, total_completed_posts: 0 };
+    FROM writer_offpage_tasks WHERE writer_campaign_id = ? AND task_type = 'weboff'
+  `).get(writerCampaign.id) : { total_target_posts: 0, total_completed_posts: 0 };
 
   const stats = {
     totalWriters: writers.filter(w => w.is_active).length,
@@ -215,6 +222,8 @@ export default async function WritersPage() {
             writers={writers}
             writerStats={writerStats}
             writerOffpageSheetUrl={writerOffpageSheetUrl}
+            writerCampaign={writerCampaign}
+            writerCampaignOffDays={writerCampaignOffDays}
           />
         </>
       )}

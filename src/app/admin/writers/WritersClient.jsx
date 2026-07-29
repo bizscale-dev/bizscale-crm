@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { regenerateWriterTasks, clearWriterTasks } from './actions';
+import { regenerateWriterTasks, clearWriterTasks, createWriterCampaign, toggleWriterCampaignOffDayAction } from './actions';
 import { updateWriterOffpageSheetUrl } from '../settings/actions';
 
 const BRAND_COLOR = '#16b293';
@@ -15,11 +15,70 @@ const inputStyle = {
   color: 'var(--foreground)'
 };
 
-export default function WritersClient({ writers, writerStats, writerOffpageSheetUrl = '' }) {
+export default function WritersClient({ writers, writerStats, writerOffpageSheetUrl = '', writerCampaign = null, writerCampaignOffDays = [] }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [sheetUrl, setSheetUrl] = useState(writerOffpageSheetUrl);
   const [isSavingUrl, setIsSavingUrl] = useState(false);
+  const [creatingWriterCampaign, setCreatingWriterCampaign] = useState(false);
+  const [newStartDate, setNewStartDate] = useState('');
+  const [newTotalDays, setNewTotalDays] = useState(16);
+  const [newOffDate, setNewOffDate] = useState('');
+
+  const handleCreateWriterCampaign = async () => {
+    if (!newStartDate) {
+      setMessage({ type: 'error', text: 'Pick a start date for the writer campaign' });
+      return;
+    }
+    if (!confirm(`Start a new writer campaign on ${newStartDate}? This ends the current writer campaign (if any) and generates a fresh schedule from the sheet.`)) return;
+
+    setCreatingWriterCampaign(true);
+    setMessage(null);
+    try {
+      const formData = new FormData();
+      formData.set('start_date', newStartDate);
+      formData.set('total_days', newTotalDays);
+      const result = await createWriterCampaign(null, formData);
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error });
+      } else {
+        setMessage({ type: 'success', text: result.success });
+        window.location.reload();
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setCreatingWriterCampaign(false);
+    }
+  };
+
+  const handleAddOffDay = async () => {
+    if (!newOffDate) return;
+    try {
+      const result = await toggleWriterCampaignOffDayAction(newOffDate);
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error });
+      } else {
+        setNewOffDate('');
+        window.location.reload();
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+  };
+
+  const handleRemoveOffDay = async (dateStr) => {
+    try {
+      const result = await toggleWriterCampaignOffDayAction(dateStr);
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error });
+      } else {
+        window.location.reload();
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+  };
 
   const handleSaveSheetUrl = async () => {
     if (!sheetUrl) {
@@ -107,6 +166,67 @@ export default function WritersClient({ writers, writerStats, writerOffpageSheet
         </div>
       )}
 
+      {/* Writer Campaign — independent of the main campaign, so writers can start
+          their rotation ahead of the associate-facing campaign. */}
+      <div className="card" style={{ border: `1px solid ${BRAND_COLOR}` }}>
+        <h3 style={{ marginTop: 0, marginBottom: '0.75rem' }}>Writer Campaign</h3>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
+          Controls the writers&apos; GBP-Off/Web-Off rotation independently of the main campaign — start it whenever you want writers to begin, even before the next main campaign exists.
+        </p>
+
+        {writerCampaign ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
+              <div><strong>Status:</strong> {writerCampaign.status}</div>
+              <div><strong>Start Date:</strong> {writerCampaign.start_date}</div>
+              <div><strong>Total Days:</strong> {writerCampaign.total_days}</div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '500' }}>Off Days</label>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                {writerCampaignOffDays.length === 0 ? (
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>None set</span>
+                ) : (
+                  writerCampaignOffDays.map(od => (
+                    <span key={od.off_date} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                      padding: '0.25rem 0.6rem', borderRadius: '1rem', fontSize: '0.75rem',
+                      backgroundColor: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b',
+                    }}>
+                      {od.off_date}
+                      <button onClick={() => handleRemoveOffDay(od.off_date)} style={{ background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer', fontWeight: '700', padding: 0 }}>×</button>
+                    </span>
+                  ))
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <input type="date" value={newOffDate} onChange={(e) => setNewOffDate(e.target.value)} style={{ ...inputStyle, width: 'auto' }} />
+                <button onClick={handleAddOffDay} className="btn" style={{ backgroundColor: 'transparent', border: '1px solid var(--border)', color: 'var(--foreground)', cursor: 'pointer' }}>
+                  Add Off Day
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>No active writer campaign — start one below.</p>
+        )}
+
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '500' }}>Start Date</label>
+            <input type="date" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '500' }}>Total Days</label>
+            <input type="number" min="1" value={newTotalDays} onChange={(e) => setNewTotalDays(e.target.value)} style={{ ...inputStyle, width: '100px' }} />
+          </div>
+          <button onClick={handleCreateWriterCampaign} disabled={creatingWriterCampaign} className="btn btn-primary" style={{ backgroundColor: BRAND_COLOR, color: 'white', border: 'none', cursor: creatingWriterCampaign ? 'not-allowed' : 'pointer' }}>
+            {creatingWriterCampaign ? 'Starting...' : (writerCampaign ? 'Start New Writer Campaign' : 'Start Writer Campaign')}
+          </button>
+        </div>
+      </div>
+
       {/* GBP-Off Page / Web-Off Page Sheet */}
       <div className="card">
         <h3 style={{ marginTop: 0, marginBottom: '0.75rem' }}>Writer GBP-Off Page / Web-Off Page Sheet</h3>
@@ -134,26 +254,28 @@ export default function WritersClient({ writers, writerStats, writerOffpageSheet
       <div className="card" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <button
           onClick={handleRegenerateTasks}
-          disabled={loading}
+          disabled={loading || !writerCampaign}
           className="btn btn-primary"
           style={{
             backgroundColor: BRAND_COLOR,
             color: 'white',
             border: 'none',
-            cursor: 'pointer'
+            cursor: (loading || !writerCampaign) ? 'not-allowed' : 'pointer',
+            opacity: writerCampaign ? 1 : 0.5,
           }}
         >
           {loading ? 'Processing...' : '🔄 Sync Now'}
         </button>
         <button
           onClick={handleClearTasks}
-          disabled={loading}
+          disabled={loading || !writerCampaign}
           className="btn"
           style={{
             backgroundColor: 'transparent',
             border: `1px solid var(--border)`,
             color: 'var(--danger)',
-            cursor: 'pointer'
+            cursor: (loading || !writerCampaign) ? 'not-allowed' : 'pointer',
+            opacity: writerCampaign ? 1 : 0.5,
           }}
         >
           🗑️ Clear All Tasks

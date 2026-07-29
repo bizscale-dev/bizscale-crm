@@ -41,6 +41,12 @@ export async function getActiveCampaign() {
   return row ? { ...row } : null;
 }
 
+export async function getActiveWriterCampaign() {
+  const db = await getDb();
+  const row = await db.prepare("SELECT * FROM writer_campaigns WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();
+  return row ? { ...row } : null;
+}
+
 export async function getCampaignProgress(campaignId) {
   const db = await getDb();
 

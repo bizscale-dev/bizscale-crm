@@ -1,6 +1,7 @@
 import { getDb } from './db';
 import { getValidAccessToken } from './webClientsImport';
-import { getOffDaysSet, getWorkingDays } from './offDays';
+import { getWorkingDays } from './offDays';
+import { getOffDaysSet as getWriterCampaignOffDaysSet } from './writerCampaignOffDays';
 
 const TAB_CONFIGS = [
   { taskType: 'gbp', suffix: 'GBP-Off Page' },
@@ -99,29 +100,32 @@ function matchClient(name, dbClients) {
 
 /**
  * Incrementally updates writer_offpage_assignments for one task_type: drops
- * assignments for clients no longer present, and assigns any newly-seen client to
+ * assignments for clients no longer present *or* whose writer is no longer an
+ * active writer (deleted or deactivated), and assigns any now-unassigned client to
  * whichever active writer currently has the fewest clients for this task_type —
  * load-balanced, not a full reshuffle, so existing pairings are stable across syncs.
  */
-async function syncAssignments(db, campaignId, taskType, matchedClientIds) {
+async function syncAssignments(db, writerCampaignId, sourceCampaignId, taskType, matchedClientIds) {
   const existing = await db.prepare(`
     SELECT id, client_id, writer_id FROM writer_offpage_assignments
-    WHERE campaign_id = ? AND task_type = ?
-  `).all(campaignId, taskType);
+    WHERE writer_campaign_id = ? AND task_type = ?
+  `).all(writerCampaignId, taskType);
+
+  const writers = await db.prepare(`
+    SELECT id FROM users WHERE role = 'writer' AND is_active = 1 ORDER BY id
+  `).all();
+  const activeWriterIds = new Set(writers.map(w => w.id));
 
   const matchedSet = new Set(matchedClientIds);
   const existingByClient = new Map(existing.map(a => [a.client_id, a]));
 
   for (const a of existing) {
-    if (!matchedSet.has(a.client_id)) {
+    if (!matchedSet.has(a.client_id) || !activeWriterIds.has(a.writer_id)) {
       await db.prepare('DELETE FROM writer_offpage_assignments WHERE id = ?').run(a.id);
       existingByClient.delete(a.client_id);
     }
   }
 
-  const writers = await db.prepare(`
-    SELECT id FROM users WHERE role = 'writer' AND is_active = 1 ORDER BY id
-  `).all();
   if (writers.length === 0) return;
 
   const loadByWriter = new Map(writers.map(w => [w.id, 0]));
@@ -139,9 +143,9 @@ async function syncAssignments(db, campaignId, taskType, matchedClientIds) {
     }
 
     await db.prepare(`
-      INSERT INTO writer_offpage_assignments (campaign_id, task_type, client_id, writer_id)
-      VALUES (?, ?, ?, ?)
-    `).run(campaignId, taskType, clientId, leastLoadedWriter);
+      INSERT INTO writer_offpage_assignments (campaign_id, writer_campaign_id, task_type, client_id, writer_id)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(sourceCampaignId, writerCampaignId, taskType, clientId, leastLoadedWriter);
     loadByWriter.set(leastLoadedWriter, minLoad + 1);
   }
 }
@@ -154,20 +158,21 @@ async function syncAssignments(db, campaignId, taskType, matchedClientIds) {
  *
  * Weekly rotation: the campaign's working days are grouped into 5-day weeks. A
  * writer's clients are split into 5 rotation groups — group g is visited on the
- * same day-of-week every week (day g+1, g+1+5, g+1+10, ...), so by the end of any
- * single week every client has gotten some progress, not just whichever subset
- * happened to be scheduled that week. Each client's 15 tasks (5 GBP categories × 3,
- * or 10+5 Web-Off categories × 2, interleaved so a visit mixes categories rather
- * than being all-one-type) are split into one equal chunk per weekly visit (5 tasks/
- * visit across 3 weekly visits) — so a writer with ~7 clients/day × 5 tasks/visit
- * lands around 35 tasks/day for GBP, proportionally fewer for Web-Off.
+ * same day-of-week every week (day g+1, g+1+5, g+1+10, ...), so every client gets
+ * touched every week, not just whichever subset happened to be scheduled that
+ * week. Each category's row count is split independently across the numWeeks
+ * weekly visits (front-loaded remainder, e.g. GBP's 5 Guest Post rows become
+ * 2/2/1 across 3 weeks) — so a client's weekly visit has one row per category
+ * with a predictable target (e.g. GBP: 2 Guest Post + 2 Web 2.0 + 2 PDF done by
+ * the end of week 1), instead of one row per individual unit with a mixed,
+ * unpredictable per-category count.
  */
-async function generateTasksForType(db, campaign, taskType, blocksByClientId) {
-  await db.prepare('DELETE FROM writer_offpage_tasks WHERE campaign_id = ? AND task_type = ?').run(campaign.id, taskType);
+async function generateTasksForType(db, writerCampaign, taskType, blocksByClientId) {
+  await db.prepare('DELETE FROM writer_offpage_tasks WHERE writer_campaign_id = ? AND task_type = ?').run(writerCampaign.id, taskType);
 
-  const offDays = await getOffDaysSet(campaign.id);
-  const totalDays = campaign.total_days || 16;
-  const workingDays = getWorkingDays(campaign.start_date, totalDays, offDays);
+  const offDays = await getWriterCampaignOffDaysSet(writerCampaign.id);
+  const totalDays = writerCampaign.total_days || 16;
+  const workingDays = getWorkingDays(writerCampaign.start_date, totalDays, offDays);
 
   const daysPerWeek = 5;
   const numWeeks = Math.floor(workingDays.length / daysPerWeek);
@@ -175,9 +180,9 @@ async function generateTasksForType(db, campaign, taskType, blocksByClientId) {
 
   const assignments = await db.prepare(`
     SELECT client_id, writer_id FROM writer_offpage_assignments
-    WHERE campaign_id = ? AND task_type = ?
+    WHERE writer_campaign_id = ? AND task_type = ?
     ORDER BY client_id
-  `).all(campaign.id, taskType);
+  `).all(writerCampaign.id, taskType);
 
   const clientsByWriter = new Map();
   for (const a of assignments) {
@@ -207,42 +212,45 @@ async function generateTasksForType(db, campaign, taskType, blocksByClientId) {
     groups.forEach((groupClients, g) => {
       for (const clientId of groupClients) {
         const categories = blocksByClientId.get(clientId);
-
-        // Interleave this client's category blocks round-robin (Guest Post, Web
-        // 2.0, PDF, Guest Post, Web 2.0, PDF, ...) rather than concatenating them,
-        // so a single visit's chunk mixes categories instead of being all one type.
         const catEntries = [...categories.entries()];
-        const maxLen = Math.max(...catEntries.map(([, stats]) => stats.total));
-        const units = [];
-        for (let i = 0; i < maxLen; i++) {
-          for (const [category, stats] of catEntries) {
-            if (i < stats.total) units.push({ category, done: i < stats.done });
-          }
-        }
-        if (units.length === 0) continue;
 
-        // Split this client's units into one equal chunk per weekly visit.
-        const chunkBase = Math.floor(units.length / numWeeks);
-        const chunkRemainder = units.length % numWeeks;
-        let unitIdx = 0;
+        // Split each category's rows independently across the numWeeks weekly
+        // visits (front-loaded remainder — same convention as the day-of-week
+        // grouping above), so every week has an explicit, predictable
+        // per-category target rather than an interleaved mixed count.
+        const catWeeklyChunks = catEntries.map(([category, stats]) => {
+          const chunkBase = Math.floor(stats.total / numWeeks);
+          const chunkRemainder = stats.total % numWeeks;
+          const weeks = [];
+          let doneRemaining = stats.done;
+          for (let w = 0; w < numWeeks; w++) {
+            const size = chunkBase + (w < chunkRemainder ? 1 : 0);
+            const done = Math.min(size, doneRemaining);
+            doneRemaining -= done;
+            weeks.push({ size, done });
+          }
+          return { category, weeks };
+        });
 
         for (let w = 0; w < numWeeks; w++) {
-          const chunkSize = chunkBase + (w < chunkRemainder ? 1 : 0);
           const dayIndex = w * daysPerWeek + g;
           const { dayNumber, dateStr } = workingDays[dayIndex];
 
-          for (let k = 0; k < chunkSize; k++) {
-            const unit = units[unitIdx++];
+          for (const { category, weeks } of catWeeklyChunks) {
+            const { size, done } = weeks[w];
+            if (size === 0) continue;
+
             rows.push({
-              campaign_id: campaign.id,
+              campaign_id: writerCampaign.source_campaign_id,
+              writer_campaign_id: writerCampaign.id,
               writer_id: writerId,
               client_id: clientId,
               task_type: taskType,
-              category: unit.category,
+              category,
               day_number: dayNumber,
               task_date: dateStr,
-              target_count: 1,
-              completed_count: unit.done ? 1 : 0,
+              target_count: size,
+              completed_count: done,
             });
           }
         }
@@ -253,12 +261,12 @@ async function generateTasksForType(db, campaign, taskType, blocksByClientId) {
   if (rows.length > 0) {
     const insertSql = `
       INSERT INTO writer_offpage_tasks
-        (campaign_id, writer_id, client_id, task_type, category, day_number, task_date, target_count, completed_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (campaign_id, writer_campaign_id, writer_id, client_id, task_type, category, day_number, task_date, target_count, completed_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     await db.batch(rows.map(r => ({
       sql: insertSql,
-      args: [r.campaign_id, r.writer_id, r.client_id, r.task_type, r.category, r.day_number, r.task_date, r.target_count, r.completed_count],
+      args: [r.campaign_id, r.writer_campaign_id, r.writer_id, r.client_id, r.task_type, r.category, r.day_number, r.task_date, r.target_count, r.completed_count],
     })));
   }
 
@@ -271,10 +279,10 @@ async function generateTasksForType(db, campaign, taskType, blocksByClientId) {
  * them. Each tab is independent — a failure on one (e.g. next month's tab not
  * created yet) doesn't block the other.
  */
-export async function runWriterOffpageSync(campaignId) {
+export async function runWriterOffpageSync(writerCampaignId) {
   const db = await getDb();
-  const campaign = await db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
-  if (!campaign) throw new Error('Campaign not found');
+  const writerCampaign = await db.prepare('SELECT * FROM writer_campaigns WHERE id = ?').get(writerCampaignId);
+  if (!writerCampaign) throw new Error('Writer campaign not found');
 
   const settings = await db.prepare("SELECT value FROM settings WHERE key = ?").get('writer_offpage_sheet_url');
   const sheetUrl = settings?.value;
@@ -290,7 +298,7 @@ export async function runWriterOffpageSync(campaignId) {
 
   const dbClients = await db.prepare(`
     SELECT id, name FROM clients WHERE campaign_id = ? AND is_active = 1
-  `).all(campaignId);
+  `).all(writerCampaign.source_campaign_id);
 
   const results = {};
 
@@ -310,9 +318,9 @@ export async function runWriterOffpageSync(campaignId) {
         blocksByClientId.set(match.id, categories);
       }
 
-      await syncAssignments(db, campaignId, taskType, [...blocksByClientId.keys()]);
+      await syncAssignments(db, writerCampaignId, writerCampaign.source_campaign_id, taskType, [...blocksByClientId.keys()]);
 
-      const taskCount = await generateTasksForType(db, campaign, taskType, blocksByClientId);
+      const taskCount = await generateTasksForType(db, writerCampaign, taskType, blocksByClientId);
 
       results[taskType] = {
         success: true,

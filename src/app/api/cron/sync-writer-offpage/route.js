@@ -1,4 +1,4 @@
-import { getActiveCampaign } from '@/lib/services';
+import { getActiveWriterCampaign } from '@/lib/services';
 import { runWriterOffpageSync } from '@/lib/writerOffpageSync';
 import { logSyncRun } from '@/lib/syncLog';
 import { revalidatePath } from 'next/cache';
@@ -11,10 +11,12 @@ export const maxDuration = 60;
  * GET /api/cron/sync-writer-offpage
  *
  * Reads the GBP-Off Page / Web-Off Page writer task sheets (see
- * src/lib/writerOffpageSync.js) and rebuilds writer assignments/tasks from them.
- * See vercel.json for the schedule (staggered alongside the other daily sync
- * triggers). Also run once synchronously on campaign creation
- * (src/app/admin/campaign/actions.js) and manually via the admin Writers page.
+ * src/lib/writerOffpageSync.js) and rebuilds writer assignments/tasks from them,
+ * for whichever Writer Campaign is currently active (see writer_campaigns —
+ * independent of the main campaigns table). See vercel.json for the schedule
+ * (staggered alongside the other daily sync triggers). Also run once
+ * synchronously on writer campaign creation and manually via the admin Writers
+ * page (src/app/admin/writers/actions.js).
  */
 export async function GET(request) {
   const authHeader = request.headers.get('authorization');
@@ -26,13 +28,15 @@ export async function GET(request) {
   try {
     console.log('[CRON] Writer off-page sync triggered at', new Date().toISOString());
 
-    const campaign = await getActiveCampaign();
-    if (!campaign) {
-      await logSyncRun('writer-offpage', 'error', 'No active campaign');
-      return Response.json({ error: 'No active campaign' }, { status: 400 });
+    const writerCampaign = await getActiveWriterCampaign();
+    if (!writerCampaign) {
+      // Writer campaigns are optional/admin-initiated (unlike the main campaign),
+      // so this is a normal no-op, not an error.
+      console.log('[CRON] No active writer campaign — skipping');
+      return Response.json({ success: true, skipped: true, reason: 'No active writer campaign' });
     }
 
-    const result = await runWriterOffpageSync(campaign.id);
+    const result = await runWriterOffpageSync(writerCampaign.id);
 
     revalidatePath('/writer/tasks');
     revalidatePath('/writer');

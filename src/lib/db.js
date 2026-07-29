@@ -113,6 +113,12 @@ async function runMigrations(raw) {
     // writerOffpageSync.js) — how many clients per writer get featured per working day.
     "ALTER TABLE campaigns ADD COLUMN gbp_writer_clients_per_day INTEGER DEFAULT 8",
     "ALTER TABLE campaigns ADD COLUMN weboff_writer_clients_per_day INTEGER DEFAULT 6",
+    // Writer scheduling is now driven by its own independent writer_campaigns entity
+    // (see writerOffpageSync.js) instead of the main campaigns row, so an admin can
+    // start a writer's rotation before the associate-facing campaign exists. The old
+    // campaign_id column on these two tables is left in place but unused going forward.
+    "ALTER TABLE writer_offpage_assignments ADD COLUMN writer_campaign_id INTEGER",
+    "ALTER TABLE writer_offpage_tasks ADD COLUMN writer_campaign_id INTEGER",
   ];
 
   for (const sql of alterStatements) {
@@ -245,12 +251,13 @@ async function runMigrations(raw) {
     // sync, never wiped wholesale, so a client stays with the same writer over time.
     `CREATE TABLE IF NOT EXISTS writer_offpage_assignments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      campaign_id INTEGER NOT NULL,
+      campaign_id INTEGER,
+      writer_campaign_id INTEGER,
       task_type TEXT NOT NULL CHECK(task_type IN ('gbp','weboff')),
       client_id INTEGER NOT NULL,
       writer_id INTEGER NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(campaign_id, task_type, client_id)
+      UNIQUE(writer_campaign_id, task_type, client_id)
     )`,
     // One row per (writer, client, category) block, wiped and rebuilt every sync —
     // completed_count is always re-derived live from the sheet's current Status
@@ -258,7 +265,8 @@ async function runMigrations(raw) {
     // there's no prior-progress-loss risk from wiping, unlike seo_tasks/webseo_tasks.
     `CREATE TABLE IF NOT EXISTS writer_offpage_tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      campaign_id INTEGER NOT NULL,
+      campaign_id INTEGER,
+      writer_campaign_id INTEGER,
       writer_id INTEGER NOT NULL,
       client_id INTEGER NOT NULL,
       task_type TEXT NOT NULL CHECK(task_type IN ('gbp','weboff')),
@@ -268,6 +276,29 @@ async function runMigrations(raw) {
       target_count INTEGER DEFAULT 0,
       completed_count INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    // Independent writer scheduling entity — its own start_date/total_days, decoupled
+    // from the main campaigns table, so an admin can kick off a writer's rotation
+    // (e.g. Week 1) up to a week before the associate-facing campaign is created.
+    // source_campaign_id is captured at creation time purely to resolve which
+    // `clients` rows to match Google Sheet names against (clients have no roster of
+    // their own outside the main campaigns table).
+    `CREATE TABLE IF NOT EXISTS writer_campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_campaign_id INTEGER NOT NULL,
+      start_date DATE NOT NULL,
+      total_days INTEGER NOT NULL DEFAULT 16,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS writer_campaign_off_days (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      writer_campaign_id INTEGER NOT NULL,
+      off_date DATE NOT NULL,
+      reason TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(writer_campaign_id, off_date),
+      FOREIGN KEY (writer_campaign_id) REFERENCES writer_campaigns(id) ON DELETE CASCADE
     )`,
   ];
 
@@ -310,6 +341,42 @@ async function runMigrations(raw) {
         SELECT id, campaign_id, week_number, category, platform, url, note, requires, order_in_week, created_at FROM tunnel_templates_old
       `);
       await raw.execute('DROP TABLE tunnel_templates_old');
+    }
+  } catch (e) {
+    // Migration already done or table doesn't exist yet
+  }
+
+  // Rebuild writer_offpage_assignments if it still has the old UNIQUE(campaign_id,
+  // task_type, client_id) constraint from before writer scheduling moved to its own
+  // independent writer_campaigns entity — that constraint collides with pre-existing
+  // rows from the old campaign-scoped system once a new writer campaign starts
+  // reusing the same source_campaign_id. campaign_id/writer_campaign_id are also
+  // widened to nullable here, matching the new CREATE TABLE definition above.
+  try {
+    const existingResult = await raw.execute(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='writer_offpage_assignments'"
+    );
+    const existing = existingResult.rows[0];
+
+    if (existing && !existing.sql.includes('UNIQUE(writer_campaign_id, task_type, client_id)')) {
+      await raw.execute('ALTER TABLE writer_offpage_assignments RENAME TO writer_offpage_assignments_old');
+      await raw.execute(`
+        CREATE TABLE writer_offpage_assignments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          campaign_id INTEGER,
+          writer_campaign_id INTEGER,
+          task_type TEXT NOT NULL CHECK(task_type IN ('gbp','weboff')),
+          client_id INTEGER NOT NULL,
+          writer_id INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(writer_campaign_id, task_type, client_id)
+        )
+      `);
+      await raw.execute(`
+        INSERT INTO writer_offpage_assignments (id, campaign_id, writer_campaign_id, task_type, client_id, writer_id, created_at)
+        SELECT id, campaign_id, writer_campaign_id, task_type, client_id, writer_id, created_at FROM writer_offpage_assignments_old
+      `);
+      await raw.execute('DROP TABLE writer_offpage_assignments_old');
     }
   } catch (e) {
     // Migration already done or table doesn't exist yet

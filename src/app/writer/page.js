@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+import { getActiveWriterCampaign } from '@/lib/services';
 import { verifySession } from '@/lib/session';
 import Logo from '@/components/Logo';
 import StatCard from '@/components/ui/StatCard';
@@ -12,14 +12,14 @@ const WEEKS_SCHEDULE = [
   { week: 4, days: '16' },
 ];
 
-async function loadOffpageStats(db, userId, campaignId, taskType, today) {
+async function loadOffpageStats(db, userId, writerCampaignId, taskType, today) {
   const todayTasks = await db.prepare(`
     SELECT wot.*, c.name as client_name
     FROM writer_offpage_tasks wot
     JOIN clients c ON c.id = wot.client_id
-    WHERE wot.writer_id = ? AND wot.campaign_id = ? AND wot.task_type = ? AND wot.task_date = ? AND c.is_active = 1
+    WHERE wot.writer_id = ? AND wot.writer_campaign_id = ? AND wot.task_type = ? AND wot.task_date = ? AND c.is_active = 1
     ORDER BY c.name, wot.category
-  `).all(userId, campaignId, taskType, today);
+  `).all(userId, writerCampaignId, taskType, today);
 
   // Pending — the task's scheduled day has already passed but it's still not fully
   // done (the sheet's Status column hasn't caught up to Done for it yet).
@@ -27,15 +27,15 @@ async function loadOffpageStats(db, userId, campaignId, taskType, today) {
     SELECT wot.*, c.name as client_name
     FROM writer_offpage_tasks wot
     JOIN clients c ON c.id = wot.client_id
-    WHERE wot.writer_id = ? AND wot.campaign_id = ? AND wot.task_type = ?
+    WHERE wot.writer_id = ? AND wot.writer_campaign_id = ? AND wot.task_type = ?
       AND wot.task_date < ? AND wot.completed_count < wot.target_count AND c.is_active = 1
     ORDER BY wot.task_date DESC, c.name, wot.category
-  `).all(userId, campaignId, taskType, today);
+  `).all(userId, writerCampaignId, taskType, today);
 
   const overallStats = await db.prepare(`
     SELECT SUM(target_count) as target, SUM(completed_count) as completed
-    FROM writer_offpage_tasks WHERE writer_id = ? AND campaign_id = ? AND task_type = ?
-  `).get(userId, campaignId, taskType);
+    FROM writer_offpage_tasks WHERE writer_id = ? AND writer_campaign_id = ? AND task_type = ?
+  `).get(userId, writerCampaignId, taskType);
 
   const weeklySummary = [];
   for (const schedule of WEEKS_SCHEDULE) {
@@ -45,8 +45,8 @@ async function loadOffpageStats(db, userId, campaignId, taskType, today) {
     const weekStats = await db.prepare(`
       SELECT SUM(target_count) as target, SUM(completed_count) as completed
       FROM writer_offpage_tasks
-      WHERE writer_id = ? AND campaign_id = ? AND task_type = ? AND day_number >= ? AND day_number <= ?
-    `).get(userId, campaignId, taskType, dayStart, dayEnd);
+      WHERE writer_id = ? AND writer_campaign_id = ? AND task_type = ? AND day_number >= ? AND day_number <= ?
+    `).get(userId, writerCampaignId, taskType, dayStart, dayEnd);
 
     weeklySummary.push({
       week: schedule.week,
@@ -63,17 +63,17 @@ export default async function WriterDashboard() {
   const db = await getDb();
   const session = await verifySession();
   const userId = session.userId;
-  const campaign = await getActiveCampaign();
+  const writerCampaign = await getActiveWriterCampaign();
   const today = new Date().toISOString().split('T')[0];
 
   let gbp = { todayTasks: [], pendingTasks: [], overallStats: null, weeklySummary: [] };
   let weboff = { todayTasks: [], pendingTasks: [], overallStats: null, weeklySummary: [] };
 
-  if (campaign) {
+  if (writerCampaign) {
     // GBP-Off Page / Web-Off Page — read-only, sourced from the Google Sheet tabs
     // (see src/lib/writerOffpageSync.js). Writers mark work Done in the sheet itself.
-    gbp = await loadOffpageStats(db, userId, campaign.id, 'gbp', today);
-    weboff = await loadOffpageStats(db, userId, campaign.id, 'weboff', today);
+    gbp = await loadOffpageStats(db, userId, writerCampaign.id, 'gbp', today);
+    weboff = await loadOffpageStats(db, userId, writerCampaign.id, 'weboff', today);
   }
 
   const gbpTodayTarget = gbp.todayTasks.reduce((s, t) => s + t.target_count, 0);
@@ -89,8 +89,8 @@ export default async function WriterDashboard() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <PageHeader title="My Dashboard" subtitle="Today's targets and progress across your assigned clients" />
-      {!campaign ? (
-        <div className="card"><p style={{ color: 'var(--danger)', margin: 0 }}>No active campaign. Please contact your admin.</p></div>
+      {!writerCampaign ? (
+        <div className="card"><p style={{ color: 'var(--danger)', margin: 0 }}>No active writer campaign yet. Please contact your admin.</p></div>
       ) : (
         <>
           {/* Stats */}
@@ -204,7 +204,7 @@ function PendingTasksCard({ title, tasks }) {
                 }}>
                   <span style={{ fontWeight: '600', fontSize: '0.85rem' }}>{task.category}</span>
                   <span style={{ fontSize: '0.7rem', fontWeight: '600', color: '#f59e0b', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
-                    Due {task.task_date}
+                    {task.completed_count}/{task.target_count} · Due {task.task_date}
                   </span>
                 </div>
               ))}
@@ -246,7 +246,7 @@ function OffpageTaskCard({ task }) {
       </span>
       <span style={{ fontWeight: '600', fontSize: '0.85rem' }}>{task.category}</span>
       <span style={{ fontSize: '0.7rem', fontWeight: '600', color: done ? 'var(--success)' : 'var(--text-muted)', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
-        {done ? 'Complete' : 'Pending'}
+        {task.completed_count}/{task.target_count} · {done ? 'Complete' : 'Pending'}
       </span>
     </div>
   );
