@@ -151,10 +151,19 @@ async function syncAssignments(db, writerCampaignId, sourceCampaignId, taskType,
 }
 
 /**
- * Rebuilds writer_offpage_tasks for one task_type — safe to wipe and regenerate
- * every run since completed_count is always re-derived live from the sheet's
- * current Status values passed in via `blocksByClientId`, not carried over from
- * prior rows.
+ * Rebuilds writer_offpage_tasks for one task_type. The day/category schedule
+ * (target_count) is structural and safe to fully recompute every run. completed_count
+ * is NOT — a day that has already passed is frozen forever once set, and only
+ * *today's* row is recomputed from the sheet's current Status values. Earlier this
+ * whole table (including past days) was wiped and re-derived live from the sheet on
+ * every sync, using a "first N sheet rows in Done order count as done" heuristic —
+ * that meant an already-passed day's number could silently change on a later sync
+ * purely because unrelated, more recent work pushed the sheet's overall Done count
+ * up, which the heuristic then credited to the earliest chunk first. That's not a
+ * real per-day record, so it's replaced here with an explicit daily delta: each
+ * day's completed_count is either preserved from before (past), computed as
+ * (current sheet Done count for that client/category) minus (everything already
+ * frozen on earlier days) (today), or left at 0 (future, hasn't happened yet).
  *
  * Weekly rotation: the campaign's working days are grouped into 5-day weeks. A
  * writer's clients are split into 5 rotation groups — group g is visited on the
@@ -168,6 +177,25 @@ async function syncAssignments(db, writerCampaignId, sourceCampaignId, taskType,
  * unpredictable per-category count.
  */
 async function generateTasksForType(db, writerCampaign, taskType, blocksByClientId) {
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Snapshot yesterday-and-earlier before wiping the table, so today's/future's
+  // rows can be rebuilt structurally while past days' real completed_count survives.
+  const frozenRows = await db.prepare(`
+    SELECT client_id, category, day_number, completed_count
+    FROM writer_offpage_tasks
+    WHERE writer_campaign_id = ? AND task_type = ? AND task_date < ?
+  `).all(writerCampaign.id, taskType, todayStr);
+  const frozenByDay = new Map(frozenRows.map(r => [`${r.client_id}|${r.category}|${r.day_number}`, r.completed_count]));
+
+  const pastDoneRows = await db.prepare(`
+    SELECT client_id, category, SUM(completed_count) as doneSum
+    FROM writer_offpage_tasks
+    WHERE writer_campaign_id = ? AND task_type = ? AND task_date < ?
+    GROUP BY client_id, category
+  `).all(writerCampaign.id, taskType, todayStr);
+  const pastDoneByClientCategory = new Map(pastDoneRows.map(r => [`${r.client_id}|${r.category}`, r.doneSum || 0]));
+
   await db.prepare('DELETE FROM writer_offpage_tasks WHERE writer_campaign_id = ? AND task_type = ?').run(writerCampaign.id, taskType);
 
   const offDays = await getWriterCampaignOffDaysSet(writerCampaign.id);
@@ -214,31 +242,47 @@ async function generateTasksForType(db, writerCampaign, taskType, blocksByClient
         const categories = blocksByClientId.get(clientId);
         const catEntries = [...categories.entries()];
 
-        // Split each category's rows independently across the numWeeks weekly
-        // visits (front-loaded remainder — same convention as the day-of-week
-        // grouping above), so every week has an explicit, predictable
-        // per-category target rather than an interleaved mixed count.
-        const catWeeklyChunks = catEntries.map(([category, stats]) => {
+        // Split each category's row count independently across the numWeeks
+        // weekly visits (front-loaded remainder — same convention as the
+        // day-of-week grouping above), so every week has an explicit,
+        // predictable per-category target rather than an interleaved mixed
+        // count. This target/size math is purely structural (how many rows
+        // exist in the sheet for this category) — it doesn't depend on Done
+        // status, so it's safe to recompute every sync regardless of date.
+        const catWeeklySizes = catEntries.map(([category, stats]) => {
           const chunkBase = Math.floor(stats.total / numWeeks);
           const chunkRemainder = stats.total % numWeeks;
-          const weeks = [];
-          let doneRemaining = stats.done;
+          const sizes = [];
           for (let w = 0; w < numWeeks; w++) {
-            const size = chunkBase + (w < chunkRemainder ? 1 : 0);
-            const done = Math.min(size, doneRemaining);
-            doneRemaining -= done;
-            weeks.push({ size, done });
+            sizes.push(chunkBase + (w < chunkRemainder ? 1 : 0));
           }
-          return { category, weeks };
+          return { category, sizes, currentDone: stats.done };
         });
 
         for (let w = 0; w < numWeeks; w++) {
           const dayIndex = w * daysPerWeek + g;
           const { dayNumber, dateStr } = workingDays[dayIndex];
 
-          for (const { category, weeks } of catWeeklyChunks) {
-            const { size, done } = weeks[w];
+          for (const { category, sizes, currentDone } of catWeeklySizes) {
+            const size = sizes[w];
             if (size === 0) continue;
+
+            let completed;
+            if (dateStr < todayStr) {
+              // Already passed — frozen. If this exact day never existed
+              // before (brand new schedule / newly added client), there's no
+              // history to preserve, so it starts at 0.
+              completed = frozenByDay.get(`${clientId}|${category}|${dayNumber}`) ?? 0;
+            } else if (dateStr === todayStr) {
+              // Today — the only day that's still live. completed = whatever
+              // the sheet currently shows as Done for this client/category,
+              // minus whatever's already been credited to earlier frozen days.
+              const pastDone = pastDoneByClientCategory.get(`${clientId}|${category}`) || 0;
+              completed = Math.min(size, Math.max(0, currentDone - pastDone));
+            } else {
+              // Future — hasn't happened yet.
+              completed = 0;
+            }
 
             rows.push({
               campaign_id: writerCampaign.source_campaign_id,
@@ -250,7 +294,7 @@ async function generateTasksForType(db, writerCampaign, taskType, blocksByClient
               day_number: dayNumber,
               task_date: dateStr,
               target_count: size,
-              completed_count: done,
+              completed_count: completed,
             });
           }
         }

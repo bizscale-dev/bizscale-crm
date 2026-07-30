@@ -47,7 +47,7 @@ export default function UserActivityReport({ users }) {
   const today = toDateStr(now);
   const yesterday = toDateStr(new Date(now.getTime() - 24 * 60 * 60 * 1000));
   const [userId, setUserId] = useState('');
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useState(yesterday);
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -203,11 +203,19 @@ export default function UserActivityReport({ users }) {
       {loading && <p style={{ color: 'var(--text-muted)' }}>Loading...</p>}
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
+      {!loading && !error && report?.notFinalized && (
+        <p style={{ color: '#f59e0b' }}>
+          {report.date === today
+            ? 'Today isn\'t finalized yet — it gets captured into the permanent record at 1 AM tonight. Check back tomorrow for today\'s numbers.'
+            : 'This date hasn\'t been finalized yet.'}
+        </p>
+      )}
+
       {!loading && !error && !report && userId && (
         <p style={{ color: 'var(--text-muted)' }}>No work recorded for this person on this date.</p>
       )}
 
-      {!loading && report && (
+      {!loading && report && !report.notFinalized && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
             <div><strong>{report.user.name}</strong> ({report.user.email})</div>

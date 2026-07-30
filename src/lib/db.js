@@ -300,6 +300,30 @@ async function runMigrations(raw) {
       UNIQUE(writer_campaign_id, off_date),
       FOREIGN KEY (writer_campaign_id) REFERENCES writer_campaigns(id) ON DELETE CASCADE
     )`,
+    // Permanent, immutable daily record of completed work — captured once per day
+    // (see src/lib/dailyActivityCapture.js, run by a 1 AM cron) from whatever the
+    // live task tables (seo_tasks/webseo_tasks/writer_offpage_tasks) show for the
+    // day that just closed out. Once a day is captured here it is never
+    // recalculated again, unlike the live tables which keep getting resynced —
+    // this is what the "By Person" report reads from, so historical numbers stay
+    // stable instead of drifting as later, unrelated syncs run.
+    // client_name is a point-in-time snapshot (not an FK) since clients can be
+    // renamed/deactivated later and a historical log shouldn't shift when that
+    // happens. task_type is '' (not NULL) for SEO/Web SEO associates so the
+    // UNIQUE constraint dedupes correctly — SQLite treats NULL as never equal to
+    // NULL, which would defeat ON CONFLICT for those rows.
+    `CREATE TABLE IF NOT EXISTS daily_activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      client_name TEXT NOT NULL,
+      task_type TEXT NOT NULL DEFAULT '',
+      label TEXT NOT NULL,
+      work_date DATE NOT NULL,
+      target_count INTEGER NOT NULL DEFAULT 0,
+      completed_count INTEGER NOT NULL DEFAULT 0,
+      captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, client_name, task_type, label, work_date)
+    )`,
   ];
 
   for (const sql of createTableStatements) {
