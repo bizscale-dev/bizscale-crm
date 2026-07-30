@@ -115,9 +115,11 @@ export async function POST(request) {
       for (const [writerName, clientNames] of Object.entries(writerAssignments)) {
         console.log(`[sync-apply] Processing writer: ${writerName} with ${clientNames.length} clients`);
         
-        // Find the writer user - if not found, create it
+        // Find the writer user - if not found, create it. Matches regardless of
+        // is_active so a deactivated/removed writer isn't silently re-created as a
+        // duplicate account the next time this name appears in the sheet.
         let writer = await db.prepare(
-          "SELECT id FROM users WHERE role = 'writer' AND name = ? AND is_active = 1"
+          "SELECT id FROM users WHERE role = 'writer' AND name = ?"
         ).get(writerName);
 
         if (!writer) {
