@@ -1,0 +1,304 @@
+'use client';
+
+import { useState } from 'react';
+import { getUserActivityReport } from './actions';
+
+const BRAND_COLOR = '#16b293';
+
+const ROLE_LABELS = {
+  seo_associate: 'SEO Associates',
+  writer: 'Writers',
+  web_seo_associate: 'Web SEO Associates',
+};
+
+const ROLE_ICONS = {
+  seo_associate: '🔗',
+  writer: '✍️',
+  web_seo_associate: '🌐',
+};
+
+const labelStyle = {
+  display: 'block',
+  marginBottom: '0.4rem',
+  fontSize: '0.75rem',
+  fontWeight: '600',
+  color: 'var(--text-muted)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.02em',
+};
+
+const inputStyle = {
+  padding: '0.6rem 0.85rem',
+  borderRadius: '0.5rem',
+  border: '1px solid var(--border)',
+  backgroundColor: 'var(--background)',
+  color: 'var(--foreground)',
+  fontSize: '0.9rem',
+  outline: 'none',
+  transition: 'border-color 0.15s ease',
+};
+
+function toDateStr(d) {
+  return d.toISOString().split('T')[0];
+}
+
+export default function UserActivityReport({ users }) {
+  const now = new Date();
+  const today = toDateStr(now);
+  const yesterday = toDateStr(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  const [userId, setUserId] = useState('');
+  const [date, setDate] = useState(today);
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [userFocused, setUserFocused] = useState(false);
+  const [dateFocused, setDateFocused] = useState(false);
+
+  const usersByRole = {};
+  for (const u of users) {
+    if (!usersByRole[u.role]) usersByRole[u.role] = [];
+    usersByRole[u.role].push(u);
+  }
+
+  const runReport = async (nextUserId, nextDate) => {
+    if (!nextUserId || !nextDate) {
+      setReport(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getUserActivityReport(parseInt(nextUserId, 10), nextDate);
+      if (result.error) {
+        setError(result.error);
+        setReport(null);
+      } else {
+        setReport(result);
+      }
+    } catch (err) {
+      setError(err.message);
+      setReport(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUserChange = (e) => {
+    const val = e.target.value;
+    setUserId(val);
+    runReport(val, date);
+  };
+
+  const handleDateChange = (e) => {
+    const val = e.target.value;
+    setDate(val);
+    runReport(userId, val);
+  };
+
+  const jumpToDate = (val) => {
+    setDate(val);
+    runReport(userId, val);
+  };
+
+  const selectedUser = users.find(u => String(u.id) === String(userId));
+
+  return (
+    <div className="card">
+      <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+        By Person — Daily Activity
+      </h2>
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0 0 1.25rem 0' }}>
+        Pick a person and a date to see everything they worked on that day.
+      </p>
+
+      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
+        <div style={{ flex: '1', minWidth: '260px' }}>
+          <label style={labelStyle}>Person</label>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', fontSize: '0.9rem', pointerEvents: 'none' }}>
+              {selectedUser ? (ROLE_ICONS[selectedUser.role] || '👤') : '👤'}
+            </span>
+            <select
+              value={userId}
+              onChange={handleUserChange}
+              onFocus={() => setUserFocused(true)}
+              onBlur={() => setUserFocused(false)}
+              style={{
+                ...inputStyle,
+                width: '100%',
+                paddingLeft: '2.1rem',
+                borderColor: userFocused ? BRAND_COLOR : 'var(--border)',
+                boxShadow: userFocused ? `0 0 0 3px ${BRAND_COLOR}22` : 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="">Select a person...</option>
+              {Object.entries(usersByRole).map(([role, roleUsers]) => (
+                <optgroup key={role} label={`${ROLE_ICONS[role] || ''} ${ROLE_LABELS[role] || role}`}>
+                  {roleUsers.map(u => (
+                    <option key={u.id} value={u.id}>{u.name}{u.is_active ? '' : ' (inactive)'}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Date</label>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input
+              type="date"
+              value={date}
+              max={today}
+              onChange={handleDateChange}
+              onFocus={() => setDateFocused(true)}
+              onBlur={() => setDateFocused(false)}
+              style={{
+                ...inputStyle,
+                borderColor: dateFocused ? BRAND_COLOR : 'var(--border)',
+                boxShadow: dateFocused ? `0 0 0 3px ${BRAND_COLOR}22` : 'none',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => jumpToDate(today)}
+              disabled={date === today}
+              style={{
+                padding: '0.5rem 0.85rem',
+                borderRadius: '0.5rem',
+                border: `1px solid ${date === today ? BRAND_COLOR : 'var(--border)'}`,
+                backgroundColor: date === today ? `${BRAND_COLOR}1a` : 'transparent',
+                color: date === today ? BRAND_COLOR : 'var(--foreground)',
+                fontSize: '0.8rem',
+                fontWeight: '600',
+                cursor: date === today ? 'default' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => jumpToDate(yesterday)}
+              disabled={date === yesterday}
+              style={{
+                padding: '0.5rem 0.85rem',
+                borderRadius: '0.5rem',
+                border: `1px solid ${date === yesterday ? BRAND_COLOR : 'var(--border)'}`,
+                backgroundColor: date === yesterday ? `${BRAND_COLOR}1a` : 'transparent',
+                color: date === yesterday ? BRAND_COLOR : 'var(--foreground)',
+                fontSize: '0.8rem',
+                fontWeight: '600',
+                cursor: date === yesterday ? 'default' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Yesterday
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {loading && <p style={{ color: 'var(--text-muted)' }}>Loading...</p>}
+      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
+
+      {!loading && !error && !report && userId && (
+        <p style={{ color: 'var(--text-muted)' }}>No work recorded for this person on this date.</p>
+      )}
+
+      {!loading && report && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
+            <div><strong>{report.user.name}</strong> ({report.user.email})</div>
+            <div>Total: <strong style={{ color: 'var(--primary)' }}>{report.totalCompleted} / {report.totalTarget}</strong></div>
+            {report.totalLogs > 0 && <div>{report.totalLogs} logged item(s)</div>}
+          </div>
+
+          {report.sections.every(sec => sec.completedRows.length === 0 && sec.pendingRows.length === 0) ? (
+            <p style={{ color: 'var(--text-muted)' }}>No work completed by {report.user.name} on {report.date}.</p>
+          ) : (
+            report.sections.map(sec => (sec.completedRows.length === 0 && sec.pendingRows.length === 0) ? null : (
+              <div key={sec.title}>
+                <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>{sec.title}</h3>
+
+                {sec.completedRows.length > 0 && (
+                  <RowsTable heading="Completed" rows={sec.completedRows} accentColor="var(--success)" />
+                )}
+
+                {sec.pendingRows.length > 0 && (
+                  <div style={{ marginTop: sec.completedRows.length > 0 ? '1rem' : 0 }}>
+                    <RowsTable heading="Assigned but not completed" rows={sec.pendingRows} accentColor="#f59e0b" />
+                  </div>
+                )}
+
+                {sec.logs && sec.logs.length > 0 && (
+                  <div style={{ marginTop: '0.75rem', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8rem' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                          <th style={{ padding: '0.4rem 0' }}>Time</th>
+                          <th style={{ padding: '0.4rem 0' }}>Client</th>
+                          <th style={{ padding: '0.4rem 0' }}>Type</th>
+                          <th style={{ padding: '0.4rem 0' }}>URL</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sec.logs.map((l, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                            <td style={{ padding: '0.4rem 0', color: 'var(--text-muted)' }}>{new Date(l.time).toLocaleTimeString()}</td>
+                            <td style={{ padding: '0.4rem 0' }}>{l.client_name}</td>
+                            <td style={{ padding: '0.4rem 0' }}>{l.label}</td>
+                            <td style={{ padding: '0.4rem 0' }}>
+                              {l.url ? (
+                                <a href={l.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>
+                                  {l.url}
+                                </a>
+                              ) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RowsTable({ heading, rows, accentColor }) {
+  return (
+    <div>
+      <div style={{ fontSize: '0.75rem', fontWeight: '600', color: accentColor, textTransform: 'uppercase', marginBottom: '0.4rem' }}>
+        {heading}
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+              <th style={{ padding: '0.5rem 0' }}>Client</th>
+              <th style={{ padding: '0.5rem 0' }}>Type</th>
+              <th style={{ padding: '0.5rem 0' }}>Completed / Target</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                <td style={{ padding: '0.5rem 0', fontWeight: '500' }}>{r.client_name}</td>
+                <td style={{ padding: '0.5rem 0' }}>{r.label}</td>
+                <td style={{ padding: '0.5rem 0', color: accentColor }}>
+                  {r.completed_count} / {r.target_count}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

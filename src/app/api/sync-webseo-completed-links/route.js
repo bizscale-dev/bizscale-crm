@@ -88,9 +88,6 @@ export async function POST(request) {
     const postTypeMap = { web2: web2Idx, guestpost: guestPostIdx };
 
     const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
 
     let syncedCount = 0;
     const syncedClients = [];
@@ -150,20 +147,26 @@ export async function POST(request) {
 
         if (!todayTask) continue;
 
-        const yesterdayTask = await db.prepare(`
+        // Baseline = the most recent PRIOR task row for this exact client+post_type,
+        // not literally "yesterday's calendar date" (see sync-completed-links for why
+        // — associates are typically scheduled on a given client on a rotation, not
+        // daily, so a fixed one-day lookback usually finds nothing and dumps the
+        // client's entire cumulative sheet total onto whichever day it next comes up).
+        const priorTask = await db.prepare(`
           SELECT completed_count
           FROM webseo_tasks
-          WHERE campaign_id = ? AND client_id = ? AND post_type = ? AND task_date = ?
+          WHERE campaign_id = ? AND client_id = ? AND post_type = ? AND task_date < ?
+          ORDER BY task_date DESC
           LIMIT 1
-        `).get(campaign.id, client.id, postType, yesterdayStr);
+        `).get(campaign.id, client.id, postType, today);
 
-        const yesterdayCompleted = yesterdayTask?.completed_count || 0;
-        const todaysProgress = Math.max(0, sheetCompletedCount - yesterdayCompleted);
+        const priorCompleted = priorTask?.completed_count || 0;
+        const todaysProgress = Math.max(0, sheetCompletedCount - priorCompleted);
 
         if (todaysProgress !== todayTask.completed_count) {
           await db.prepare('UPDATE webseo_tasks SET completed_count = ? WHERE id = ?').run(todaysProgress, todayTask.id);
           syncedCount++;
-          console.log(`[WEBSEO SYNC] Updated ${client.business_name} - ${postType}: ${todaysProgress} (sheet: ${sheetCompletedCount}, yesterday: ${yesterdayCompleted})`);
+          console.log(`[WEBSEO SYNC] Updated ${client.business_name} - ${postType}: ${todaysProgress} (sheet: ${sheetCompletedCount}, prior: ${priorCompleted})`);
         }
       }
 

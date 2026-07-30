@@ -1,9 +1,16 @@
 import { getDb } from '@/lib/db';
 import { getActiveCampaign, LINK_TYPE_LABELS } from '@/lib/services';
+import UserActivityReport from './UserActivityReport';
 
 export default async function ReportsPage() {
   const db = await getDb();
   const campaign = await getActiveCampaign();
+
+  const activityUsers = await db.prepare(`
+    SELECT id, name, role, is_active FROM users
+    WHERE role IN ('seo_associate', 'writer', 'web_seo_associate')
+    ORDER BY role, name
+  `).all();
 
   let linkTypeBreakdown = [];
   let clientProgress = [];
@@ -50,6 +57,7 @@ export default async function ReportsPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      <UserActivityReport users={activityUsers} />
       {!campaign ? (
         <div className="card">
           <p style={{ color: 'var(--danger)', margin: 0 }}>

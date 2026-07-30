@@ -188,21 +188,24 @@ export async function POST(request) {
         `).get(campaign.id, client.id, linkType, today);
 
         if (todayTask) {
-          // Get yesterday's task to calculate delta
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
-          const yesterdayStr = yesterday.toISOString().split('T')[0];
-          
-          const yesterdayTask = await db.prepare(`
+          // Baseline = the most recent PRIOR task row for this exact client+link_type,
+          // not literally "yesterday's calendar date" — associates are typically
+          // scheduled on this client only once a week (or on some other rotation), so
+          // there's usually no row for yesterday at all. Using a fixed one-day lookback
+          // meant that gap defaulted to 0 and dumped this client's entire multi-week
+          // cumulative sheet total onto whichever day it next came up in rotation.
+          const priorTask = await db.prepare(`
             SELECT completed_count
             FROM seo_tasks
-            WHERE campaign_id = ? AND client_id = ? AND link_type = ? AND task_date = ?
+            WHERE campaign_id = ? AND client_id = ? AND link_type = ? AND task_date < ?
+            ORDER BY task_date DESC
             LIMIT 1
-          `).get(campaign.id, client.id, linkType, yesterdayStr);
+          `).get(campaign.id, client.id, linkType, today);
 
-          // Today's progress = sheet total - yesterday's total
-          const yesterdayCompleted = yesterdayTask?.completed_count || 0;
-          const todaysProgress = Math.max(0, sheetCompletedCount - yesterdayCompleted);
+          // Today's progress = sheet total - total as of the last time this client/link
+          // type was scheduled
+          const priorCompleted = priorTask?.completed_count || 0;
+          const todaysProgress = Math.max(0, sheetCompletedCount - priorCompleted);
 
           // Only update if different
           if (todaysProgress !== todayTask.completed_count) {
@@ -213,7 +216,7 @@ export async function POST(request) {
             `).run(todaysProgress, todayTask.id);
             
             syncedCount++;
-            console.log(`[SYNC] Updated ${client.name} - ${linkType}: ${todaysProgress} (sheet: ${sheetCompletedCount}, yesterday: ${yesterdayCompleted})`);
+            console.log(`[SYNC] Updated ${client.name} - ${linkType}: ${todaysProgress} (sheet: ${sheetCompletedCount}, prior: ${priorCompleted})`);
           }
         } else {
           console.log(`[SYNC] No task found for ${client.name} - ${linkType} on ${today}`);
