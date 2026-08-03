@@ -43,7 +43,7 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
                 <Logo width={32} height={32} />
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: BRAND_COLOR, margin: 0, whiteSpace: 'nowrap' }}>BizScale</h2>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: BRAND_COLOR, margin: 0, whiteSpace: 'nowrap' }}>Bizscale</h2>
               </div>
 
               <button

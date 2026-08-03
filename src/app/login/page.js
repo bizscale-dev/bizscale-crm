@@ -163,7 +163,7 @@ export default function LoginPage() {
             <div style={{ marginBottom: '1.5rem' }}>
               <img 
                 src="https://bizscale.pk/wp-content/uploads/2025/04/Bizscale-scaled.png" 
-                alt="BizScale" 
+                alt="Bizscale"
                 style={{ 
                   maxWidth: '160px', 
                   height: 'auto',
