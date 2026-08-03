@@ -147,19 +147,33 @@ export default function UserActivityReport({ users }) {
         <div>
           <label style={labelStyle}>Date</label>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <input
-              type="date"
-              value={date}
-              max={today}
-              onChange={handleDateChange}
-              onFocus={() => setDateFocused(true)}
-              onBlur={() => setDateFocused(false)}
-              style={{
-                ...inputStyle,
-                borderColor: dateFocused ? BRAND_COLOR : 'var(--border)',
-                boxShadow: dateFocused ? `0 0 0 3px ${BRAND_COLOR}22` : 'none',
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type="date"
+                className="date-input-brand"
+                value={date}
+                max={today}
+                onChange={handleDateChange}
+                onFocus={() => setDateFocused(true)}
+                onBlur={() => setDateFocused(false)}
+                style={{
+                  ...inputStyle,
+                  paddingRight: '2.3rem',
+                  borderColor: dateFocused ? BRAND_COLOR : 'var(--border)',
+                  boxShadow: dateFocused ? `0 0 0 3px ${BRAND_COLOR}22` : 'none',
+                }}
+              />
+              <svg
+                width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={BRAND_COLOR}
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </div>
             <button
               type="button"
               onClick={() => jumpToDate(today)}

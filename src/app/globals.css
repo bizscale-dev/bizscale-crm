@@ -165,3 +165,12 @@ a:hover {
   background-color: rgba(100, 116, 139, 0.1);
   color: var(--text-muted);
 }
+
+/* Hides the native date-picker calendar glyph (Chromium/Edge) so a
+   brand-colored SVG icon can be overlaid on top of it — see the
+   `.date-input-brand` usage pattern (e.g. UserActivityReport.jsx). Opacity 0
+   (not display:none) keeps the native button clickable underneath. */
+input[type="date"].date-input-brand::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  cursor: pointer;
+}
