@@ -1,26 +1,10 @@
+import Link from 'next/link';
 import SyncLinksClient from './SyncLinksClient';
 import SyncWebSeoLinksClient from './SyncWebSeoLinksClient';
 import { getRecentSyncLogs } from '@/lib/syncLog';
+import { SYNC_TYPE_LABELS, formatLogTime } from './syncLogDisplay';
 
 export const revalidate = 0;
-
-const SYNC_TYPE_LABELS = {
-  'daily-sync': 'Daily Sync (Clients/Writers/Associates)',
-  'completed-links': 'SEO Completed Links',
-  'webseo-completed-links': 'Web SEO Completed Links',
-  'web-clients': 'Web Clients (Add/Remove)',
-  'writer-offpage': 'Writer GBP/Web-Off Tasks',
-};
-
-function formatLogTime(isoString) {
-  // created_at is stored as UTC (SQLite CURRENT_TIMESTAMP) — render in Pakistan Time
-  // since that's the timezone the cron schedule and the rest of this page are described in.
-  return new Date(`${isoString.replace(' ', 'T')}Z`).toLocaleString('en-US', {
-    timeZone: 'Asia/Karachi',
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
 
 export default async function LinkSyncPage() {
   const syncLogs = await getRecentSyncLogs(20);
@@ -44,9 +28,14 @@ export default async function LinkSyncPage() {
       <SyncWebSeoLinksClient />
 
       <div className="card">
-        <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', margin: 0, marginBottom: '1rem' }}>
-          Recent Sync Activity
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h2 style={{ fontSize: '1.25rem', margin: 0 }}>
+            Recent Sync Activity
+          </h2>
+          <Link href="/admin/link-sync/history" style={{ fontSize: '0.875rem', color: 'var(--primary)', textDecoration: 'none', fontWeight: '500' }}>
+            View All →
+          </Link>
+        </div>
         <p style={{ color: 'var(--text-muted)', margin: 0, marginBottom: '1rem', fontSize: '0.875rem' }}>
           Every trigger run — the twice-daily automatic cron and any manual &quot;Fetch &amp; Update Now&quot; click — is logged here, so you can confirm a trigger actually ran and see what it did without needing to check Vercel&apos;s logs.
         </p>

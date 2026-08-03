@@ -294,6 +294,18 @@ export default function UserActivityReport({ users }) {
 }
 
 function RowsTable({ heading, rows, accentColor }) {
+  // Rows arrive sorted by client_name — merge consecutive rows for the same
+  // client into one rowSpan'd cell instead of repeating the name every line.
+  const runs = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (i === 0 || rows[i].client_name !== rows[i - 1].client_name) {
+      let len = 1;
+      while (i + len < rows.length && rows[i + len].client_name === rows[i].client_name) len++;
+      runs.push({ start: i, length: len });
+    }
+  }
+  const runStartByIndex = new Map(runs.map(r => [r.start, r.length]));
+
   return (
     <div>
       <div style={{ fontSize: '0.75rem', fontWeight: '600', color: accentColor, textTransform: 'uppercase', marginBottom: '0.4rem' }}>
@@ -311,7 +323,11 @@ function RowsTable({ heading, rows, accentColor }) {
           <tbody>
             {rows.map((r, i) => (
               <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '0.5rem 0', fontWeight: '500' }}>{r.client_name}</td>
+                {runStartByIndex.has(i) && (
+                  <td rowSpan={runStartByIndex.get(i)} style={{ padding: '0.5rem 0', fontWeight: '500', verticalAlign: 'top' }}>
+                    {r.client_name}
+                  </td>
+                )}
                 <td style={{ padding: '0.5rem 0' }}>{r.label}</td>
                 <td style={{ padding: '0.5rem 0', color: accentColor }}>
                   {r.completed_count} / {r.target_count}

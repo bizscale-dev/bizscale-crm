@@ -26,17 +26,26 @@ export async function logSyncRun(syncType, status, summary, details) {
 /**
  * Most recent sync trigger runs, newest first, for display on /admin/link-sync.
  */
-export async function getRecentSyncLogs(limit = 20) {
+export async function getRecentSyncLogs(limit = 20, offset = 0) {
   const db = await getDb();
   const rows = await db.prepare(`
     SELECT id, sync_type, status, summary, details, created_at
     FROM sync_logs
     ORDER BY created_at DESC, id DESC
-    LIMIT ?
-  `).all(limit);
+    LIMIT ? OFFSET ?
+  `).all(limit, offset);
 
   return rows.map(r => ({
     ...r,
     details: r.details ? JSON.parse(r.details) : null,
   }));
+}
+
+/**
+ * Total count of recorded sync runs — for pagination on the full history page.
+ */
+export async function getSyncLogsCount() {
+  const db = await getDb();
+  const row = await db.prepare('SELECT COUNT(*) as count FROM sync_logs').get();
+  return row?.count || 0;
 }
