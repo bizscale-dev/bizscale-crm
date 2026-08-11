@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { moveFunnelClientToNormalAction, moveFunnelClientsToNormalAction } from './actions';
+import { moveFunnelClientToNormalAction, moveFunnelClientsToNormalAction, jumpFunnelClientToMonthAction } from './actions';
 
 const BRAND_COLOR = '#16b293';
 
@@ -33,6 +33,21 @@ export default function FunnelClientsTable({ funnelClients }) {
         setMessage({ type: 'error', text: result.error });
       } else {
         setSelected(current => current.filter(x => x !== clientId));
+        router.refresh();
+      }
+    });
+  };
+
+  const handleJumpToMonth = (clientId, clientName, targetMonth) => {
+    if (!confirm(`Move "${clientName}" directly to Month ${targetMonth}? This sets their target to the Month 2 & 3 Bonus Link Targets, tracked day-by-day and synced from the sheet like a normal client; any skipped month's tasks are never generated.`)) return;
+
+    setMessage(null);
+    startTransition(async () => {
+      const result = await jumpFunnelClientToMonthAction(clientId, targetMonth);
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error });
+      } else {
+        setMessage({ type: 'success', text: result.success });
         router.refresh();
       }
     });
@@ -150,7 +165,7 @@ export default function FunnelClientsTable({ funnelClients }) {
                     </div>
                   </td>
                   <td style={{ padding: '0.75rem 0' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <Link href={`/admin/funnel/${client.id}`} style={{
                         padding: '0.4rem 0.75rem',
                         backgroundColor: 'var(--primary)',
@@ -163,6 +178,27 @@ export default function FunnelClientsTable({ funnelClients }) {
                       }}>
                         View Details
                       </Link>
+                      {[2, 3].filter(m => m > client.funnel_month).map(m => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => handleJumpToMonth(client.id, client.name, m)}
+                          disabled={isPending}
+                          style={{
+                            padding: '0.4rem 0.75rem',
+                            backgroundColor: 'transparent',
+                            border: `1px solid ${BRAND_COLOR}`,
+                            color: BRAND_COLOR,
+                            borderRadius: '0.25rem',
+                            fontSize: '0.75rem',
+                            fontWeight: '500',
+                            cursor: isPending ? 'not-allowed' : 'pointer',
+                            opacity: isPending ? 0.6 : 1
+                          }}
+                        >
+                          Move to Month {m}
+                        </button>
+                      ))}
                       <button
                         type="button"
                         onClick={() => handleMoveOne(client.id, client.name)}

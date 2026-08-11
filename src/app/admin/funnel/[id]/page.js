@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+import { getActiveCampaign, LINK_TYPE_LABELS } from '@/lib/services';
 import Link from 'next/link';
 import FunnelDetailClient from './FunnelDetailClient';
 
@@ -31,14 +31,19 @@ export default async function FunnelDetailPage({ params }) {
     );
   }
 
+  // Month 1 is a fixed checklist tracked in tunnel_tasks (one row per item, with a
+  // status). Month 2/3 clients are tracked through seo_tasks instead (see
+  // taskService.js's generateSEOTasks) — real day-distributed, sheet-synced rows
+  // by link type, not a checklist — so they're fetched and displayed separately.
   let funnelTasks = [];
   let monthBreakdown = [];
+  let bonusMonthLinkStats = [];
 
   if (campaign) {
     funnelTasks = await db.prepare(`
       SELECT * FROM tunnel_tasks
-      WHERE client_id = ? AND campaign_id = ?
-      ORDER BY funnel_month,
+      WHERE client_id = ? AND campaign_id = ? AND funnel_month = 1
+      ORDER BY
         CASE category
           WHEN 'Citations' THEN 1
           WHEN 'Profiles' THEN 2
@@ -50,20 +55,49 @@ export default async function FunnelDetailPage({ params }) {
         END
     `).all(clientId, campaign.id);
 
-    monthBreakdown = await db.prepare(`
+    const month1Breakdown = await db.prepare(`
       SELECT funnel_month,
         COUNT(*) as total_tasks,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_tasks
       FROM tunnel_tasks
-      WHERE client_id = ? AND campaign_id = ?
+      WHERE client_id = ? AND campaign_id = ? AND funnel_month = 1
       GROUP BY funnel_month
-      ORDER BY funnel_month
     `).all(clientId, campaign.id);
+
+    // A client only ever has seo_tasks rows for their CURRENT bonus month —
+    // moving to a new month regenerates the whole campaign's seo_tasks, so a
+    // past bonus month's rows don't stick around the way tunnel_tasks history does.
+    bonusMonthLinkStats = await db.prepare(`
+      SELECT link_type, SUM(target_count) as target, SUM(completed_count) as completed
+      FROM seo_tasks
+      WHERE client_id = ? AND campaign_id = ?
+      GROUP BY link_type
+    `).all(clientId, campaign.id);
+
+    const bonusMonthTotals = bonusMonthLinkStats.reduce(
+      (acc, r) => ({ target: acc.target + r.target, completed: acc.completed + r.completed }),
+      { target: 0, completed: 0 }
+    );
+
+    monthBreakdown = [...month1Breakdown];
+    if (bonusMonthTotals.target > 0 && (client.funnel_month === 2 || client.funnel_month === 3)) {
+      monthBreakdown.push({
+        funnel_month: client.funnel_month,
+        total_tasks: bonusMonthTotals.target,
+        completed_tasks: bonusMonthTotals.completed,
+      });
+    }
+    monthBreakdown.sort((a, b) => a.funnel_month - b.funnel_month);
   }
 
+  const isBonusMonth = client.funnel_month === 2 || client.funnel_month === 3;
   const currentMonthTasks = funnelTasks.filter(t => t.funnel_month === client.funnel_month);
-  const totalTasks = currentMonthTasks.length;
-  const completedTasks = currentMonthTasks.filter(t => t.status === 'completed').length;
+  const totalTasks = isBonusMonth
+    ? bonusMonthLinkStats.reduce((s, r) => s + r.target, 0)
+    : currentMonthTasks.length;
+  const completedTasks = isBonusMonth
+    ? bonusMonthLinkStats.reduce((s, r) => s + r.completed, 0)
+    : currentMonthTasks.filter(t => t.status === 'completed').length;
   const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   const tasksByMonth = {};
@@ -149,9 +183,36 @@ export default async function FunnelDetailPage({ params }) {
             </div>
           )}
 
-          {Object.keys(tasksByMonth).length > 0 ? (
+          {isBonusMonth && bonusMonthLinkStats.length > 0 && (
+            <div className="card">
+              <h3 style={{ marginTop: 0, marginBottom: '0.5rem', color: BRAND_COLOR, fontSize: '1.1rem' }}>
+                Month {client.funnel_month} Tasks
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 0, marginBottom: '1.5rem' }}>
+                Tracked day-by-day and synced from the Google Sheet, same as a normal client — not a manual checklist.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {bonusMonthLinkStats.map(r => {
+                  const pct = r.target > 0 ? Math.round((r.completed / r.target) * 100) : 0;
+                  return (
+                    <div key={r.link_type}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                        <span style={{ fontWeight: '500', fontSize: '0.875rem' }}>{LINK_TYPE_LABELS[r.link_type] || r.link_type}</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{r.completed} / {r.target} ({pct}%)</span>
+                      </div>
+                      <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', backgroundColor: BRAND_COLOR }}></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {client.funnel_month === 1 && Object.keys(tasksByMonth).length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-              {[1, 2, 3].map(monthNum => {
+              {[1].map(monthNum => {
                 const tasks = tasksByMonth[monthNum] || [];
                 if (tasks.length === 0) return null;
 
@@ -197,7 +258,7 @@ export default async function FunnelDetailPage({ params }) {
                 );
               })}
             </div>
-          ) : (
+          ) : (!isBonusMonth || bonusMonthLinkStats.length === 0) && (
             <div className="card">
               <p style={{ color: 'var(--text-muted)', margin: 0 }}>No funnel tasks assigned yet.</p>
             </div>

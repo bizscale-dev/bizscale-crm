@@ -1,7 +1,7 @@
 import { getDb } from './db';
-import { LINK_TYPES, LINK_TYPE_TARGET_FIELDS, LINK_TYPE_LABELS, DEFAULT_LINK_TARGETS } from './linkTargetConstants';
-import { FUNNEL_MONTH1_ITEMS, FUNNEL_BONUS_FIELDS } from './funnelConstants';
+import { FUNNEL_MONTH1_ITEMS } from './funnelConstants';
 import { computeFunnelMonth1Window, computeFunnelNextMonthWindow } from './campaign-cycle';
+import { generateSEOTasks } from './taskService';
 
 function todayStr() {
   return new Date().toISOString().split('T')[0];
@@ -73,42 +73,37 @@ export async function enrollClientInFunnel(clientId, campaignId, enrollDate = to
 }
 
 /**
- * Generate a client's numbered checklist for funnel month 2 or 3 — one item per
- * campaign link-type quota (normal monthly target + admin-configured bonus).
+ * Move a client into funnel month 2 or 3: updates their month window, then
+ * regenerates the whole campaign's seo_tasks (generateSEOTasks already includes
+ * Month 2/3 funnel clients — see src/lib/taskService.js — using their Month 2 & 3
+ * Bonus Link Targets as their target instead of the campaign's normal one, day
+ * distributed and Google Sheet-synced exactly like every other client). Existing
+ * clients' completed_count is preserved across the regeneration by
+ * generateSEOTasks itself.
  */
-export async function generateFunnelMonthTasks(clientId, campaignId, monthNumber) {
+async function moveClientIntoBonusMonth(client, campaign, targetMonth, { skipRegeneration = false } = {}) {
   const db = await getDb();
-  const campaign = await db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
-  if (!campaign) throw new Error('Campaign not found');
+  const { monthEndDate } = computeFunnelNextMonthWindow(campaign.start_date, client.funnel_month_end_date, targetMonth);
 
-  const rows = [];
-  for (const type of LINK_TYPES) {
-    const normalTarget = campaign[LINK_TYPE_TARGET_FIELDS[type]] ?? DEFAULT_LINK_TARGETS[type];
-    const bonus = campaign[FUNNEL_BONUS_FIELDS[type]] ?? 0;
-    const count = normalTarget + bonus;
-    const label = LINK_TYPE_LABELS[type];
+  await db.prepare('UPDATE clients SET funnel_month = ?, funnel_month_end_date = ? WHERE id = ?')
+    .run(targetMonth, monthEndDate, client.id);
 
-    for (let i = 1; i <= count; i++) {
-      rows.push([campaignId, clientId, monthNumber, label, `${label} Link #${i}`]);
-    }
-  }
+  if (skipRegeneration) return { newMonth: targetMonth, tasksCreated: null };
 
-  if (rows.length > 0) {
-    const insertSql = `
-      INSERT INTO tunnel_tasks (campaign_id, client_id, week_number, funnel_month, category, platform, status)
-      VALUES (?, ?, 0, ?, ?, ?, 'pending')
-    `;
-    await db.batch(rows.map(args => ({ sql: insertSql, args })));
-  }
+  await generateSEOTasks(client.campaign_id);
 
-  return rows.length;
+  const { count: tasksCreated } = await db.prepare(
+    'SELECT COUNT(*) as count FROM seo_tasks WHERE campaign_id = ? AND client_id = ?'
+  ).get(client.campaign_id, client.id);
+
+  return { newMonth: targetMonth, tasksCreated };
 }
 
 /**
  * Advance a single funnel client by one stage: month 1 -> 2, 2 -> 3, or 3 -> graduate.
  * Used both by the batch progression sweep and by the admin's manual "force advance" action.
  */
-export async function advanceOneFunnelClient(clientId) {
+export async function advanceOneFunnelClient(clientId, { skipRegeneration = false } = {}) {
   const db = await getDb();
   const client = await db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
   if (!client || client.tunnel_status !== 'active') return { advanced: false };
@@ -118,10 +113,7 @@ export async function advanceOneFunnelClient(clientId) {
 
   if (client.funnel_month === 1 || client.funnel_month === 2) {
     const nextMonth = client.funnel_month + 1;
-    const { monthEndDate } = computeFunnelNextMonthWindow(campaign.start_date, client.funnel_month_end_date, nextMonth);
-    await generateFunnelMonthTasks(clientId, client.campaign_id, nextMonth);
-    await db.prepare('UPDATE clients SET funnel_month = ?, funnel_month_end_date = ? WHERE id = ?')
-      .run(nextMonth, monthEndDate, clientId);
+    await moveClientIntoBonusMonth(client, campaign, nextMonth, { skipRegeneration });
     return { advanced: true, newMonth: nextMonth };
   }
 
@@ -133,6 +125,35 @@ export async function advanceOneFunnelClient(clientId) {
   }
 
   return { advanced: false };
+}
+
+/**
+ * Jump a funnel client directly to month 2 or 3, skipping any month in between —
+ * the skipped month's tasks are simply never generated, only the target month's.
+ * Used by the admin's manual "Move to Month 2/3" action, as an alternative to
+ * advancing one month at a time.
+ */
+export async function jumpFunnelClientToMonth(clientId, targetMonth) {
+  const db = await getDb();
+
+  if (![2, 3].includes(targetMonth)) {
+    return { moved: false, error: 'Target month must be 2 or 3' };
+  }
+
+  const client = await db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
+  if (!client || client.tunnel_status !== 'active') {
+    return { moved: false, error: 'Client is not currently active in the funnel' };
+  }
+  if (targetMonth <= client.funnel_month) {
+    return { moved: false, error: `Client is already on Month ${client.funnel_month}` };
+  }
+
+  const campaign = await db.prepare('SELECT * FROM campaigns WHERE id = ?').get(client.campaign_id);
+  if (!campaign) return { moved: false, error: 'Campaign not found' };
+
+  const { newMonth, tasksCreated } = await moveClientIntoBonusMonth(client, campaign, targetMonth);
+
+  return { moved: true, newMonth, tasksCreated };
 }
 
 /**
@@ -184,23 +205,34 @@ export async function runFunnelProgressionForCampaign(campaignId, today = todayS
   `).all(campaignId, today);
 
   const result = { advancedToMonth2: [], advancedToMonth3: [], graduated: [] };
+  let anyMovedIntoBonusMonth = false;
 
-  // Each client's advancement (advanceOneFunnelClient -> generateFunnelMonthTasks) is
+  // Each client's advancement (advanceOneFunnelClient -> moveClientIntoBonusMonth) is
   // already its own atomic transaction, so the sweep itself doesn't wrap in one more —
   // per-client atomicity is all that's needed here (idempotency handles recovery if the
-  // sweep is interrupted).
+  // sweep is interrupted). seo_tasks regeneration is skipped per-client here and done
+  // once for the whole campaign at the end instead — generateSEOTasks rebuilds every
+  // client's tasks regardless of which one triggered it, so calling it once per
+  // transitioning client in the same sweep would repeat the same full-campaign work
+  // needlessly.
   for (const { id } of dueClients) {
     const before = await db.prepare('SELECT funnel_month FROM clients WHERE id = ?').get(id);
-    const outcome = await advanceOneFunnelClient(id);
+    const outcome = await advanceOneFunnelClient(id, { skipRegeneration: true });
     if (!outcome.advanced) continue;
 
     if (outcome.graduated) {
       result.graduated.push(id);
     } else if (before.funnel_month === 1) {
       result.advancedToMonth2.push(id);
+      anyMovedIntoBonusMonth = true;
     } else if (before.funnel_month === 2) {
       result.advancedToMonth3.push(id);
+      anyMovedIntoBonusMonth = true;
     }
+  }
+
+  if (anyMovedIntoBonusMonth) {
+    await generateSEOTasks(campaignId);
   }
 
   return result;

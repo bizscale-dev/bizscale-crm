@@ -2,7 +2,7 @@
 
 import { getDb } from '@/lib/db';
 import { LINK_TYPES } from '@/lib/linkTargetConstants';
-import { enrollClientInFunnel, advanceOneFunnelClient, graduateFunnelClientNow, graduateFunnelClientsNow } from '@/lib/funnel';
+import { enrollClientInFunnel, advanceOneFunnelClient, jumpFunnelClientToMonth, graduateFunnelClientNow, graduateFunnelClientsNow } from '@/lib/funnel';
 import { revalidatePath } from 'next/cache';
 
 export async function addFunnelTemplate(campaignId, templateData) {
@@ -73,6 +73,26 @@ export async function forceAdvanceFunnelClientAction(clientId) {
     revalidatePath('/admin/clients');
     revalidatePath('/admin/tasks');
     return { success: result.graduated ? 'Client graduated to the main campaign' : `Client advanced to Month ${result.newMonth}` };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+// Manual escape hatch: jump a client straight to Month 2 or 3, skipping any month
+// in between — generates only the target month's tasks (using the campaign's
+// Month 2 & 3 Bonus Link Targets as the whole target for that month, tracked
+// through seo_tasks day-by-day and Google Sheet-synced like a normal client),
+// the skipped month's tasks are never created.
+export async function jumpFunnelClientToMonthAction(clientId, targetMonth) {
+  try {
+    const result = await jumpFunnelClientToMonth(clientId, targetMonth);
+    if (!result.moved) {
+      return { error: result.error || 'Could not move client' };
+    }
+    revalidatePath('/admin/funnel');
+    revalidatePath('/admin/clients');
+    revalidatePath('/admin/tasks');
+    return { success: `Client moved to Month ${result.newMonth} (${result.tasksCreated} tasks created)` };
   } catch (err) {
     return { error: err.message };
   }

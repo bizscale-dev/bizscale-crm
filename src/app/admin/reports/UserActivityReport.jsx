@@ -156,6 +156,7 @@ export default function UserActivityReport({ users }) {
                 onChange={handleDateChange}
                 onFocus={() => setDateFocused(true)}
                 onBlur={() => setDateFocused(false)}
+                onClick={(e) => e.target.showPicker?.()}
                 style={{
                   ...inputStyle,
                   paddingRight: '2.3rem',

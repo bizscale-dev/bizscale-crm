@@ -179,47 +179,60 @@ export async function POST(request) {
 
         clientResult[linkType] = sheetCompletedCount;
 
-        // Get today's task
-        const todayTask = await db.prepare(`
-          SELECT id, target_count, completed_count
+        // Every due row for this client/link type (today and any still-overdue
+        // "Pending" ones), oldest first. New progress from the sheet pays down the
+        // oldest unfinished debt before crediting today — so a Pending task
+        // actually clears itself once enough real work lands in the sheet, instead
+        // of staying stuck forever (the sync used to only ever touch today's row,
+        // so a day that fell behind could never be caught up automatically).
+        const dueTasks = await db.prepare(`
+          SELECT id, task_date, target_count, completed_count
           FROM seo_tasks
-          WHERE campaign_id = ? AND client_id = ? AND link_type = ? AND task_date = ?
-          LIMIT 1
-        `).get(campaign.id, client.id, linkType, today);
+          WHERE campaign_id = ? AND client_id = ? AND link_type = ? AND task_date <= ?
+          ORDER BY task_date ASC
+        `).all(campaign.id, client.id, linkType, today);
 
-        if (todayTask) {
-          // Baseline = the most recent PRIOR task row for this exact client+link_type,
-          // not literally "yesterday's calendar date" — associates are typically
-          // scheduled on this client only once a week (or on some other rotation), so
-          // there's usually no row for yesterday at all. Using a fixed one-day lookback
-          // meant that gap defaulted to 0 and dumped this client's entire multi-week
-          // cumulative sheet total onto whichever day it next came up in rotation.
-          const priorTask = await db.prepare(`
-            SELECT completed_count
-            FROM seo_tasks
-            WHERE campaign_id = ? AND client_id = ? AND link_type = ? AND task_date < ?
-            ORDER BY task_date DESC
-            LIMIT 1
-          `).get(campaign.id, client.id, linkType, today);
+        if (dueTasks.length > 0) {
+          const alreadyRecorded = dueTasks.reduce((sum, t) => sum + t.completed_count, 0);
+          let newProgress = Math.max(0, sheetCompletedCount - alreadyRecorded);
 
-          // Today's progress = sheet total - total as of the last time this client/link
-          // type was scheduled
-          const priorCompleted = priorTask?.completed_count || 0;
-          const todaysProgress = Math.max(0, sheetCompletedCount - priorCompleted);
+          const updates = [];
+          for (const task of dueTasks) {
+            if (newProgress <= 0) break;
+            const room = Math.max(0, task.target_count - task.completed_count);
+            if (room <= 0) continue;
+            const applied = Math.min(room, newProgress);
+            updates.push({ id: task.id, newCompleted: task.completed_count + applied });
+            newProgress -= applied;
+          }
 
-          // Only update if different
-          if (todaysProgress !== todayTask.completed_count) {
-            await db.prepare(`
-              UPDATE seo_tasks
-              SET completed_count = ?
-              WHERE id = ?
-            `).run(todaysProgress, todayTask.id);
-            
+          // Anything left over once every due row is already at its own target
+          // means the sheet shows more than everything assigned so far — attribute
+          // it to today specifically (allowed to exceed today's target), same as
+          // the old "overachievement" behavior, rather than discarding it.
+          if (newProgress > 0) {
+            const todayTask = dueTasks.find(t => t.task_date === today);
+            if (todayTask) {
+              const existingUpdate = updates.find(u => u.id === todayTask.id);
+              if (existingUpdate) {
+                existingUpdate.newCompleted += newProgress;
+              } else {
+                updates.push({ id: todayTask.id, newCompleted: todayTask.completed_count + newProgress });
+              }
+              newProgress = 0;
+            }
+          }
+
+          for (const { id, newCompleted } of updates) {
+            await db.prepare('UPDATE seo_tasks SET completed_count = ? WHERE id = ?').run(newCompleted, id);
             syncedCount++;
-            console.log(`[SYNC] Updated ${client.name} - ${linkType}: ${todaysProgress} (sheet: ${sheetCompletedCount}, prior: ${priorCompleted})`);
+          }
+
+          if (updates.length > 0) {
+            console.log(`[SYNC] Updated ${client.name} - ${linkType}: ${updates.length} row(s) (sheet: ${sheetCompletedCount}, already recorded: ${alreadyRecorded})`);
           }
         } else {
-          console.log(`[SYNC] No task found for ${client.name} - ${linkType} on ${today}`);
+          console.log(`[SYNC] No due tasks found for ${client.name} - ${linkType} as of ${today}`);
         }
       }
 

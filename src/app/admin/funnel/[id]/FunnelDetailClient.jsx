@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { forceAdvanceFunnelClientAction, moveFunnelClientToNormalAction } from '../actions';
+import { forceAdvanceFunnelClientAction, jumpFunnelClientToMonthAction, moveFunnelClientToNormalAction } from '../actions';
 
 const BRAND_COLOR = '#16b293';
 
@@ -50,6 +50,11 @@ export default function FunnelDetailClient({ client }) {
     'Move this client straight to the normal client list now? This skips any remaining funnel months.'
   );
 
+  const handleJumpToMonth = (targetMonth) => runAction(
+    (clientId) => jumpFunnelClientToMonthAction(clientId, targetMonth),
+    `Move this client directly to Month ${targetMonth}? This sets their target to the Month 2 & 3 Bonus Link Targets, tracked day-by-day and synced from the sheet like a normal client; any skipped month's tasks are never generated.`
+  );
+
   return (
     <div className="card">
       <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Manual Override</h3>
@@ -76,6 +81,27 @@ export default function FunnelDetailClient({ client }) {
         >
           {loading ? 'Working...' : isLastMonth ? '✓ Graduate to Main Campaign' : `Force-Advance to Month ${client.funnel_month + 1}`}
         </button>
+
+        {[2, 3].filter(m => m > client.funnel_month).map(m => (
+          <button
+            key={m}
+            onClick={() => handleJumpToMonth(m)}
+            disabled={loading}
+            style={{
+              padding: '0.75rem 1.5rem',
+              backgroundColor: 'transparent',
+              color: BRAND_COLOR,
+              border: `1px solid ${BRAND_COLOR}`,
+              borderRadius: '0.5rem',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontWeight: '600',
+              fontSize: '0.875rem',
+              opacity: loading ? 0.6 : 1
+            }}
+          >
+            {loading ? 'Working...' : `Move to Month ${m}`}
+          </button>
+        ))}
 
         <button
           onClick={handleMoveToNormal}

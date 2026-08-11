@@ -149,13 +149,14 @@ export default async function LinkSyncPage() {
           <div>
             <h3 style={{ margin: 0, marginBottom: '0.5rem', color: 'var(--foreground)' }}>Daily Progress Calculation</h3>
             <p style={{ margin: 0, marginBottom: '0.5rem' }}>
-              Today's progress is calculated by comparing the sheet totals:
+              New progress is calculated by comparing the sheet total against everything already recorded, then
+              applied oldest-first:
             </p>
             <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
-              <li><strong>Formula:</strong> Today's Progress = Sheet Total - Yesterday's Total</li>
-              <li><strong>Example:</strong> If sheet shows 30 Web2 links and yesterday had 28, today's progress = 2 new links</li>
-              <li><strong>Why:</strong> This ensures you only count links completed today, not the cumulative total</li>
-              <li><strong>Note:</strong> If sheet total goes down, today's progress is set to 0 (to prevent negative values)</li>
+              <li><strong>Formula:</strong> New Progress = Sheet Total − Sum of Completed Across All Due Rows</li>
+              <li><strong>Oldest first:</strong> New progress fills the oldest still-incomplete (&quot;Pending&quot;) day first, then the next, and so on — a Pending task clears itself automatically once enough real work lands in the sheet, instead of staying stuck</li>
+              <li><strong>Leftover goes to today:</strong> Once every overdue day is caught up, any remaining new progress is credited to today (can exceed today&apos;s target if there&apos;s genuinely that much extra)</li>
+              <li><strong>Note:</strong> If the sheet total goes down, new progress is set to 0 (to prevent negative values)</li>
             </ul>
           </div>
 
@@ -169,7 +170,7 @@ export default async function LinkSyncPage() {
           <div>
             <h3 style={{ margin: 0, marginBottom: '0.5rem', color: 'var(--foreground)' }}>What Gets Updated</h3>
             <p style={{ margin: 0 }}>
-              For today's date, the system updates the <strong>completed_count</strong> field in seo_tasks (regular SEO Associates) and webseo_tasks (Web SEO Associates, using the same today-minus-yesterday delta approach). This instantly updates progress bars and completion status in all dashboards.
+              The system updates the <strong>completed_count</strong> field in seo_tasks (regular SEO Associates) and webseo_tasks (Web SEO Associates) — for whichever day(s) the new sheet progress actually applies to, oldest overdue day first, then today. This instantly updates progress bars, Pending Tasks, and completion status in all dashboards.
             </p>
           </div>
         </div>

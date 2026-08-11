@@ -27,8 +27,9 @@ export default function FunnelSettingsClient({ campaign, linkTypes, linkTypeLabe
     <div className="card">
       <h3 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Month 2 &amp; 3 Bonus Link Targets</h3>
       <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: 0, marginBottom: '1.5rem' }}>
-        During Funnel months 2 and 3, each link type&apos;s monthly checklist count is the campaign&apos;s normal target
-        plus the bonus below (e.g. a normal target of 10 with a bonus of 10 becomes 20 items that month).
+        During Funnel months 2 and 3, each link type&apos;s monthly target is set to the number below (not the
+        campaign&apos;s normal target plus this — this is the client&apos;s whole target for that month). Tracked
+        day-by-day and synced from the Google Sheet, the same as a normal client.
       </p>
 
       <form action={handleSubmit}>

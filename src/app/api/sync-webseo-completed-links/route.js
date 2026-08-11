@@ -19,10 +19,11 @@ export const maxDuration = 60;
  * - Column E: Guest Post
  * - Column F: Last Update
  *
- * Same delta approach as /api/sync-completed-links: the sheet holds a running
- * cumulative total per client, so today's completed_count = today's sheet total
- * minus yesterday's sheet total (i.e. yesterday's webseo_tasks.completed_count),
- * not the raw sheet number.
+ * Same approach as /api/sync-completed-links: the sheet holds a running
+ * cumulative total per client, so new progress = sheet total minus everything
+ * already recorded across this client/post-type's due rows — applied to the
+ * oldest still-incomplete ("Pending") row first, then today's, so a Pending
+ * task actually clears once enough real work lands in the sheet.
  */
 
 export async function POST(request) {
@@ -136,37 +137,57 @@ export async function POST(request) {
 
         clientResult[postType] = sheetCompletedCount;
 
-        // No task scheduled for this client/type today (not their batch's visit day
-        // this cycle) — nothing to update, skip silently.
-        const todayTask = await db.prepare(`
-          SELECT id, target_count, completed_count
+        // Every due row for this client/post type (today and any still-overdue
+        // "Pending" ones), oldest first — new progress pays down the oldest
+        // unfinished debt before crediting today, so a Pending task actually
+        // clears once enough real work lands in the sheet (see sync-completed-links
+        // for the full rationale — the sync used to only ever touch today's row,
+        // so an overdue day could never be caught up automatically).
+        const dueTasks = await db.prepare(`
+          SELECT id, task_date, target_count, completed_count
           FROM webseo_tasks
-          WHERE campaign_id = ? AND client_id = ? AND post_type = ? AND task_date = ?
-          LIMIT 1
-        `).get(campaign.id, client.id, postType, today);
+          WHERE campaign_id = ? AND client_id = ? AND post_type = ? AND task_date <= ?
+          ORDER BY task_date ASC
+        `).all(campaign.id, client.id, postType, today);
 
-        if (!todayTask) continue;
+        if (dueTasks.length === 0) continue;
 
-        // Baseline = the most recent PRIOR task row for this exact client+post_type,
-        // not literally "yesterday's calendar date" (see sync-completed-links for why
-        // — associates are typically scheduled on a given client on a rotation, not
-        // daily, so a fixed one-day lookback usually finds nothing and dumps the
-        // client's entire cumulative sheet total onto whichever day it next comes up).
-        const priorTask = await db.prepare(`
-          SELECT completed_count
-          FROM webseo_tasks
-          WHERE campaign_id = ? AND client_id = ? AND post_type = ? AND task_date < ?
-          ORDER BY task_date DESC
-          LIMIT 1
-        `).get(campaign.id, client.id, postType, today);
+        const alreadyRecorded = dueTasks.reduce((sum, t) => sum + t.completed_count, 0);
+        let newProgress = Math.max(0, sheetCompletedCount - alreadyRecorded);
 
-        const priorCompleted = priorTask?.completed_count || 0;
-        const todaysProgress = Math.max(0, sheetCompletedCount - priorCompleted);
+        const updates = [];
+        for (const task of dueTasks) {
+          if (newProgress <= 0) break;
+          const room = Math.max(0, task.target_count - task.completed_count);
+          if (room <= 0) continue;
+          const applied = Math.min(room, newProgress);
+          updates.push({ id: task.id, newCompleted: task.completed_count + applied });
+          newProgress -= applied;
+        }
 
-        if (todaysProgress !== todayTask.completed_count) {
-          await db.prepare('UPDATE webseo_tasks SET completed_count = ? WHERE id = ?').run(todaysProgress, todayTask.id);
+        // Leftover once every due row is already at its own target means the sheet
+        // shows more than everything assigned so far — attribute it to today
+        // specifically (allowed to exceed today's target), same as the old
+        // "overachievement" behavior, rather than discarding it.
+        if (newProgress > 0) {
+          const todayTask = dueTasks.find(t => t.task_date === today);
+          if (todayTask) {
+            const existingUpdate = updates.find(u => u.id === todayTask.id);
+            if (existingUpdate) {
+              existingUpdate.newCompleted += newProgress;
+            } else {
+              updates.push({ id: todayTask.id, newCompleted: todayTask.completed_count + newProgress });
+            }
+          }
+        }
+
+        for (const { id, newCompleted } of updates) {
+          await db.prepare('UPDATE webseo_tasks SET completed_count = ? WHERE id = ?').run(newCompleted, id);
           syncedCount++;
-          console.log(`[WEBSEO SYNC] Updated ${client.business_name} - ${postType}: ${todaysProgress} (sheet: ${sheetCompletedCount}, prior: ${priorCompleted})`);
+        }
+
+        if (updates.length > 0) {
+          console.log(`[WEBSEO SYNC] Updated ${client.business_name} - ${postType}: ${updates.length} row(s) (sheet: ${sheetCompletedCount}, already recorded: ${alreadyRecorded})`);
         }
       }
 

@@ -1,6 +1,8 @@
 import { getDb } from '@/lib/db';
 import Link from 'next/link';
 import { getActiveCampaign, getTotalLinksPerClient } from '@/lib/services';
+import { LINK_TYPES } from '@/lib/linkTargetConstants';
+import { FUNNEL_BONUS_FIELDS } from '@/lib/funnelConstants';
 
 export default async function SEOAssociatesPage() {
   const db = await getDb();
@@ -10,19 +12,33 @@ export default async function SEOAssociatesPage() {
   const campaign = await getActiveCampaign();
   const monthlyTargetPerClient = campaign ? getTotalLinksPerClient(campaign) : 0;
 
+  // A funnel Month 2/3 client's target is the campaign's Month 2 & 3 Bonus Link
+  // Targets (Admin → Funnel) instead of the normal monthlyTargetPerClient — see
+  // taskService.js's generateSEOTasks, which now includes these clients directly.
+  const funnelBonusTargetPerClient = campaign
+    ? LINK_TYPES.reduce((sum, type) => sum + (campaign[FUNNEL_BONUS_FIELDS[type]] || 0), 0)
+    : 0;
+
   // Get all SEO associates with client and task information — scoped to the active
-  // campaign only (a client/task from a past campaign shouldn't count here), and
-  // excluding clients currently in the Funnel (they don't get regular seo_tasks).
+  // campaign only (a client/task from a past campaign shouldn't count here).
+  // "total_clients" excludes ALL funnel-active clients (month 1, 2, or 3) — the
+  // funnel_m1/m2/m3 counts below cover those separately.
   const associates = campaign ? await db.prepare(`
     SELECT u.id, u.name, u.email, u.is_active, u.lifetime_completed_links,
       (SELECT COUNT(*) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as total_tasks,
       (SELECT SUM(completed_count) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as completed_tasks,
       (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ?
-         AND (tunnel_status IS NULL OR tunnel_status != 'active')) as total_clients
+         AND (tunnel_status IS NULL OR tunnel_status != 'active')) as total_clients,
+      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ?
+         AND tunnel_status = 'active' AND funnel_month = 1) as funnel_m1,
+      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ?
+         AND tunnel_status = 'active' AND funnel_month = 2) as funnel_m2,
+      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ?
+         AND tunnel_status = 'active' AND funnel_month = 3) as funnel_m3
     FROM users u
     WHERE u.role IN ('seo_associate', 'associate')
     ORDER BY u.name ASC
-  `).all(campaign.id, campaign.id, campaign.id) : [];
+  `).all(campaign.id, campaign.id, campaign.id, campaign.id, campaign.id, campaign.id) : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -40,22 +56,36 @@ export default async function SEOAssociatesPage() {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
               <thead>
+                <tr style={{ color: 'var(--text-muted)' }}>
+                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Name</th>
+                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Email</th>
+                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Status</th>
+                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Total Clients</th>
+                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Total Tasks Per Client</th>
+                  <th colSpan={3} style={{ padding: '0.4rem 1rem 0.4rem 0', textAlign: 'center', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: '600', borderBottom: '1px solid var(--border)' }}>Funnel Clients</th>
+                  <th colSpan={2} style={{ padding: '0.4rem 1rem 0.4rem 0', textAlign: 'center', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: '600', borderBottom: '1px solid var(--border)' }}>Funnel Tasks</th>
+                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Total Expected Links</th>
+                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Completed</th>
+                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>All-Time (Sheet)</th>
+                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Progress</th>
+                  <th rowSpan={2} style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Action</th>
+                </tr>
                 <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Name</th>
-                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Email</th>
-                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Status</th>
-                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Total Clients</th>
-                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Total Tasks Per Client</th>
-                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Total Expected Links</th>
-                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Completed</th>
-                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>All-Time (Sheet)</th>
-                  <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Progress</th>
-                  <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Action</th>
+                  <th style={{ padding: '0.4rem 0.5rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M1</th>
+                  <th style={{ padding: '0.4rem 0.5rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M2</th>
+                  <th style={{ padding: '0.4rem 1rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M3</th>
+                  <th style={{ padding: '0.4rem 0.5rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M2</th>
+                  <th style={{ padding: '0.4rem 1rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M3</th>
                 </tr>
               </thead>
               <tbody>
                 {associates.map((associate) => {
-                  const expectedTotalLinks = associate.total_clients * monthlyTargetPerClient;
+                  // Total Expected Links = normal clients' target + this associate's
+                  // Month 2/3 funnel clients' bonus-target totals (Month 1 excluded —
+                  // it's a fixed platform checklist, not "links").
+                  const funnelM2Expected = associate.funnel_m2 * funnelBonusTargetPerClient;
+                  const funnelM3Expected = associate.funnel_m3 * funnelBonusTargetPerClient;
+                  const expectedTotalLinks = (associate.total_clients * monthlyTargetPerClient) + funnelM2Expected + funnelM3Expected;
                   // seo_tasks rows (and their completed_count) get wiped and rebuilt from
                   // scratch every time a new client is onboarded (see taskService.js's
                   // generateSEOTasks), so completed_tasks only reflects the current
@@ -81,6 +111,11 @@ export default async function SEOAssociatesPage() {
                       </td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{associate.total_clients}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--success)', whiteSpace: 'nowrap' }}>{monthlyTargetPerClient}</td>
+                      <td style={{ padding: '0.75rem 0.5rem 0.75rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>{associate.funnel_m1 || 0}</td>
+                      <td style={{ padding: '0.75rem 0.5rem 0.75rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>{associate.funnel_m2 || 0}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>{associate.funnel_m3 || 0}</td>
+                      <td style={{ padding: '0.75rem 0.5rem 0.75rem 0', textAlign: 'center', color: 'var(--primary)', fontWeight: '600' }}>{funnelM2Expected || 0}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', textAlign: 'center', color: 'var(--primary)', fontWeight: '600' }}>{funnelM3Expected || 0}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{expectedTotalLinks}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>{associate.completed_tasks || 0}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--success)', whiteSpace: 'nowrap' }}>{associate.lifetime_completed_links || 0}</td>

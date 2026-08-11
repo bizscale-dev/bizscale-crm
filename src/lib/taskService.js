@@ -2,6 +2,47 @@ import moment from 'moment';
 import { getDb } from './db';
 import { LINK_TYPES } from './services';
 import { getOffDaysSet, getWorkingDays } from './offDays';
+import { FUNNEL_BONUS_FIELDS } from './funnelConstants';
+
+// Rotation formula: 16 total days ÷ 5 rotation groups = 3.2 times per month per
+// client — converts a set of MONTHLY per-link-type targets into DAILY targets,
+// flooring each one and then handing any remainder (from the floor rounding) to
+// the highest-value link types first. Shared by both the normal campaign targets
+// and a funnel Month 2/3 client's own (smaller, bonus-field-sourced) targets, so
+// both follow the identical distribution shape.
+function computeDailyLinkTargets(monthlyTargets) {
+  const dailyLinkTargets = {};
+  let totalDailyTarget = 0;
+
+  for (const [linkType, monthlyTarget] of Object.entries(monthlyTargets)) {
+    const dailyValue = monthlyTarget / 3.2;
+    dailyLinkTargets[linkType] = Math.floor(dailyValue);
+    totalDailyTarget += dailyLinkTargets[linkType];
+  }
+
+  const totalMonthlyTarget = Object.values(monthlyTargets).reduce((a, b) => a + b, 0);
+  const rotationDivisor = 3.2;
+  const expectedDailyPerClient = Math.floor(totalMonthlyTarget / rotationDivisor);
+
+  if (totalDailyTarget < expectedDailyPerClient) {
+    const remaining = expectedDailyPerClient - totalDailyTarget;
+    const priorityOrder = ['profile', 'citation', 'image', 'pdf', 'guestpost', 'web2'];
+    for (let i = 0; i < remaining && i < priorityOrder.length; i++) {
+      dailyLinkTargets[priorityOrder[i]]++;
+    }
+  }
+
+  return dailyLinkTargets;
+}
+
+// A funnel client in Month 2 or 3 is tracked through this same seo_tasks pipeline
+// (day-distributed, Google Sheet-synced) rather than the separate Month 1
+// tunnel_tasks checklist — but their target for each link type is ONLY the
+// Month 2 & 3 Bonus Link Targets configured on the campaign (Admin → Funnel),
+// not the normal campaign target plus the bonus.
+function isFunnelBonusMonthClient(client) {
+  return client.tunnel_status === 'active' && (client.funnel_month === 2 || client.funnel_month === 3);
+}
 
 export async function generateSEOTasks(campaignId) {
   const db = await getDb();
@@ -18,9 +59,13 @@ export async function generateSEOTasks(campaignId) {
 
   if (associates.length === 0) throw new Error('No SEO associates assigned to this campaign');
 
+  // Funnel Month 1 clients (fixed platform checklist, tracked separately in
+  // tunnel_tasks) are excluded, but Month 2/3 clients ARE included here — they get
+  // real day-distributed, sheet-synced tasks like any other client, just at their
+  // own (smaller, bonus-field-sourced) target instead of the campaign's normal one.
   const clients = await db.prepare(`
     SELECT * FROM clients WHERE campaign_id = ? AND is_active = 1
-      AND (tunnel_status IS NULL OR tunnel_status != 'active')
+      AND (tunnel_status IS NULL OR tunnel_status != 'active' OR funnel_month IN (2, 3))
     ORDER BY sort_order, id
   `).all(campaignId);
 
@@ -66,47 +111,16 @@ export async function generateSEOTasks(campaignId) {
 
   const allTasks = [];
 
-  // Calculate total monthly target (50 per client per month)
-  const totalMonthlyTarget = Object.values(monthlyLinkTargets).reduce((a, b) => a + b, 0);
-  
-  // Calculate daily targets per link type:
-  // Based on campaign settings:
-  // - Monthly targets are READ FROM CAMPAIGN DB (web2_target, guestpost_target, etc.)
-  // - Not hardcoded, they're fully dynamic based on campaign configuration
-  // 
-  // Rotation formula: 16 total days ÷ 5 rotation groups = 3.2 times per month per client
-  // Daily target per client when working = 50 / 3.2 ≈ 15.625 links
-  //
-  // For each link type on a working day:
-  // daily = (monthly_target from DB / 50) × 15.625
-  // = (monthly_target from DB / 50) × (50 / 3.2)
-  // = monthly_target from DB / 3.2
-  
-  const dailyLinkTargets = {};
-  let totalDailyTarget = 0;
-  
-  // Calculate daily value for each link type based on its monthly target from campaign DB
-  for (const [linkType, monthlyTarget] of Object.entries(monthlyLinkTargets)) {
-    // Divide by 3.2 to get daily target (fully calculated, not hardcoded values)
-    const dailyValue = monthlyTarget / 3.2;
-    // Use Math.floor to avoid over-counting
-    dailyLinkTargets[linkType] = Math.floor(dailyValue);
-    totalDailyTarget += dailyLinkTargets[linkType];
-  }
-  
-  // Distribute any remaining links due to floor() rounding
-  // Each client should work ~15.625 links per day, so total should be 15 (with ~0.625 rounding)
-  const rotationDivisor = 3.2; // 16 days / 5 groups
-  const linksPerClientPerMonth = totalMonthlyTarget; // 50 per client
-  const expectedDailyPerClient = Math.floor(linksPerClientPerMonth / rotationDivisor); // 15
-  
-  if (totalDailyTarget < expectedDailyPerClient) {
-    const remaining = expectedDailyPerClient - totalDailyTarget;
-    // Add remaining to the highest-value targets (profile, citation, image)
-    const priorityOrder = ['profile', 'citation', 'image', 'pdf', 'guestpost', 'web2'];
-    for (let i = 0; i < remaining && i < priorityOrder.length; i++) {
-      dailyLinkTargets[priorityOrder[i]]++;
-    }
+  // Daily targets for normal clients, from the campaign's monthly link-type targets.
+  const dailyLinkTargets = computeDailyLinkTargets(monthlyLinkTargets);
+
+  // Monthly targets for funnel Month 2/3 clients, from the campaign's Month 2 & 3
+  // Bonus Link Targets (Admin → Funnel) instead — this is their WHOLE target for
+  // that month, not the normal target plus the bonus. Split exactly across their
+  // occurrences below (not approximated via computeDailyLinkTargets).
+  const funnelMonthlyLinkTargets = {};
+  for (const linkType of LINK_TYPES) {
+    funnelMonthlyLinkTargets[linkType] = campaign[FUNNEL_BONUS_FIELDS[linkType]] || 0;
   }
 
   // Get all clients with their assigned associates
@@ -115,7 +129,7 @@ export async function generateSEOTasks(campaignId) {
     FROM clients c
     LEFT JOIN users u ON u.id = c.assigned_associate_id
     WHERE c.campaign_id = ? AND c.is_active = 1
-      AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')
+      AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active' OR c.funnel_month IN (2, 3))
     ORDER BY c.sort_order
   `).all(campaignId);
 
@@ -136,7 +150,12 @@ export async function generateSEOTasks(campaignId) {
 
     if (assignedClients.length === 0) continue;
 
-    // For each working day in the campaign
+    // First pass: work out exactly which days each client appears on (their
+    // rotation slot recurs every 5 working days — see below), before generating
+    // any rows. Needed so a funnel bonus-month client's EXACT monthly target can
+    // be split across their real occurrence count, rather than approximated by
+    // a shared daily rate.
+    const clientOccurrenceDays = new Map();
     for (const { dayNumber: currentWorkday, dateStr: taskDateStr } of workingDays) {
       // Determine which 4 clients work on this day using rotation
       // Days 1,6,11: clients 0-3
@@ -145,29 +164,70 @@ export async function generateSEOTasks(campaignId) {
       // Days 4,9,14: clients 12-15
       // Days 5,10,15: clients 16-19
       // Day 16: remaining clients
-      
       const dayInWeek = ((currentWorkday - 1) % 5); // 0-4 for which rotation
       const startClientIdx = dayInWeek * 4;
       const endClientIdx = Math.min(startClientIdx + 4, assignedClients.length);
-      
       const dayClientsToProcess = assignedClients.slice(startClientIdx, endClientIdx);
 
-      // Create tasks for these clients on this day using consistent daily distribution
       for (const client of dayClientsToProcess) {
-        // Each link type gets its daily target for this client on this day
-        for (const [linkType, dailyTarget] of Object.entries(dailyLinkTargets)) {
-          if (dailyTarget > 0) {
-            const priorKey = `${client.id}|${currentWorkday}|${linkType}`;
+        if (!clientOccurrenceDays.has(client.id)) clientOccurrenceDays.set(client.id, []);
+        clientOccurrenceDays.get(client.id).push({ dayNumber: currentWorkday, dateStr: taskDateStr });
+      }
+    }
+
+    // Second pass: generate each client's rows across their own occurrence days.
+    for (const client of assignedClients) {
+      const occurrences = clientOccurrenceDays.get(client.id);
+      if (!occurrences || occurrences.length === 0) continue;
+
+      if (isFunnelBonusMonthClient(client)) {
+        // Exact distribution: split each link type's WHOLE monthly bonus target
+        // across this client's occurrences, front-loaded remainder (same
+        // convention used elsewhere in the app for exact monthly splits), so the
+        // full defined number is always delivered by month's end instead of an
+        // approximated daily rate.
+        for (const linkType of LINK_TYPES) {
+          const monthlyTarget = funnelMonthlyLinkTargets[linkType];
+          if (monthlyTarget <= 0) continue;
+
+          const base = Math.floor(monthlyTarget / occurrences.length);
+          const remainder = monthlyTarget % occurrences.length;
+
+          occurrences.forEach(({ dayNumber, dateStr }, i) => {
+            const chunkSize = base + (i < remainder ? 1 : 0);
+            if (chunkSize <= 0) return;
+
+            const priorKey = `${client.id}|${dayNumber}|${linkType}`;
             allTasks.push({
               campaign_id: campaignId,
               associate_id: associate.user_id,
               client_id: client.id,
-              day_number: currentWorkday,
-              task_date: taskDateStr,
+              day_number: dayNumber,
+              task_date: dateStr,
               link_type: linkType,
-              target_count: dailyTarget,
+              target_count: chunkSize,
               completed_count: priorCompleted.get(priorKey) || 0
             });
+          });
+        }
+      } else {
+        // Normal clients: existing shared daily-rate approach, applied on each
+        // of their occurrence days.
+        for (const { dayNumber, dateStr } of occurrences) {
+          for (const [linkType, dailyTarget] of Object.entries(dailyLinkTargets)) {
+            if (dailyTarget > 0) {
+              const priorKey = `${client.id}|${dayNumber}|${linkType}`;
+              allTasks.push({
+                campaign_id: campaignId,
+                associate_id: associate.user_id,
+                client_id: client.id,
+                day_number: dayNumber,
+                task_date: dateStr,
+                link_type: linkType,
+                target_count: dailyTarget,
+                completed_count: priorCompleted.get(priorKey) || 0
+              });
+            }
           }
         }
       }
