@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/daily-sync",
-      "schedule": "30 18 * * *"
+      "schedule": "50 18 * * *"
     },
     {
       "path": "/api/sync-completed-links",
@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/sync-completed-links",
-      "schedule": "32 18 * * *"
+      "schedule": "52 18 * * *"
     },
     {
       "path": "/api/sync-webseo-completed-links",
@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/sync-webseo-completed-links",
-      "schedule": "34 18 * * *"
+      "schedule": "54 18 * * *"
     },
     {
       "path": "/api/cron/sync-web-clients",
@@ -30,7 +30,7 @@
     },
     {
       "path": "/api/cron/sync-web-clients",
-      "schedule": "36 18 * * *"
+      "schedule": "56 18 * * *"
     },
     {
       "path": "/api/cron/sync-writer-offpage",
@@ -38,7 +38,7 @@
     },
     {
       "path": "/api/cron/sync-writer-offpage",
-      "schedule": "38 18 * * *"
+      "schedule": "58 18 * * *"
     },
     {
       "path": "/api/cron/capture-daily-activity",

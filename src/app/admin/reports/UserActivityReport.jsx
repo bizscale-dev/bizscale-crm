@@ -237,10 +237,10 @@ export default function UserActivityReport({ users }) {
             {report.totalLogs > 0 && <div>{report.totalLogs} logged item(s)</div>}
           </div>
 
-          {report.sections.every(sec => sec.completedRows.length === 0 && sec.pendingRows.length === 0) ? (
-            <p style={{ color: 'var(--text-muted)' }}>No work completed by {report.user.name} on {report.date}.</p>
+          {report.sections.every(sec => sec.completedRows.length === 0 && sec.pendingRows.length === 0 && sec.unverifiedRows.length === 0) ? (
+            <p style={{ color: 'var(--text-muted)' }}>No work recorded for {report.user.name} on {report.date}.</p>
           ) : (
-            report.sections.map(sec => (sec.completedRows.length === 0 && sec.pendingRows.length === 0) ? null : (
+            report.sections.map(sec => (sec.completedRows.length === 0 && sec.pendingRows.length === 0 && sec.unverifiedRows.length === 0) ? null : (
               <div key={sec.title}>
                 <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>{sec.title}</h3>
 
@@ -251,6 +251,15 @@ export default function UserActivityReport({ users }) {
                 {sec.pendingRows.length > 0 && (
                   <div style={{ marginTop: sec.completedRows.length > 0 ? '1rem' : 0 }}>
                     <RowsTable heading="Assigned but not completed" rows={sec.pendingRows} accentColor="#f59e0b" />
+                  </div>
+                )}
+
+                {sec.unverifiedRows.length > 0 && (
+                  <div style={{ marginTop: (sec.completedRows.length > 0 || sec.pendingRows.length > 0) ? '1.25rem' : 0 }}>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.4rem 0' }}>
+                      These clients/tasks were tracked for the first time on this day, so there&apos;s no earlier day to confirm the numbers are same-day work rather than progress from before tracking started. Shown for verification only — not counted in the total above.
+                    </p>
+                    <RowsTable heading="First Day — Unverified" rows={sec.unverifiedRows} accentColor="#94a3b8" />
                   </div>
                 )}
 

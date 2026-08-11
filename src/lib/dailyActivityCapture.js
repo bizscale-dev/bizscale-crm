@@ -19,7 +19,9 @@ const POST_TYPE_LABELS = {
  * it's the very first time that item was ever scheduled (e.g. a client's first
  * day under a brand new writer campaign), and the sheet's cumulative total
  * (which may reflect work finished well before tracking started) would get
- * misread as same-day work. Those get captured as not-completed instead.
+ * misread as same-day work. Those are still captured with their real numbers —
+ * so the sync itself can be verified — but flagged is_verified=0 and kept out
+ * of the trustworthy "Completed" total the report leads with.
  *
  * Writer rows are also scoped to the currently active writer_campaign_id —
  * writer_offpage_tasks still has leftover rows from before the Writer Campaign
@@ -70,31 +72,31 @@ export async function captureDailyActivity(dateStr) {
     ...seoRows.map(r => ({
       user_id: r.user_id, client_name: r.client_name, task_type: '',
       label: LINK_TYPE_LABELS[r.label_key] || r.label_key,
-      target_count: r.target_count, completed_count: r.has_prior ? r.completed_count : 0,
+      target_count: r.target_count, completed_count: r.completed_count, is_verified: r.has_prior ? 1 : 0,
     })),
     ...webseoRows.map(r => ({
       user_id: r.user_id, client_name: r.client_name, task_type: '',
       label: POST_TYPE_LABELS[r.label_key] || r.label_key,
-      target_count: r.target_count, completed_count: r.has_prior ? r.completed_count : 0,
+      target_count: r.target_count, completed_count: r.completed_count, is_verified: r.has_prior ? 1 : 0,
     })),
     ...writerRows.map(r => ({
       user_id: r.user_id, client_name: r.client_name, task_type: r.task_type,
       label: r.label_key,
-      target_count: r.target_count, completed_count: r.has_prior ? r.completed_count : 0,
+      target_count: r.target_count, completed_count: r.completed_count, is_verified: r.has_prior ? 1 : 0,
     })),
   ];
 
   if (entries.length === 0) return 0;
 
   const sql = `
-    INSERT INTO daily_activity_log (user_id, client_name, task_type, label, work_date, target_count, completed_count)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO daily_activity_log (user_id, client_name, task_type, label, work_date, target_count, completed_count, is_verified)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, client_name, task_type, label, work_date)
-    DO UPDATE SET target_count = excluded.target_count, completed_count = excluded.completed_count, captured_at = CURRENT_TIMESTAMP
+    DO UPDATE SET target_count = excluded.target_count, completed_count = excluded.completed_count, is_verified = excluded.is_verified, captured_at = CURRENT_TIMESTAMP
   `;
   await db.batch(entries.map(e => ({
     sql,
-    args: [e.user_id, e.client_name, e.task_type, e.label, dateStr, e.target_count, e.completed_count],
+    args: [e.user_id, e.client_name, e.task_type, e.label, dateStr, e.target_count, e.completed_count, e.is_verified],
   })));
 
   return entries.length;

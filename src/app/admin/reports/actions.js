@@ -28,13 +28,13 @@ export async function getUserActivityReport(userId, date) {
   }
 
   const rows = await db.prepare(`
-    SELECT client_name, task_type, label, target_count, completed_count
+    SELECT client_name, task_type, label, target_count, completed_count, is_verified
     FROM daily_activity_log
     WHERE user_id = ? AND work_date = ?
     ORDER BY client_name, label
   `).all(userId, date);
 
-  const toRow = r => ({ client_name: r.client_name, label: r.label, target_count: r.target_count, completed_count: r.completed_count });
+  const toRow = r => ({ client_name: r.client_name, label: r.label, target_count: r.target_count, completed_count: r.completed_count, is_verified: !!r.is_verified });
 
   let sections;
   if (user.role === 'writer') {
@@ -69,17 +69,23 @@ export async function getUserActivityReport(userId, date) {
     return { error: 'This user\'s role has no trackable daily work' };
   }
 
-  // Total target reflects everything actually assigned that day (completed +
-  // still-pending), not just the target of rows that happened to have progress.
-  const totalTarget = sections.reduce((s, sec) => s + sec.rows.reduce((s2, r) => s2 + r.target_count, 0), 0);
-  const totalCompleted = sections.reduce((s, sec) => s + sec.rows.reduce((s2, r) => s2 + r.completed_count, 0), 0);
+  // Totals only reflect verified rows — a row where this is the first day that
+  // client/task was ever tracked (no earlier day to diff the sheet against) isn't
+  // trustworthy as "done today" and shouldn't inflate the headline number.
+  const totalTarget = sections.reduce((s, sec) => s + sec.rows.filter(r => r.is_verified).reduce((s2, r) => s2 + r.target_count, 0), 0);
+  const totalCompleted = sections.reduce((s, sec) => s + sec.rows.filter(r => r.is_verified).reduce((s2, r) => s2 + r.completed_count, 0), 0);
 
   // Split each section's assigned rows into what was actually completed that
   // day vs. what was assigned but left incomplete (a partially-done row, e.g.
   // 2/5, shows up in both — some work happened, but it's not fully done either).
+  // Unverified (first-tracked-day) rows are shown separately with their real
+  // numbers so the sync itself can be confirmed working, without being counted
+  // as trustworthy same-day progress.
   for (const sec of sections) {
-    sec.completedRows = sec.rows.filter(r => r.completed_count > 0);
-    sec.pendingRows = sec.rows.filter(r => r.completed_count < r.target_count);
+    const verified = sec.rows.filter(r => r.is_verified);
+    sec.completedRows = verified.filter(r => r.completed_count > 0);
+    sec.pendingRows = verified.filter(r => r.completed_count < r.target_count);
+    sec.unverifiedRows = sec.rows.filter(r => !r.is_verified);
     delete sec.rows;
   }
 

@@ -119,6 +119,9 @@ async function runMigrations(raw) {
     // campaign_id column on these two tables is left in place but unused going forward.
     "ALTER TABLE writer_offpage_assignments ADD COLUMN writer_campaign_id INTEGER",
     "ALTER TABLE writer_offpage_tasks ADD COLUMN writer_campaign_id INTEGER",
+    // Distinguishes a genuinely-verified daily delta from a client/task's very
+    // first-ever tracked day (no earlier day to diff against) — see daily_activity_log.
+    "ALTER TABLE daily_activity_log ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 1",
   ];
 
   for (const sql of alterStatements) {
@@ -312,6 +315,11 @@ async function runMigrations(raw) {
     // happens. task_type is '' (not NULL) for SEO/Web SEO associates so the
     // UNIQUE constraint dedupes correctly — SQLite treats NULL as never equal to
     // NULL, which would defeat ON CONFLICT for those rows.
+    // is_verified = 0 means this row is a client/task's very first-ever tracked
+    // day, with no earlier day to diff the sheet's cumulative total against — the
+    // completed_count is real (whatever the sheet showed at capture time), but may
+    // include work finished before tracking started, so it's kept separate from
+    // the trustworthy "Completed" total rather than hidden outright.
     `CREATE TABLE IF NOT EXISTS daily_activity_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -321,6 +329,7 @@ async function runMigrations(raw) {
       work_date DATE NOT NULL,
       target_count INTEGER NOT NULL DEFAULT 0,
       completed_count INTEGER NOT NULL DEFAULT 0,
+      is_verified INTEGER NOT NULL DEFAULT 1,
       captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, client_name, task_type, label, work_date)
     )`,

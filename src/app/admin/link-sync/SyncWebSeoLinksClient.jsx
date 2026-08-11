@@ -214,7 +214,7 @@ export default function SyncWebSeoLinksClient() {
           )}
 
           <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            &quot;Save as Default&quot; persists this URL for the daily 2 PM &amp; 11:30 PM (PKT) sync and future visits to this page.
+            &quot;Save as Default&quot; persists this URL for the daily 2 PM &amp; 11:50 PM (PKT) sync and future visits to this page.
           </p>
         </div>
 
