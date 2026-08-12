@@ -40,20 +40,14 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     `).get(associateId, campaign.id);
 
     // Clients currently in the Funnel, shown separately since they work a different
-    // checklist (see /admin/funnel) rather than the regular daily link rotation.
-    // Month 1 is a fixed checklist tracked in tunnel_tasks; Month 2/3 clients are
-    // tracked through seo_tasks instead (see taskService.js's generateSEOTasks),
-    // and their seo_tasks rows are entirely the Month 2/3 Bonus Link Targets.
+    // schedule (see /admin/funnel) rather than the regular daily link rotation. All
+    // 3 funnel months are tracked through seo_tasks (see taskService.js's
+    // generateSEOTasks) — Month 1 on its fixed 4-week schedule, Month 2/3 on the
+    // Month 2 & 3 Bonus Link Targets.
     funnelClients = await db.prepare(`
       SELECT c.id, c.name, c.website, c.funnel_month, c.tunnel_start_date,
-        CASE WHEN c.funnel_month = 1
-          THEN (SELECT COUNT(*) FROM tunnel_tasks WHERE client_id = c.id AND funnel_month = 1 AND status = 'completed')
-          ELSE (SELECT COALESCE(SUM(completed_count), 0) FROM seo_tasks WHERE client_id = c.id AND campaign_id = c.campaign_id)
-        END as completed_tasks,
-        CASE WHEN c.funnel_month = 1
-          THEN (SELECT COUNT(*) FROM tunnel_tasks WHERE client_id = c.id AND funnel_month = 1)
-          ELSE (SELECT COALESCE(SUM(target_count), 0) FROM seo_tasks WHERE client_id = c.id AND campaign_id = c.campaign_id)
-        END as total_tasks
+        (SELECT COALESCE(SUM(completed_count), 0) FROM seo_tasks WHERE client_id = c.id AND campaign_id = c.campaign_id) as completed_tasks,
+        (SELECT COALESCE(SUM(target_count), 0) FROM seo_tasks WHERE client_id = c.id AND campaign_id = c.campaign_id) as total_tasks
       FROM clients c
       WHERE c.assigned_associate_id = ? AND c.campaign_id = ? AND c.tunnel_status = 'active' AND c.is_active = 1
       ORDER BY c.tunnel_start_date DESC

@@ -8,33 +8,46 @@ function todayStr() {
 }
 
 /**
- * Seed the campaign's Month 1 template library (tunnel_templates, week_number = 0)
- * from the hardcoded FUNNEL_MONTH1_ITEMS list, if it hasn't been seeded yet.
+ * Seed the campaign's Month 1 reference template library (tunnel_templates,
+ * week_number 1-4) from the hardcoded FUNNEL_MONTH1_ITEMS list, if it hasn't been
+ * seeded yet. Also clears out any leftover flat (week_number = 0) rows from the old
+ * pre-week-scheduled format, since those would otherwise sit orphaned alongside the
+ * new ones.
  */
 export async function seedMonth1TemplatesIfMissing(campaignId) {
   const db = await getDb();
 
   const existing = await db.prepare(
-    'SELECT COUNT(*) as c FROM tunnel_templates WHERE campaign_id = ? AND week_number = 0'
+    'SELECT COUNT(*) as c FROM tunnel_templates WHERE campaign_id = ? AND week_number IN (1, 2, 3, 4)'
   ).get(campaignId);
 
   if (existing.c > 0) return 0;
 
+  await db.prepare('DELETE FROM tunnel_templates WHERE campaign_id = ? AND week_number = 0').run(campaignId);
+
   const insertSql = `
     INSERT INTO tunnel_templates (campaign_id, week_number, category, platform, url, note, order_in_week)
-    VALUES (?, 0, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
-  await db.batch(FUNNEL_MONTH1_ITEMS.map((item, idx) => ({
-    sql: insertSql,
-    args: [campaignId, item.category, item.platform, item.url, item.note, idx],
-  })));
+  const orderCounters = {};
+  await db.batch(FUNNEL_MONTH1_ITEMS.map((item) => {
+    const key = `${item.week_number}|${item.category}`;
+    orderCounters[key] = (orderCounters[key] || 0) + 1;
+    return {
+      sql: insertSql,
+      args: [campaignId, item.week_number, item.category, item.platform, item.url, item.note, orderCounters[key] - 1],
+    };
+  }));
 
   return FUNNEL_MONTH1_ITEMS.length;
 }
 
 /**
- * Enroll a client into the Funnel: sets month-1 window on the client row and
- * instantiates their month-1 checklist from the campaign's template library.
+ * Enroll a client into the Funnel: sets month-1 window on the client row, seeds the
+ * campaign's reference template library if missing, then regenerates seo_tasks so the
+ * client immediately gets real Week 1 tasks — day-distributed and Google Sheet-synced,
+ * same pipeline as every other client (see generateSEOTasks's Month 1 handling in
+ * taskService.js). No more tunnel_tasks checklist instantiation.
  */
 export async function enrollClientInFunnel(clientId, campaignId, enrollDate = todayStr()) {
   const db = await getDb();
@@ -53,23 +66,13 @@ export async function enrollClientInFunnel(clientId, campaignId, enrollDate = to
     WHERE id = ?
   `).run(enrollDate, monthEndDate, cycleIndexAtEnroll, clientId);
 
-  const templates = await db.prepare(`
-    SELECT * FROM tunnel_templates WHERE campaign_id = ? AND week_number = 0
-    ORDER BY order_in_week
-  `).all(campaignId);
+  await generateSEOTasks(campaignId);
 
-  if (templates.length > 0) {
-    const insertSql = `
-      INSERT INTO tunnel_tasks (campaign_id, client_id, week_number, funnel_month, category, platform, url, note, status)
-      VALUES (?, ?, 0, 1, ?, ?, ?, ?, 'pending')
-    `;
-    await db.batch(templates.map(t => ({
-      sql: insertSql,
-      args: [campaignId, clientId, t.category, t.platform, t.url, t.note],
-    })));
-  }
+  const { count: tasksCreated } = await db.prepare(
+    'SELECT COUNT(*) as count FROM seo_tasks WHERE campaign_id = ? AND client_id = ?'
+  ).get(campaignId, clientId);
 
-  return { monthEndDate, tasksCreated: templates.length };
+  return { monthEndDate, tasksCreated };
 }
 
 /**
@@ -236,4 +239,82 @@ export async function runFunnelProgressionForCampaign(campaignId, today = todayS
   }
 
   return result;
+}
+
+// Maps the old flat tunnel_tasks categories to the LINK_TYPES keys used by seo_tasks.
+// Guest Post has no equivalent in the new week-based Month 1 structure, so its old
+// progress isn't carried over.
+const MONTH1_CATEGORY_TO_LINK_TYPE = {
+  'Citations': 'citation',
+  'Profiles': 'profile',
+  'Web 2.0': 'web2',
+  'Image Submission': 'image',
+  'PDF Submission': 'pdf',
+};
+
+/**
+ * One-time conversion of every client currently active in Month 1 (working the old
+ * manual tunnel_tasks checklist) onto the new week-based, Google Sheet-synced
+ * seo_tasks system. Each client's already-recorded manual progress (per old category)
+ * is carried over into the new rows oldest-week-first — same backfill shape as the
+ * completed-links sync — so real progress isn't lost. Old tunnel_tasks rows are left
+ * in place (just no longer read) rather than deleted.
+ */
+export async function migrateMonth1ClientsToSheetSync(campaignId) {
+  const db = await getDb();
+
+  const clients = await db.prepare(`
+    SELECT id FROM clients WHERE campaign_id = ? AND tunnel_status = 'active' AND funnel_month = 1 AND is_active = 1
+  `).all(campaignId);
+
+  if (clients.length === 0) return { migratedClients: 0 };
+
+  // Snapshot each client's old completed-by-category counts before regenerating —
+  // generateSEOTasks doesn't touch tunnel_tasks, but reading it after wouldn't be any
+  // different; snapshotting first just keeps the two steps clearly separated.
+  const carryoverByClient = new Map();
+  for (const { id: clientId } of clients) {
+    const rows = await db.prepare(`
+      SELECT category, COUNT(*) as completedCount
+      FROM tunnel_tasks
+      WHERE client_id = ? AND funnel_month = 1 AND status = 'completed'
+      GROUP BY category
+    `).all(clientId);
+
+    const carryover = {};
+    for (const row of rows) {
+      const linkType = MONTH1_CATEGORY_TO_LINK_TYPE[row.category];
+      if (linkType) carryover[linkType] = (carryover[linkType] || 0) + row.completedCount;
+    }
+    carryoverByClient.set(clientId, carryover);
+  }
+
+  await generateSEOTasks(campaignId);
+
+  let migratedClients = 0;
+  for (const { id: clientId } of clients) {
+    const carryover = carryoverByClient.get(clientId) || {};
+    if (Object.keys(carryover).length === 0) continue;
+
+    for (const [linkType, carryCount] of Object.entries(carryover)) {
+      if (carryCount <= 0) continue;
+
+      const rows = await db.prepare(`
+        SELECT id, target_count FROM seo_tasks
+        WHERE campaign_id = ? AND client_id = ? AND link_type = ?
+        ORDER BY day_number ASC
+      `).all(campaignId, clientId, linkType);
+
+      let remaining = carryCount;
+      for (const row of rows) {
+        if (remaining <= 0) break;
+        const applied = Math.min(row.target_count, remaining);
+        await db.prepare('UPDATE seo_tasks SET completed_count = ? WHERE id = ?').run(applied, row.id);
+        remaining -= applied;
+      }
+    }
+    migratedClients++;
+  }
+
+  return { migratedClients };
 }

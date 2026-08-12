@@ -4,14 +4,15 @@ import { useState } from 'react';
 import { addFunnelTemplate, deleteFunnelTemplate } from './actions';
 
 const BRAND_COLOR = '#16b293';
-const CATEGORIES = ['Citations', 'Profiles', 'Web 2.0', 'Guest Post', 'Image Submission', 'PDF Submission'];
+const CATEGORIES = ['Citations', 'Profiles', 'Web 2.0', 'Image Submission', 'PDF Submission'];
+const WEEKS = [1, 2, 3, 4];
 
 export default function FunnelTemplatesClient({ campaign, existingTemplates }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [templates, setTemplates] = useState(existingTemplates || []);
-  const [newPlatform, setNewPlatform] = useState({ category: 'Citations', platform: '', url: '', note: '' });
+  const [newPlatform, setNewPlatform] = useState({ week_number: 1, category: 'Citations', platform: '', url: '', note: '' });
 
   const handleAddPlatform = async () => {
     if (!newPlatform.platform) {
@@ -22,7 +23,7 @@ export default function FunnelTemplatesClient({ campaign, existingTemplates }) {
     setLoading(true);
     try {
       const result = await addFunnelTemplate(campaign.id, {
-        week_number: 0,
+        week_number: Number(newPlatform.week_number),
         category: newPlatform.category,
         platform: newPlatform.platform,
         url: newPlatform.url || null,
@@ -33,7 +34,7 @@ export default function FunnelTemplatesClient({ campaign, existingTemplates }) {
         setMessage({ type: 'error', text: result.error });
       } else {
         setMessage({ type: 'success', text: 'Platform added successfully' });
-        setNewPlatform({ category: 'Citations', platform: '', url: '', note: '' });
+        setNewPlatform({ week_number: 1, category: 'Citations', platform: '', url: '', note: '' });
         window.location.reload();
       }
     } catch (err) {
@@ -62,11 +63,12 @@ export default function FunnelTemplatesClient({ campaign, existingTemplates }) {
     }
   };
 
-  // Group templates by category (flat list, no week scheduling)
+  // Group templates by week, then category
   const groupedTemplates = {};
   templates.forEach(t => {
-    if (!groupedTemplates[t.category]) groupedTemplates[t.category] = [];
-    groupedTemplates[t.category].push(t);
+    if (!groupedTemplates[t.week_number]) groupedTemplates[t.week_number] = {};
+    if (!groupedTemplates[t.week_number][t.category]) groupedTemplates[t.week_number][t.category] = [];
+    groupedTemplates[t.week_number][t.category].push(t);
   });
 
   return (
@@ -109,6 +111,27 @@ export default function FunnelTemplatesClient({ campaign, existingTemplates }) {
           <h3 style={{ marginTop: 0, marginBottom: '1.5rem', color: BRAND_COLOR }}>Add New Platform</h3>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div>
+              <label style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                Week
+              </label>
+              <select
+                value={newPlatform.week_number}
+                onChange={(e) => setNewPlatform({ ...newPlatform, week_number: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  border: '1px solid var(--border)',
+                  borderRadius: '0.5rem',
+                  backgroundColor: 'var(--background)',
+                  color: 'var(--foreground)',
+                  fontSize: '0.875rem'
+                }}
+              >
+                {WEEKS.map(w => <option key={w} value={w}>Week {w}</option>)}
+              </select>
+            </div>
+
             <div>
               <label style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
                 Category
@@ -220,67 +243,83 @@ export default function FunnelTemplatesClient({ campaign, existingTemplates }) {
 
       <div className="card">
         <h3 style={{ marginTop: 0, marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-          Month 1 Checklist ({templates.length} items)
+          Month 1 Reference Platforms ({templates.length} items)
         </h3>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 0, marginBottom: '1.5rem' }}>
+          Informational only — the real per-week targets that drive the day-distributed, sheet-synced tasks are
+          fixed in code (see the week-by-week targets on a Month 1 client&apos;s detail page).
+        </p>
 
         {templates.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)' }}>No checklist items configured yet. Click &quot;Edit Checklist&quot; to add platforms.</p>
+          <p style={{ color: 'var(--text-muted)' }}>No reference platforms configured yet. Click &quot;Edit Checklist&quot; to add some.</p>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-            {CATEGORIES.map(category => {
-              const items = groupedTemplates[category] || [];
-              if (items.length === 0) return null;
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            {WEEKS.map(week => {
+              const categoriesForWeek = groupedTemplates[week] || {};
+              if (Object.keys(categoriesForWeek).length === 0) return null;
 
               return (
-                <div key={category} style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
-                  <p style={{ fontSize: '0.75rem', fontWeight: '600', color: BRAND_COLOR, textTransform: 'uppercase', margin: '0 0 0.75rem 0' }}>
-                    {category} ({items.length})
-                  </p>
-                  {items.map(item => (
-                    <div key={item.id} style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      padding: '0.5rem',
-                      backgroundColor: 'rgba(22, 178, 147, 0.05)',
-                      borderRadius: '0.25rem',
-                      marginBottom: '0.5rem',
-                      fontSize: '0.75rem'
-                    }}>
-                      <div style={{ flex: 1 }}>
-                        <strong>{item.platform}</strong>
-                        {item.url && (
-                          <div style={{ color: 'var(--primary)', fontSize: '0.7rem', marginTop: '0.2rem' }}>
-                            {item.url}
-                          </div>
-                        )}
-                        {item.note && (
-                          <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: '0.2rem' }}>
-                            {item.note}
-                          </div>
-                        )}
-                      </div>
-                      {editMode && (
-                        <button
-                          onClick={() => handleDeletePlatform(item.id)}
-                          style={{
-                            padding: '0.25rem 0.5rem',
-                            backgroundColor: '#ef4444',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '0.25rem',
-                            cursor: 'pointer',
-                            fontSize: '0.7rem',
-                            fontWeight: '600',
-                            marginLeft: '0.5rem',
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                <div key={week}>
+                  <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: BRAND_COLOR }}>Week {week}</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                    {CATEGORIES.map(category => {
+                      const items = categoriesForWeek[category] || [];
+                      if (items.length === 0) return null;
+
+                      return (
+                        <div key={category} style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
+                          <p style={{ fontSize: '0.75rem', fontWeight: '600', color: BRAND_COLOR, textTransform: 'uppercase', margin: '0 0 0.75rem 0' }}>
+                            {category} ({items.length})
+                          </p>
+                          {items.map(item => (
+                            <div key={item.id} style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'flex-start',
+                              padding: '0.5rem',
+                              backgroundColor: 'rgba(22, 178, 147, 0.05)',
+                              borderRadius: '0.25rem',
+                              marginBottom: '0.5rem',
+                              fontSize: '0.75rem'
+                            }}>
+                              <div style={{ flex: 1 }}>
+                                <strong>{item.platform}</strong>
+                                {item.url && (
+                                  <div style={{ color: 'var(--primary)', fontSize: '0.7rem', marginTop: '0.2rem' }}>
+                                    {item.url}
+                                  </div>
+                                )}
+                                {item.note && (
+                                  <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: '0.2rem' }}>
+                                    {item.note}
+                                  </div>
+                                )}
+                              </div>
+                              {editMode && (
+                                <button
+                                  onClick={() => handleDeletePlatform(item.id)}
+                                  style={{
+                                    padding: '0.25rem 0.5rem',
+                                    backgroundColor: '#ef4444',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '0.25rem',
+                                    cursor: 'pointer',
+                                    fontSize: '0.7rem',
+                                    fontWeight: '600',
+                                    marginLeft: '0.5rem',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}

@@ -2,7 +2,6 @@ import { getDb } from '@/lib/db';
 import { getActiveCampaign, LINK_TYPE_LABELS } from '@/lib/services';
 import { verifySession } from '@/lib/session';
 import Logo from '@/components/Logo';
-import FunnelChecklist from './FunnelChecklist';
 import StatCard from '@/components/ui/StatCard';
 import PageHeader from '@/components/ui/PageHeader';
 
@@ -20,28 +19,6 @@ export default async function AssociateDashboard() {
   let todayTasks = [], overallStats = null, recentLogs = [], upcomingDays = [], pendingTasks = [], weeklySummary = [];
   let totalExpectedLinks = 0;
   let dailyTarget = 0;
-  let funnelClients = [];
-
-  if (campaign) {
-    const funnelClientRows = await db.prepare(`
-      SELECT id, name, website, funnel_month
-      FROM clients
-      WHERE assigned_associate_id = ? AND campaign_id = ? AND tunnel_status = 'active' AND is_active = 1
-      ORDER BY sort_order
-    `).all(userId, campaign.id);
-
-    const funnelTasksStmt = db.prepare(`
-      SELECT id, category, platform, url, note, status
-      FROM tunnel_tasks
-      WHERE client_id = ? AND funnel_month = ?
-      ORDER BY category, id
-    `);
-
-    funnelClients = await Promise.all(funnelClientRows.map(async client => ({
-      ...client,
-      tasks: await funnelTasksStmt.all(client.id, client.funnel_month),
-    })));
-  }
 
   if (campaign) {
     // Get clients assigned to this associate
@@ -174,8 +151,6 @@ export default async function AssociateDashboard() {
         <div className="card"><p style={{ color: 'var(--danger)', margin: 0 }}>No active campaign. Please contact your admin.</p></div>
       ) : (
         <>
-          <FunnelChecklist funnelClients={funnelClients} />
-
           {/* Stats Row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
             <StatCard title="Today's Target" value={todayTarget} sub={`${todayCompleted} completed (${todayPercent}%)`} color="var(--primary)" />

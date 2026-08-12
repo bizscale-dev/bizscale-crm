@@ -2,7 +2,7 @@ import moment from 'moment';
 import { getDb } from './db';
 import { LINK_TYPES } from './services';
 import { getOffDaysSet, getWorkingDays } from './offDays';
-import { FUNNEL_BONUS_FIELDS } from './funnelConstants';
+import { FUNNEL_BONUS_FIELDS, FUNNEL_MONTH1_WEEK_TARGETS } from './funnelConstants';
 
 // Rotation formula: 16 total days ÷ 5 rotation groups = 3.2 times per month per
 // client — converts a set of MONTHLY per-link-type targets into DAILY targets,
@@ -36,12 +36,18 @@ function computeDailyLinkTargets(monthlyTargets) {
 }
 
 // A funnel client in Month 2 or 3 is tracked through this same seo_tasks pipeline
-// (day-distributed, Google Sheet-synced) rather than the separate Month 1
-// tunnel_tasks checklist — but their target for each link type is ONLY the
+// (day-distributed, Google Sheet-synced) — their target for each link type is ONLY the
 // Month 2 & 3 Bonus Link Targets configured on the campaign (Admin → Funnel),
 // not the normal campaign target plus the bonus.
 function isFunnelBonusMonthClient(client) {
   return client.tunnel_status === 'active' && (client.funnel_month === 2 || client.funnel_month === 3);
+}
+
+// A funnel client in Month 1 is tracked through this same pipeline too, but with a
+// fixed 4-week target schedule (FUNNEL_MONTH1_WEEK_TARGETS) instead of one flat
+// monthly total — see the week-grouping logic below.
+function isMonth1FunnelClient(client) {
+  return client.tunnel_status === 'active' && client.funnel_month === 1;
 }
 
 export async function generateSEOTasks(campaignId) {
@@ -59,13 +65,12 @@ export async function generateSEOTasks(campaignId) {
 
   if (associates.length === 0) throw new Error('No SEO associates assigned to this campaign');
 
-  // Funnel Month 1 clients (fixed platform checklist, tracked separately in
-  // tunnel_tasks) are excluded, but Month 2/3 clients ARE included here — they get
-  // real day-distributed, sheet-synced tasks like any other client, just at their
-  // own (smaller, bonus-field-sourced) target instead of the campaign's normal one.
+  // Every active client participates here now, including all 3 funnel months — Month
+  // 1 (fixed 4-week reference schedule), Month 2/3 (bonus-field-sourced monthly
+  // target), and normal clients (campaign's normal monthly target) all get real
+  // day-distributed, sheet-synced seo_tasks rows, just with different targets.
   const clients = await db.prepare(`
     SELECT * FROM clients WHERE campaign_id = ? AND is_active = 1
-      AND (tunnel_status IS NULL OR tunnel_status != 'active' OR funnel_month IN (2, 3))
     ORDER BY sort_order, id
   `).all(campaignId);
 
@@ -129,7 +134,6 @@ export async function generateSEOTasks(campaignId) {
     FROM clients c
     LEFT JOIN users u ON u.id = c.assigned_associate_id
     WHERE c.campaign_id = ? AND c.is_active = 1
-      AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active' OR c.funnel_month IN (2, 3))
     ORDER BY c.sort_order
   `).all(campaignId);
 
@@ -175,12 +179,90 @@ export async function generateSEOTasks(campaignId) {
       }
     }
 
+    // Month 1 funnel clients get a DEDICATED per-week occurrence schedule, computed
+    // separately from the general rotation above — that rotation recurs every 5
+    // working days across the whole campaign, which doesn't reliably guarantee an
+    // occurrence inside each of the 3 distinct week-ranges (e.g. when totalDays is an
+    // exact multiple of 5, one rotation slot's natural 3rd occurrence lands exactly
+    // on the campaign's last working day, colliding with the day reserved for week 4
+    // and leaving that client with no week-3 occurrence at all). Instead: the single
+    // LAST working day is always week 4 for every Month 1 client; the remaining
+    // working days split into 3 roughly-equal chronological chunks for weeks 1-3, and
+    // each Month 1 client is assigned one day from each chunk (spread by their
+    // position among the associate's Month 1 clients) — guaranteed coverage
+    // regardless of client count or how totalDays divides.
+    const month1ClientsForAssociate = assignedClients.filter(isMonth1FunnelClient);
+    if (month1ClientsForAssociate.length > 0 && workingDays.length > 0) {
+      const sortedWorkingDays = [...workingDays].sort((a, b) => a.dayNumber - b.dayNumber);
+      const week4WorkingDay = sortedWorkingDays[sortedWorkingDays.length - 1];
+      const remainingWorkingDays = sortedWorkingDays.slice(0, -1);
+
+      const bucketCount = 3;
+      const baseSize = Math.floor(remainingWorkingDays.length / bucketCount);
+      const remainder = remainingWorkingDays.length % bucketCount;
+      const weekBuckets = [];
+      let cursor = 0;
+      for (let w = 0; w < bucketCount; w++) {
+        const size = baseSize + (w < remainder ? 1 : 0);
+        weekBuckets.push(remainingWorkingDays.slice(cursor, cursor + size));
+        cursor += size;
+      }
+
+      month1ClientsForAssociate.forEach((client, clientIdx) => {
+        const occurrences = [];
+        weekBuckets.forEach((bucket, weekIdx) => {
+          if (bucket.length === 0) return;
+          const day = bucket[clientIdx % bucket.length];
+          occurrences.push({ dayNumber: day.dayNumber, dateStr: day.dateStr, week: weekIdx + 1 });
+        });
+        if (week4WorkingDay) {
+          occurrences.push({ dayNumber: week4WorkingDay.dayNumber, dateStr: week4WorkingDay.dateStr, week: 4 });
+        }
+        clientOccurrenceDays.set(client.id, occurrences);
+      });
+    }
+
     // Second pass: generate each client's rows across their own occurrence days.
     for (const client of assignedClients) {
       const occurrences = clientOccurrenceDays.get(client.id);
       if (!occurrences || occurrences.length === 0) continue;
 
-      if (isFunnelBonusMonthClient(client)) {
+      if (isMonth1FunnelClient(client)) {
+        const occurrencesByWeek = new Map();
+        for (const occurrence of occurrences) {
+          if (!occurrencesByWeek.has(occurrence.week)) occurrencesByWeek.set(occurrence.week, []);
+          occurrencesByWeek.get(occurrence.week).push(occurrence);
+        }
+
+        for (const [week, weekOccurrences] of occurrencesByWeek.entries()) {
+          const weekTargets = FUNNEL_MONTH1_WEEK_TARGETS[week] || {};
+
+          for (const linkType of LINK_TYPES) {
+            const weekTarget = weekTargets[linkType] || 0;
+            if (weekTarget <= 0) continue;
+
+            const base = Math.floor(weekTarget / weekOccurrences.length);
+            const remainder = weekTarget % weekOccurrences.length;
+
+            weekOccurrences.forEach(({ dayNumber, dateStr }, i) => {
+              const chunkSize = base + (i < remainder ? 1 : 0);
+              if (chunkSize <= 0) return;
+
+              const priorKey = `${client.id}|${dayNumber}|${linkType}`;
+              allTasks.push({
+                campaign_id: campaignId,
+                associate_id: associate.user_id,
+                client_id: client.id,
+                day_number: dayNumber,
+                task_date: dateStr,
+                link_type: linkType,
+                target_count: chunkSize,
+                completed_count: priorCompleted.get(priorKey) || 0
+              });
+            });
+          }
+        }
+      } else if (isFunnelBonusMonthClient(client)) {
         // Exact distribution: split each link type's WHOLE monthly bonus target
         // across this client's occurrences, front-loaded remainder (same
         // convention used elsewhere in the app for exact monthly splits), so the
