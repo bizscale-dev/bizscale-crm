@@ -16,6 +16,7 @@ const navItems = [
   { href: '/admin/web-seo-associates', label: 'Web SEO Associates' },
   { href: '/admin/writers', label: 'Writers' },
   { href: '/admin/reports', label: 'Reports' },
+  { href: '/admin/eods', label: 'EODs' },
   { href: '/admin/settings', label: 'Settings' },
 ];
 

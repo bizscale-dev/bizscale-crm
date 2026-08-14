@@ -333,6 +333,32 @@ async function runMigrations(raw) {
       captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, client_name, task_type, label, work_date)
     )`,
+    // End-of-day reports filed by Web SEO Managers (see /web-seo-manager/eod). One
+    // report per manager per day — the UNIQUE below is what makes a second submission
+    // on the same date append its entries to that day's existing report rather than
+    // create a duplicate.
+    `CREATE TABLE IF NOT EXISTS eod_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      report_date DATE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, report_date),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    // web_client_name is denormalized on purpose (same precedent as
+    // daily_activity_log.client_name above): an EOD report is a permanent historical
+    // record and must still read correctly after a web client is renamed, deactivated,
+    // or left behind in a past campaign.
+    `CREATE TABLE IF NOT EXISTS eod_report_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL,
+      web_client_id INTEGER NOT NULL,
+      web_client_name TEXT NOT NULL,
+      work_done TEXT NOT NULL,
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (report_id) REFERENCES eod_reports(id) ON DELETE CASCADE
+    )`,
   ];
 
   for (const sql of createTableStatements) {
