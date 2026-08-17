@@ -166,6 +166,11 @@ export default function EodManagerReports({ managerId, webClients, initialReport
                   {report.entries.map(entry => (
                     <div key={entry.id} style={{ padding: '0.85rem 1rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
                       <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{entry.web_client_name}</div>
+                      {entry.page_url && (
+                        <a href={entry.page_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontSize: '0.75rem', color: BRAND_COLOR, marginTop: '0.2rem', wordBreak: 'break-all', textDecoration: 'none' }}>
+                          {entry.page_url}
+                        </a>
+                      )}
                       <div style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{entry.work_done}</div>
                       {entry.description && (
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{entry.description}</div>

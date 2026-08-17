@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { submitEodReport } from './actions';
+import { submitEodReport, getWebClientPages } from './actions';
 
 const BRAND_COLOR = 'var(--primary)';
 
@@ -54,20 +54,68 @@ const secondaryButtonStyle = {
 export default function EodReportClient({ webClients, history, today, hasCampaign }) {
   const router = useRouter();
 
-  // 'select' -> pick a web client, 'details' -> fill in work done + description
+  // 'select' -> pick a web client, 'page' -> pick which page(s) on that site,
+  // 'details' -> fill in work done + description, 'saved' -> add more or submit
   const [step, setStep] = useState('select');
   const [selectedClientId, setSelectedClientId] = useState('');
+  const [pageLoading, setPageLoading] = useState(false);
+  const [pages, setPages] = useState([]);
+  const [pageFetchError, setPageFetchError] = useState(null);
+  const [allowManualPage, setAllowManualPage] = useState(false);
+  const [selectedPageUrls, setSelectedPageUrls] = useState([]);
+  const [manualPageUrls, setManualPageUrls] = useState('');
   const [workDone, setWorkDone] = useState('');
   const [description, setDescription] = useState('');
   const [staged, setStaged] = useState([]);
+  const [lastSavedCount, setLastSavedCount] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
 
   const selectedClient = webClients.find(c => String(c.id) === String(selectedClientId));
+  const manualPageList = manualPageUrls.split('\n').map(u => u.trim()).filter(Boolean);
+  const chosenPageUrls = allowManualPage
+    ? [...new Set([...selectedPageUrls, ...manualPageList])]
+    : selectedPageUrls;
 
-  const handleContinue = () => {
+  const togglePage = (url) => {
+    setSelectedPageUrls(current =>
+      current.includes(url) ? current.filter(u => u !== url) : [...current, url]
+    );
+  };
+
+  const handleContinueToPage = async () => {
     if (!selectedClientId) {
       setMessage({ type: 'error', text: 'Select a website first' });
+      return;
+    }
+    setMessage(null);
+    setPageLoading(true);
+    setPages([]);
+    setPageFetchError(null);
+    setAllowManualPage(false);
+    setSelectedPageUrls([]);
+    setManualPageUrls('');
+
+    try {
+      const result = await getWebClientPages(selectedClientId);
+      if (result.error) {
+        setPageFetchError(result.error);
+        setAllowManualPage(!!result.allowManual);
+      } else {
+        setPages(result.pages || []);
+      }
+    } catch (err) {
+      setPageFetchError(err.message);
+      setAllowManualPage(true);
+    } finally {
+      setPageLoading(false);
+      setStep('page');
+    }
+  };
+
+  const handleContinueToDetails = () => {
+    if (chosenPageUrls.length === 0) {
+      setMessage({ type: 'error', text: 'Select or enter at least one page first' });
       return;
     }
     setMessage(null);
@@ -79,16 +127,28 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
       setMessage({ type: 'error', text: 'Work done is required' });
       return;
     }
-    setStaged(current => [...current, {
-      key: `${selectedClientId}-${Date.now()}`,
-      webClientId: selectedClientId,
-      webClientName: selectedClient?.label || '',
-      workDone: workDone.trim(),
-      description: description.trim(),
-    }]);
+    const trimmedWorkDone = workDone.trim();
+    const trimmedDescription = description.trim();
+    setStaged(current => [
+      ...current,
+      ...chosenPageUrls.map((pageUrl, i) => ({
+        key: `${selectedClientId}-${Date.now()}-${i}`,
+        webClientId: selectedClientId,
+        webClientName: selectedClient?.label || '',
+        pageUrl,
+        workDone: trimmedWorkDone,
+        description: trimmedDescription,
+      })),
+    ]);
     setSelectedClientId('');
+    setPages([]);
+    setPageFetchError(null);
+    setAllowManualPage(false);
+    setSelectedPageUrls([]);
+    setManualPageUrls('');
     setWorkDone('');
     setDescription('');
+    setLastSavedCount(chosenPageUrls.length);
     setStep('saved');
     setMessage(null);
   };
@@ -113,6 +173,7 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
     try {
       const result = await submitEodReport(staged.map(e => ({
         webClientId: e.webClientId,
+        pageUrl: e.pageUrl,
         workDone: e.workDone,
         description: e.description,
       })));
@@ -187,9 +248,91 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
                   ))}
                 </select>
               </div>
-              <button type="button" onClick={handleContinue} style={primaryButtonStyle}>
-                Continue
+              <button type="button" onClick={handleContinueToPage} disabled={pageLoading} style={{ ...primaryButtonStyle, opacity: pageLoading ? 0.6 : 1, cursor: pageLoading ? 'not-allowed' : 'pointer' }}>
+                {pageLoading ? 'Loading pages...' : 'Continue'}
               </button>
+            </>
+          )}
+
+          {step === 'page' && (
+            <>
+              <h2 style={{ fontSize: '1.1rem', margin: 0, marginBottom: '0.35rem' }}>
+                {selectedClient?.label}
+              </h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, marginBottom: '1.25rem' }}>
+                Which page(s) was this work done on? Select as many as apply — the same work
+                done/description will be recorded against each one.
+              </p>
+
+              <div style={{ maxWidth: '640px', marginBottom: '1.25rem' }}>
+                {pages.length > 0 && (
+                  <div style={{ marginBottom: allowManualPage ? '1rem' : 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>Pages</label>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {selectedPageUrls.length} selected
+                      </span>
+                    </div>
+                    <div style={{
+                      maxHeight: '260px',
+                      overflowY: 'auto',
+                      border: '1px solid var(--border)',
+                      borderRadius: '0.5rem',
+                      backgroundColor: 'var(--background)',
+                    }}>
+                      {pages.map(url => (
+                        <label
+                          key={url}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.6rem',
+                            padding: '0.55rem 0.85rem',
+                            borderBottom: '1px solid var(--border)',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedPageUrls.includes(url)}
+                            onChange={() => togglePage(url)}
+                          />
+                          <span style={{ wordBreak: 'break-all' }}>{url}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {pageFetchError && pages.length === 0 && (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0 0 0.75rem 0' }}>
+                    {pageFetchError}{allowManualPage ? ' — enter the page URL(s) below instead.' : ''}
+                  </p>
+                )}
+
+                {allowManualPage && (
+                  <div>
+                    <label style={labelStyle}>Page URL(s)</label>
+                    <textarea
+                      value={manualPageUrls}
+                      onChange={(e) => setManualPageUrls(e.target.value)}
+                      placeholder={'https://example.com/some-page/\nhttps://example.com/another-page/'}
+                      style={{ ...inputStyle, minHeight: '90px', resize: 'vertical' }}
+                    />
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', margin: '0.35rem 0 0 0' }}>
+                      One page URL per line.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <button type="button" onClick={handleContinueToDetails} style={primaryButtonStyle}>Continue</button>
+                <button type="button" onClick={() => { setStep('select'); setMessage(null); }} style={secondaryButtonStyle}>
+                  Back
+                </button>
+              </div>
             </>
           )}
 
@@ -198,8 +341,21 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
               <h2 style={{ fontSize: '1.1rem', margin: 0, marginBottom: '0.35rem' }}>
                 {selectedClient?.label}
               </h2>
+              <div style={{ margin: '0 0 0.35rem 0' }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, marginBottom: '0.25rem' }}>
+                  {chosenPageUrls.length} {chosenPageUrls.length === 1 ? 'page' : 'pages'} selected:
+                </p>
+                <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                  {chosenPageUrls.map(url => (
+                    <li key={url} style={{ fontSize: '0.75rem', wordBreak: 'break-all', marginBottom: '0.15rem' }}>
+                      <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: BRAND_COLOR, textDecoration: 'none' }}>{url}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, marginBottom: '1.25rem' }}>
-                What was done for this website today?
+                What was done{chosenPageUrls.length === 1 ? ' on this page' : ' on these pages'} today?
+                {chosenPageUrls.length > 1 && ' The same work done/description will be recorded against each one.'}
               </p>
 
               <div style={{ maxWidth: '640px', display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.25rem' }}>
@@ -226,7 +382,7 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
 
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <button type="button" onClick={handleSave} style={primaryButtonStyle}>Save</button>
-                <button type="button" onClick={() => { setStep('select'); setMessage(null); }} style={secondaryButtonStyle}>
+                <button type="button" onClick={() => { setStep('page'); setMessage(null); }} style={secondaryButtonStyle}>
                   Back
                 </button>
               </div>
@@ -235,7 +391,9 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
 
           {step === 'saved' && (
             <>
-              <h2 style={{ fontSize: '1.1rem', margin: 0, marginBottom: '0.35rem' }}>Entry saved</h2>
+              <h2 style={{ fontSize: '1.1rem', margin: 0, marginBottom: '0.35rem' }}>
+                {lastSavedCount === 1 ? 'Entry saved' : `${lastSavedCount} entries saved`}
+              </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, marginBottom: '1.25rem' }}>
                 Add another website, or submit the report as it stands.
               </p>
@@ -264,6 +422,7 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
               <div key={entry.key} style={{ padding: '0.85rem 1rem', border: '1px solid var(--border)', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{entry.webClientName}</div>
+                  <div style={{ fontSize: '0.75rem', color: BRAND_COLOR, marginTop: '0.2rem', wordBreak: 'break-all' }}>{entry.pageUrl}</div>
                   <div style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{entry.workDone}</div>
                   {entry.description && (
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{entry.description}</div>
@@ -309,6 +468,11 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
                   {report.entries.map(entry => (
                     <div key={entry.id} style={{ padding: '0.75rem 1rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
                       <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{entry.web_client_name}</div>
+                      {entry.page_url && (
+                        <a href={entry.page_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontSize: '0.75rem', color: BRAND_COLOR, marginTop: '0.2rem', wordBreak: 'break-all', textDecoration: 'none' }}>
+                          {entry.page_url}
+                        </a>
+                      )}
                       <div style={{ fontSize: '0.85rem', marginTop: '0.2rem' }}>{entry.work_done}</div>
                       {entry.description && (
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{entry.description}</div>

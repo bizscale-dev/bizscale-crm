@@ -28,13 +28,16 @@ export async function getUserActivityReport(userId, date) {
   }
 
   const rows = await db.prepare(`
-    SELECT client_name, task_type, label, target_count, completed_count, is_verified
+    SELECT client_name, task_type, label, target_count, completed_count, is_verified, is_funnel
     FROM daily_activity_log
     WHERE user_id = ? AND work_date = ?
     ORDER BY client_name, label
   `).all(userId, date);
 
-  const toRow = r => ({ client_name: r.client_name, label: r.label, target_count: r.target_count, completed_count: r.completed_count, is_verified: !!r.is_verified });
+  const toRow = r => ({
+    client_name: r.client_name, label: r.label, target_count: r.target_count, completed_count: r.completed_count,
+    is_verified: !!r.is_verified, is_funnel: !!r.is_funnel,
+  });
 
   let sections;
   if (user.role === 'writer') {
@@ -69,18 +72,32 @@ export async function getUserActivityReport(userId, date) {
     return { error: 'This user\'s role has no trackable daily work' };
   }
 
-  // Totals only reflect verified rows — a row where this is the first day that
-  // client/task was ever tracked (no earlier day to diff the sheet against) isn't
-  // trustworthy as "done today" and shouldn't inflate the headline number.
-  const totalTarget = sections.reduce((s, sec) => s + sec.rows.filter(r => r.is_verified).reduce((s2, r) => s2 + r.target_count, 0), 0);
-  const totalCompleted = sections.reduce((s, sec) => s + sec.rows.filter(r => r.is_verified).reduce((s2, r) => s2 + r.completed_count, 0), 0);
+  // Total reflects every row for the day, verified or not — these are the real
+  // numbers captured from the sheet for this specific day's tasks. "Unverified"
+  // (first-ever-tracked) rows are still flagged and broken out separately below
+  // purely so a first-time sync can be visually confirmed, but they're no longer
+  // subtracted from the headline total.
+  const totalTarget = sections.reduce((s, sec) => s + sec.rows.reduce((s2, r) => s2 + r.target_count, 0), 0);
+  const totalCompleted = sections.reduce((s, sec) => s + sec.rows.reduce((s2, r) => s2 + r.completed_count, 0), 0);
+
+  // Pending = how much is still outstanding for the day — target minus completed,
+  // summed across every row (verified or not) that isn't fully done yet. Covers
+  // both untouched rows (0 completed) and partially-done ones in one shortfall figure.
+  const pendingShortfall = sections.reduce((s, sec) =>
+    s + sec.rows.filter(r => r.completed_count < r.target_count).reduce((s2, r) => s2 + (r.target_count - r.completed_count), 0)
+  , 0);
+
+  // Funnel = same day's work, but only for rows whose client was Funnel-active
+  // (Month 1/2/3) at capture time — frozen per-row via is_funnel, not re-derived
+  // from the client's current (possibly since-changed) funnel status.
+  const funnelTarget = sections.reduce((s, sec) => s + sec.rows.filter(r => r.is_funnel).reduce((s2, r) => s2 + r.target_count, 0), 0);
+  const funnelCompleted = sections.reduce((s, sec) => s + sec.rows.filter(r => r.is_funnel).reduce((s2, r) => s2 + r.completed_count, 0), 0);
 
   // Split each section's assigned rows into what was actually completed that
   // day vs. what was assigned but left incomplete (a partially-done row, e.g.
   // 2/5, shows up in both — some work happened, but it's not fully done either).
   // Unverified (first-tracked-day) rows are shown separately with their real
-  // numbers so the sync itself can be confirmed working, without being counted
-  // as trustworthy same-day progress.
+  // numbers so the sync itself can be confirmed working.
   for (const sec of sections) {
     const verified = sec.rows.filter(r => r.is_verified);
     sec.completedRows = verified.filter(r => r.completed_count > 0);
@@ -91,12 +108,34 @@ export async function getUserActivityReport(userId, date) {
 
   const totalLogs = sections.reduce((s, sec) => s + (sec.logs?.length || 0), 0);
 
+  // Pending Backlog box — old overdue work, not this day's own tasks (that's the
+  // Funnel/Regular boxes above, via pendingShortfall). Only tracked for
+  // seo_associate/web_seo_associate (see daily_pending_snapshot in db.js and the
+  // dailyActivityCapture.js doc for why writers aren't covered). No row yet (e.g.
+  // a date before this feature shipped) just means nothing to show — 0/0, not an error.
+  let pendingResolved = 0;
+  let pendingRemaining = 0;
+  if (user.role === 'seo_associate' || user.role === 'web_seo_associate') {
+    const snapshot = await db.prepare(
+      'SELECT resolved_count, remaining_count FROM daily_pending_snapshot WHERE user_id = ? AND work_date = ?'
+    ).get(userId, date);
+    if (snapshot) {
+      pendingResolved = snapshot.resolved_count;
+      pendingRemaining = snapshot.remaining_count;
+    }
+  }
+
   return {
     user: { id: user.id, name: user.name, email: user.email, role: user.role },
     date,
     sections,
     totalTarget,
     totalCompleted,
+    pendingShortfall,
+    funnelTarget,
+    funnelCompleted,
+    pendingResolved,
+    pendingRemaining,
     totalLogs,
   };
 }

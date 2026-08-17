@@ -3,6 +3,38 @@
 import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
+import { getSitePages } from '@/lib/sitemapFetch';
+
+async function requireWebSeoManager() {
+  const session = await verifySession();
+  if (!session || session.role !== 'web_seo_manager') {
+    return { error: 'Not authorized' };
+  }
+  return { session };
+}
+
+/**
+ * Fetches the page list for a web client's site, for the EOD report page-picker step.
+ * See src/lib/sitemapFetch.js for the actual fetch/extraction logic — this just adds
+ * the auth guard and resolves the client's stored website URL.
+ */
+export async function getWebClientPages(webClientId) {
+  const { error } = await requireWebSeoManager();
+  if (error) return { error };
+
+  const id = parseInt(webClientId, 10);
+  if (!id || Number.isNaN(id)) {
+    return { error: 'Invalid web client' };
+  }
+
+  const db = await getDb();
+  const client = await db.prepare('SELECT id, website FROM web_clients WHERE id = ?').get(id);
+  if (!client) {
+    return { error: 'Web client not found' };
+  }
+
+  return getSitePages(client.website);
+}
 
 /**
  * Submit an end-of-day report for the signed-in Web SEO Manager.
@@ -15,10 +47,8 @@ import { revalidatePath } from 'next/cache';
  * The report date is always today, computed server-side; the manager doesn't choose it.
  */
 export async function submitEodReport(entries) {
-  const session = await verifySession();
-  if (!session || session.role !== 'web_seo_manager') {
-    return { error: 'Not authorized' };
-  }
+  const { session, error: authError } = await requireWebSeoManager();
+  if (authError) return { error: authError };
 
   if (!Array.isArray(entries) || entries.length === 0) {
     return { error: 'Add at least one entry before submitting' };
@@ -29,11 +59,15 @@ export async function submitEodReport(entries) {
   const cleaned = [];
   for (const entry of entries) {
     const webClientId = parseInt(entry?.webClientId, 10);
+    const pageUrl = (entry?.pageUrl || '').trim();
     const workDone = (entry?.workDone || '').trim();
     const description = (entry?.description || '').trim();
 
     if (!webClientId || Number.isNaN(webClientId)) {
       return { error: 'Every entry needs a web client' };
+    }
+    if (!pageUrl) {
+      return { error: 'Every entry needs a page selected' };
     }
     if (!workDone) {
       return { error: 'Every entry needs the work done filled in' };
@@ -49,6 +83,7 @@ export async function submitEodReport(entries) {
     cleaned.push({
       webClientId,
       webClientName: client.business_name || client.name,
+      pageUrl,
       workDone,
       description: description || null,
     });
@@ -69,12 +104,12 @@ export async function submitEodReport(entries) {
   }
 
   const insertSql = `
-    INSERT INTO eod_report_entries (report_id, web_client_id, web_client_name, work_done, description)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO eod_report_entries (report_id, web_client_id, web_client_name, page_url, work_done, description)
+    VALUES (?, ?, ?, ?, ?, ?)
   `;
   await db.batch(cleaned.map(e => ({
     sql: insertSql,
-    args: [report.id, e.webClientId, e.webClientName, e.workDone, e.description],
+    args: [report.id, e.webClientId, e.webClientName, e.pageUrl, e.workDone, e.description],
   })));
 
   revalidatePath('/web-seo-manager/eod');

@@ -34,7 +34,7 @@ export default async function WebSeoManagerEodPage() {
   const history = await Promise.all(reports.map(async report => ({
     ...report,
     entries: await db.prepare(`
-      SELECT id, web_client_name, work_done, description
+      SELECT id, web_client_name, page_url, work_done, description
       FROM eod_report_entries
       WHERE report_id = ?
       ORDER BY id

@@ -131,6 +131,11 @@ export async function POST(request) {
     // for the daily rotation to eventually reach every client.
     const lifetimeTotalByAssociate = {};
 
+    // How much of this run's new progress went toward paying down an OLD overdue
+    // row (task_date < today) rather than crediting today's own row — feeds the "By
+    // Person" report's Pending Backlog box (see daily_pending_snapshot in db.js).
+    const backlogResolvedByAssociate = {};
+
     console.log(`[SYNC] Found ${databaseClients.length} active clients in database`);
 
     for (let i = 1; i < rows.length; i++) {
@@ -197,12 +202,14 @@ export async function POST(request) {
           let newProgress = Math.max(0, sheetCompletedCount - alreadyRecorded);
 
           const updates = [];
+          let backlogApplied = 0;
           for (const task of dueTasks) {
             if (newProgress <= 0) break;
             const room = Math.max(0, task.target_count - task.completed_count);
             if (room <= 0) continue;
             const applied = Math.min(room, newProgress);
             updates.push({ id: task.id, newCompleted: task.completed_count + applied });
+            if (task.task_date < today) backlogApplied += applied;
             newProgress -= applied;
           }
 
@@ -228,6 +235,11 @@ export async function POST(request) {
             syncedCount++;
           }
 
+          if (backlogApplied > 0 && client.assigned_associate_id) {
+            backlogResolvedByAssociate[client.assigned_associate_id] =
+              (backlogResolvedByAssociate[client.assigned_associate_id] || 0) + backlogApplied;
+          }
+
           if (updates.length > 0) {
             console.log(`[SYNC] Updated ${client.name} - ${linkType}: ${updates.length} row(s) (sheet: ${sheetCompletedCount}, already recorded: ${alreadyRecorded})`);
           }
@@ -248,6 +260,17 @@ export async function POST(request) {
 
     for (const [associateId, total] of Object.entries(lifetimeTotalByAssociate)) {
       await db.prepare('UPDATE users SET lifetime_completed_links = ? WHERE id = ?').run(total, associateId);
+    }
+
+    // Accumulate today's backlog resolution — this route runs twice daily (plus any
+    // manual trigger), and each run's newly-applied backlog progress should add on
+    // top of the day's earlier runs, not overwrite them.
+    for (const [associateId, resolved] of Object.entries(backlogResolvedByAssociate)) {
+      await db.prepare(`
+        INSERT INTO daily_pending_snapshot (user_id, work_date, resolved_count)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, work_date) DO UPDATE SET resolved_count = resolved_count + excluded.resolved_count
+      `).run(associateId, today, resolved);
     }
 
     console.log(`[SYNC] Complete: ${syncedCount} records synced from ${syncedClients.length} clients`);

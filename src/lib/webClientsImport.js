@@ -167,7 +167,7 @@ export async function runWebClientsImport(sheetUrl) {
   // Upserts one client from the sheet: creates it if new, reactivates it if it was
   // previously removed, and assigns/updates its associate. Shared by both column
   // pairs below since they're otherwise identical.
-  async function upsertClient(clientName, associateName, rowLabel) {
+  async function upsertClient(clientName, associateName, rowLabel, siteUrl) {
     seenClientNames.add(clientName);
     try {
       const existing = await db.prepare(`
@@ -198,6 +198,12 @@ export async function runWebClientsImport(sheetUrl) {
         }
       }
 
+      // The sheet is the source of truth for the site URL too, same as associate
+      // assignment below — always overwrite with whatever's currently in the column.
+      if (siteUrl && clientId) {
+        await db.prepare('UPDATE web_clients SET website = ? WHERE id = ?').run(siteUrl, clientId);
+      }
+
       if (associateName && clientId) {
         const associate = await db.prepare(`
           SELECT id FROM users
@@ -222,22 +228,24 @@ export async function runWebClientsImport(sheetUrl) {
     }
   }
 
-  // Pair 1: Column D (index 3) = Client Names → Column F (index 5) = Associate Names
-  // Pair 2: Column L (index 11) = Client Names → Column N (index 13) = Associate Names
+  // Pair 1: Column C (index 2) = Site URL → Column D (index 3) = Client Names → Column F (index 5) = Associate Names
+  // Pair 2: Column K (index 10) = Site URL → Column L (index 11) = Client Names → Column N (index 13) = Associate Names
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
     if (!row || row.length < 2) continue;
 
+    const site1Url = (row[2] || '').trim();
     const client1Name = (row[3] || '').trim();
     const associate1Name = (row[5] || '').trim();
     if (client1Name) {
-      await upsertClient(client1Name, associate1Name, `Row ${i + 1} (Pair 1)`);
+      await upsertClient(client1Name, associate1Name, `Row ${i + 1} (Pair 1)`, site1Url);
     }
 
+    const site2Url = (row[10] || '').trim();
     const client2Name = (row[11] || '').trim();
     const associate2Name = (row[13] || '').trim();
     if (client2Name) {
-      await upsertClient(client2Name, associate2Name, `Row ${i + 1} (Pair 2)`);
+      await upsertClient(client2Name, associate2Name, `Row ${i + 1} (Pair 2)`, site2Url);
     }
   }
 

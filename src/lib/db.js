@@ -122,6 +122,18 @@ async function runMigrations(raw) {
     // Distinguishes a genuinely-verified daily delta from a client/task's very
     // first-ever tracked day (no earlier day to diff against) — see daily_activity_log.
     "ALTER TABLE daily_activity_log ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 1",
+    // The web client's site URL, captured from the Web Clients sheet import (columns
+    // C and K, paired with the name columns D and L — see webClientsImport.js). Used
+    // to fetch that site's sitemap for the EOD Report page-picker.
+    "ALTER TABLE web_clients ADD COLUMN website TEXT",
+    // Which specific page on the site an EOD report entry's work applies to —
+    // selected from the site's sitemap, or typed manually if no sitemap is found.
+    "ALTER TABLE eod_report_entries ADD COLUMN page_url TEXT",
+    // Frozen at capture time (see dailyActivityCapture.js) — whether the client was
+    // active in the Funnel on the day this row was captured, so the "By Person"
+    // report can break out funnel work without re-deriving it from current (possibly
+    // since-changed) client state.
+    "ALTER TABLE daily_activity_log ADD COLUMN is_funnel INTEGER NOT NULL DEFAULT 0",
   ];
 
   for (const sql of alterStatements) {
@@ -358,6 +370,24 @@ async function runMigrations(raw) {
       description TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (report_id) REFERENCES eod_reports(id) ON DELETE CASCADE
+    )`,
+    // Per-user daily backlog tracking for the "By Person" report's Pending Backlog
+    // box (see src/app/admin/reports/actions.js). resolved_count is accumulated
+    // across the day's sync runs (see sync-completed-links/sync-webseo-completed-links)
+    // — how much old overdue work got paid down that specific day. remaining_count
+    // is overwritten once nightly by the capture cron (dailyActivityCapture.js) — a
+    // frozen point-in-time snapshot of how much backlog was still outstanding as of
+    // that day's capture, so past report dates show an honest historical number
+    // instead of "right now".
+    `CREATE TABLE IF NOT EXISTS daily_pending_snapshot (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      work_date DATE NOT NULL,
+      resolved_count INTEGER NOT NULL DEFAULT 0,
+      remaining_count INTEGER NOT NULL DEFAULT 0,
+      captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, work_date),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
   ];
 

@@ -232,11 +232,13 @@ export default function UserActivityReport({ users }) {
 
       {!loading && report && !report.notFinalized && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
+          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', alignItems: 'center', fontSize: '0.875rem' }}>
             <div><strong>{report.user.name}</strong> ({report.user.email})</div>
-            <div>Total: <strong style={{ color: 'var(--primary)' }}>{report.totalCompleted} / {report.totalTarget}</strong></div>
+            <div>Total tasks for {report.date}: <strong style={{ color: 'var(--primary)' }}>{report.totalCompleted} / {report.totalTarget}</strong></div>
             {report.totalLogs > 0 && <div>{report.totalLogs} logged item(s)</div>}
           </div>
+
+          <SummaryBoxes report={report} />
 
           {report.sections.every(sec => sec.completedRows.length === 0 && sec.pendingRows.length === 0 && sec.unverifiedRows.length === 0) ? (
             <p style={{ color: 'var(--text-muted)' }}>No work recorded for {report.user.name} on {report.date}.</p>
@@ -258,7 +260,7 @@ export default function UserActivityReport({ users }) {
                 {sec.unverifiedRows.length > 0 && (
                   <div style={{ marginTop: (sec.completedRows.length > 0 || sec.pendingRows.length > 0) ? '1.25rem' : 0 }}>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.4rem 0' }}>
-                      These clients/tasks were tracked for the first time on this day, so there&apos;s no earlier day to confirm the numbers are same-day work rather than progress from before tracking started. Shown for verification only — not counted in the total above.
+                      These clients/tasks were tracked for the first time on this day, so there&apos;s no earlier day to confirm the numbers are same-day work rather than progress from before tracking started. Still counted in the totals above — flagged here only so a first-time sync can be double-checked.
                     </p>
                     <RowsTable heading="First Day — Unverified" rows={sec.unverifiedRows} accentColor="#94a3b8" />
                   </div>
@@ -298,6 +300,72 @@ export default function UserActivityReport({ users }) {
             ))
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function StatBox({ title, accentColor, doneLabel, doneValue, pendingLabel, pendingValue, note }) {
+  return (
+    <div style={{ flex: '1', minWidth: '220px', padding: '1rem', borderRadius: '0.5rem', border: `1px solid ${accentColor}`, backgroundColor: `${accentColor}0d` }}>
+      <div style={{ fontSize: '0.75rem', fontWeight: '600', color: accentColor, textTransform: 'uppercase', marginBottom: '0.6rem' }}>
+        {title}
+      </div>
+      <div style={{ display: 'flex', gap: '1.5rem' }}>
+        <div>
+          <div style={{ fontSize: '1.25rem', fontWeight: '700' }}>{doneValue}</div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{doneLabel}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '1.25rem', fontWeight: '700' }}>{pendingValue}</div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{pendingLabel}</div>
+        </div>
+      </div>
+      {note && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.6rem' }}>{note}</div>}
+    </div>
+  );
+}
+
+// Three lenses on the same report date: Funnel and Regular split that day's OWN
+// tasks by whether the client was Funnel-active; Pending Backlog is a different
+// axis entirely — old overdue work from BEFORE that day, tracked separately (see
+// daily_pending_snapshot in db.js) since it can't be derived from that day's own
+// numbers. Only shown for seo_associate/web_seo_associate — writers have no
+// backlog-catchup mechanism (see dailyActivityCapture.js).
+function SummaryBoxes({ report }) {
+  const funnelPending = report.funnelTarget - report.funnelCompleted;
+  const regularCompleted = report.totalCompleted - report.funnelCompleted;
+  const regularPending = report.pendingShortfall - funnelPending;
+  const showBacklogBox = report.user.role === 'seo_associate' || report.user.role === 'web_seo_associate';
+
+  return (
+    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+      <StatBox
+        title="Funnel"
+        accentColor="#16b293"
+        doneLabel="Completed today"
+        doneValue={report.funnelCompleted}
+        pendingLabel="Pending (not done)"
+        pendingValue={funnelPending}
+      />
+      <StatBox
+        title="Regular"
+        accentColor="var(--primary)"
+        doneLabel="Completed today"
+        doneValue={regularCompleted}
+        pendingLabel="Pending (not done)"
+        pendingValue={regularPending}
+      />
+      {showBacklogBox && (
+        <StatBox
+          title="Pending Backlog"
+          accentColor="#f59e0b"
+          doneLabel="Resolved today"
+          doneValue={report.pendingResolved}
+          pendingLabel="Still stuck"
+          pendingValue={report.pendingRemaining}
+          note="Old overdue work from before this day — resolved today vs. still outstanding as of this day's capture."
+        />
       )}
     </div>
   );

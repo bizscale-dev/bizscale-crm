@@ -41,7 +41,7 @@ export async function getManagerEodReports(userId, filters = {}) {
 
   const rows = await db.prepare(`
     SELECT r.id as report_id, r.report_date, r.created_at,
-      e.id as entry_id, e.web_client_id, e.web_client_name, e.work_done, e.description
+      e.id as entry_id, e.web_client_id, e.web_client_name, e.page_url, e.work_done, e.description
     FROM eod_reports r
     JOIN eod_report_entries e ON e.report_id = r.id
     WHERE ${conditions.join(' AND ')}
@@ -63,6 +63,7 @@ export async function getManagerEodReports(userId, filters = {}) {
       id: row.entry_id,
       web_client_id: row.web_client_id,
       web_client_name: row.web_client_name,
+      page_url: row.page_url,
       work_done: row.work_done,
       description: row.description,
     });
