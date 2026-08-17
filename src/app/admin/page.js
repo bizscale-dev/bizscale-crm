@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
 import { getActiveCampaign, getCampaignProgress, getLinkTargetsFromCampaign, getTotalLinksPerClient } from '@/lib/services';
+import { getAccurateSeoDailyStats } from '@/lib/dailyStats';
 import Link from 'next/link';
 import LinkTargetsManager from './LinkTargetsManager';
 import Logo from '@/components/Logo';
@@ -174,38 +175,37 @@ function ProgressRow({ name, target, completed, color }) {
 }
 
 async function WeeklySummary({ campaign, db }) {
-  const today = new Date().toISOString().split('T')[0];
-  
   // Calculate weekly data for SEO tasks
   const weeklyStats = [];
   const weeksInCampaign = Math.ceil(campaign.total_days / 5);
-  
+
+  // Per-day figures immune to backlog-catch-up creep — a past day's completed
+  // count is frozen once, so catch-up work done in a LATER week never bleeds
+  // into an earlier week's total (see src/lib/dailyStats.js for the full why).
+  const dailyStats = await getAccurateSeoDailyStats(db, { campaignId: campaign.id });
+
   for (let week = 1; week <= weeksInCampaign; week++) {
     const dayStart = (week - 1) * 5 + 1;
     const dayEnd = Math.min(week * 5, campaign.total_days);
-    
-    const seoStats = await db.prepare(`
-      SELECT 
-        SUM(target_count) as target,
-        SUM(completed_count) as completed
-      FROM seo_tasks
-      WHERE campaign_id = ? AND day_number >= ? AND day_number <= ?
-    `).get(campaign.id, dayStart, dayEnd);
-    
+
+    const weekDays = dailyStats.filter(d => d.day_number >= dayStart && d.day_number <= dayEnd);
+    const seoTarget = weekDays.reduce((s, d) => s + d.target, 0);
+    const seoCompleted = weekDays.reduce((s, d) => s + d.completed, 0);
+
     const writingStats = await db.prepare(`
-      SELECT 
+      SELECT
         SUM(target_count) as target,
         SUM(completed_count) as completed
       FROM writing_tasks
       WHERE campaign_id = ? AND day_number >= ? AND day_number <= ?
     `).get(campaign.id, dayStart, dayEnd);
-    
+
     weeklyStats.push({
       week,
       dayRange: `Day ${dayStart}-${dayEnd}`,
       seo: {
-        target: seoStats.target || 0,
-        completed: seoStats.completed || 0
+        target: seoTarget,
+        completed: seoCompleted
       },
       writing: {
         target: writingStats.target || 0,
