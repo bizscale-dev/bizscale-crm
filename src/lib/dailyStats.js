@@ -1,7 +1,8 @@
 /**
  * Accurate per-day SEO progress, immune to the "backlog catch-up creep" problem:
- * seo_tasks.completed_count on an old row keeps growing whenever the oldest-first
- * backfill sync (see sync-completed-links) pays it down later, on a different
+ * seo_tasks.completed_count on an old row keeps growing whenever the backfill
+ * sync (see sync-completed-links — fills today's own row first, then pays down
+ * old debt with whatever's left over) pays it down later, on a different
  * calendar day — so naively summing seo_tasks live for a past week silently
  * folds in catch-up work that actually happened in a later week.
  *

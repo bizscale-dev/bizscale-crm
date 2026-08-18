@@ -1,5 +1,5 @@
-import SeoAssociatesProgress from '@/components/team-progress/SeoAssociatesProgress';
+import SeoAssociatesTable from '@/components/team-progress/SeoAssociatesTable';
 
 export default function SeoManagerPage() {
-  return <SeoAssociatesProgress basePath="/seo-manager" />;
+  return <SeoAssociatesTable basePath="/seo-manager" />;
 }

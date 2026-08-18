@@ -21,9 +21,10 @@ export const maxDuration = 60;
  *
  * Same approach as /api/sync-completed-links: the sheet holds a running
  * cumulative total per client, so new progress = sheet total minus everything
- * already recorded across this client/post-type's due rows — applied to the
- * oldest still-incomplete ("Pending") row first, then today's, so a Pending
- * task actually clears once enough real work lands in the sheet.
+ * already recorded across this client/post-type's due rows — applied to
+ * today's own row first, then any leftover pays down the oldest still-
+ * incomplete ("Pending") row(s), so a Pending task can still clear once
+ * there's more than enough to cover both.
  */
 
 export async function POST(request) {
@@ -143,11 +144,11 @@ export async function POST(request) {
         clientResult[postType] = sheetCompletedCount;
 
         // Every due row for this client/post type (today and any still-overdue
-        // "Pending" ones), oldest first — new progress pays down the oldest
-        // unfinished debt before crediting today, so a Pending task actually
-        // clears once enough real work lands in the sheet (see sync-completed-links
-        // for the full rationale — the sync used to only ever touch today's row,
-        // so an overdue day could never be caught up automatically).
+        // "Pending" ones). New progress fills TODAY's own row first — so an
+        // associate's real same-day work is credited to today rather than
+        // silently vanishing into old debt — and only once today is fully
+        // covered does the leftover pay down the oldest unfinished "Pending"
+        // row(s) (see sync-completed-links for the full rationale).
         const dueTasks = await db.prepare(`
           SELECT id, task_date, target_count, completed_count
           FROM webseo_tasks
@@ -160,9 +161,14 @@ export async function POST(request) {
         const alreadyRecorded = dueTasks.reduce((sum, t) => sum + t.completed_count, 0);
         let newProgress = Math.max(0, sheetCompletedCount - alreadyRecorded);
 
+        const todayIndex = dueTasks.findIndex(t => t.task_date === today);
+        const orderedTasks = todayIndex === -1
+          ? dueTasks
+          : [dueTasks[todayIndex], ...dueTasks.slice(0, todayIndex), ...dueTasks.slice(todayIndex + 1)];
+
         const updates = [];
         let backlogApplied = 0;
-        for (const task of dueTasks) {
+        for (const task of orderedTasks) {
           if (newProgress <= 0) break;
           const room = Math.max(0, task.target_count - task.completed_count);
           if (room <= 0) continue;

@@ -185,11 +185,12 @@ export async function POST(request) {
         clientResult[linkType] = sheetCompletedCount;
 
         // Every due row for this client/link type (today and any still-overdue
-        // "Pending" ones), oldest first. New progress from the sheet pays down the
-        // oldest unfinished debt before crediting today — so a Pending task
-        // actually clears itself once enough real work lands in the sheet, instead
-        // of staying stuck forever (the sync used to only ever touch today's row,
-        // so a day that fell behind could never be caught up automatically).
+        // "Pending" ones). New progress from the sheet fills TODAY's own row
+        // first — so an associate's real same-day work is credited to today
+        // rather than silently vanishing into old debt — and only once today is
+        // fully covered does the leftover pay down the oldest unfinished
+        // "Pending" row(s), so a Pending task can still clear itself once there's
+        // more than enough to cover both.
         const dueTasks = await db.prepare(`
           SELECT id, task_date, target_count, completed_count
           FROM seo_tasks
@@ -201,9 +202,14 @@ export async function POST(request) {
           const alreadyRecorded = dueTasks.reduce((sum, t) => sum + t.completed_count, 0);
           let newProgress = Math.max(0, sheetCompletedCount - alreadyRecorded);
 
+          const todayIndex = dueTasks.findIndex(t => t.task_date === today);
+          const orderedTasks = todayIndex === -1
+            ? dueTasks
+            : [dueTasks[todayIndex], ...dueTasks.slice(0, todayIndex), ...dueTasks.slice(todayIndex + 1)];
+
           const updates = [];
           let backlogApplied = 0;
-          for (const task of dueTasks) {
+          for (const task of orderedTasks) {
             if (newProgress <= 0) break;
             const room = Math.max(0, task.target_count - task.completed_count);
             if (room <= 0) continue;
