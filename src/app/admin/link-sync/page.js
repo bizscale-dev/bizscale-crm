@@ -130,7 +130,7 @@ export default async function LinkSyncPage() {
           <div>
             <h3 style={{ margin: 0, marginBottom: '0.5rem', color: 'var(--foreground)' }}>URL Configuration</h3>
             <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
-              <li><strong>Saved URL:</strong> Click &quot;Edit&quot; above, paste the sheet URL, then &quot;Save as Default&quot; to persist it for future syncs and the daily 2 PM &amp; 11:50 PM (PKT) automation</li>
+              <li><strong>Saved URL:</strong> Click &quot;Edit&quot; above, paste the sheet URL, then &quot;Save as Default&quot; to persist it for future syncs and the daily 5 PM, 7 PM, 9 PM &amp; 11:50 PM (PKT) automation</li>
               <li><strong>Separate from client sync:</strong> This is its own setting, distinct from the Google Sheet used to sync new clients/associates/writers</li>
               <li><strong>Public Access:</strong> Sheet must be shared as &quot;Anyone with the link can view&quot;</li>
             </ul>
@@ -164,7 +164,7 @@ export default async function LinkSyncPage() {
           <div>
             <h3 style={{ margin: 0, marginBottom: '0.5rem', color: 'var(--foreground)' }}>Daily Automation</h3>
             <p style={{ margin: 0 }}>
-              System automatically syncs at 2 PM and 11:50 PM (Pakistan Time) daily using the Settings-configured URLs — this includes the main Client sheet (SEO clients added/removed, funnel progression), the regular SEO Associate completed-links sync above, the Web SEO Associate completed-links sync below, and the Web Clients sheet (Web SEO clients added/removed). Each runs a couple minutes apart to avoid overlapping. You can also manually trigger the completed-links syncs anytime using the buttons above, or the Web Clients import from Admin → Web Clients.
+              System automatically syncs at 5 PM, 7 PM, 9 PM, and 11:50 PM (Pakistan Time) daily using the Settings-configured URLs — this includes the main Client sheet (SEO clients added/removed, funnel progression), the regular SEO Associate completed-links sync above, the Web SEO Associate completed-links sync below, and the Web Clients sheet (Web SEO clients added/removed). Each runs a couple minutes apart to avoid overlapping. You can also manually trigger the completed-links syncs anytime using the buttons above, or the Web Clients import from Admin → Web Clients.
             </p>
           </div>
 

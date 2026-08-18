@@ -8,9 +8,9 @@ import { LINK_TYPE_LABELS } from '@/lib/services';
  * specific date. Used by the "By Person" report on the admin Reports page.
  *
  * Reads from daily_activity_log — a permanent snapshot frozen once per day by
- * the 12:10 AM capture cron (src/lib/dailyActivityCapture.js), not computed live
+ * the 12:25 AM capture cron (src/lib/dailyActivityCapture.js), not computed live
  * off the task tables. A day only exists here once it's been captured, so "today"
- * (not yet captured — that happens tomorrow at 12:10 AM) has nothing to show yet.
+ * (not yet captured — that happens tomorrow at 12:25 AM) has nothing to show yet.
  */
 export async function getUserActivityReport(userId, date) {
   const db = await getDb();

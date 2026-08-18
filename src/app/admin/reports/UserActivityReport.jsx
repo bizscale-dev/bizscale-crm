@@ -221,7 +221,7 @@ export default function UserActivityReport({ users }) {
       {!loading && !error && report?.notFinalized && (
         <p style={{ color: '#f59e0b' }}>
           {report.date === today
-            ? 'Today isn\'t finalized yet — it gets captured into the permanent record at 12:10 AM tonight. Check back tomorrow for today\'s numbers.'
+            ? 'Today isn\'t finalized yet — it gets captured into the permanent record at 12:25 AM tonight. Check back tomorrow for today\'s numbers.'
             : 'This date hasn\'t been finalized yet.'}
         </p>
       )}

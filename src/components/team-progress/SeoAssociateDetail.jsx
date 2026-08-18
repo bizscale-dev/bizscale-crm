@@ -3,14 +3,27 @@ import { getActiveCampaign, LINK_TYPE_LABELS } from '@/lib/services';
 import { getAccurateSeoDailyStats } from '@/lib/dailyStats';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
+import TasksClient from '@/app/associate/tasks/TasksClient';
 
 const BRAND_COLOR = '#16b293'; // Teal green
 
-export default async function SeoAssociateDetail({ id, backHref, backLabel, showFunnelLink = false }) {
+function groupByClient(tasks) {
+  const byClient = {};
+  tasks.forEach(t => {
+    if (!byClient[t.client_id]) {
+      byClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, website: t.website, tasks: [] };
+    }
+    byClient[t.client_id].tasks.push(t);
+  });
+  return Object.values(byClient);
+}
+
+export default async function SeoAssociateDetail({ id, backHref, backLabel, showFunnelLink = false, basePath, selectedDate }) {
   const db = await getDb();
   const associateId = parseInt(id, 10);
   const campaign = await getActiveCampaign();
   const today = new Date().toISOString().split('T')[0];
+  const date = selectedDate || today;
 
   // Guard by role too, not just existence — this component is reachable from
   // role-scoped manager portals, so a mismatched role (e.g. an admin's id) must
@@ -26,6 +39,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   }
 
   let todayTasks = [], overallStats = null, recentLogs = [], upcomingDays = [], dailySummary = [], pendingTasks = [], weeklySummary = [], funnelClients = [];
+  let dateTasks = [], availableDates = [];
   let totalExpectedLinks = 0;
   let dailyTarget = 0;
   let cumulativeByClientType = {};
@@ -76,6 +90,26 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
       WHERE st.associate_id = ? AND st.campaign_id = ? AND st.task_date = ? AND c.is_active = 1
       ORDER BY c.sort_order, st.link_type
     `).all(associateId, campaign.id, today);
+
+    // Single-day (not cumulative) tasks for whichever date is selected in the "My
+    // Tasks" view below — the exact same shape/query the associate sees on their own
+    // /associate/tasks page, so this shows identically for admin/seo_manager viewers.
+    dateTasks = await db.prepare(`
+      SELECT st.*, c.name as client_name, c.website,
+        (SELECT COUNT(*) FROM link_logs WHERE task_id = st.id) as log_count
+      FROM seo_tasks st
+      JOIN clients c ON c.id = st.client_id
+      WHERE st.associate_id = ? AND st.campaign_id = ? AND st.task_date = ? AND c.is_active = 1
+      ORDER BY c.sort_order, st.link_type
+    `).all(associateId, campaign.id, date);
+
+    availableDates = await db.prepare(`
+      SELECT DISTINCT st.task_date, st.day_number
+      FROM seo_tasks st
+      JOIN clients c ON c.id = st.client_id
+      WHERE st.associate_id = ? AND st.campaign_id = ? AND c.is_active = 1
+      ORDER BY st.task_date
+    `).all(associateId, campaign.id);
 
     // Cumulative target/completed per client+link_type, from campaign start through
     // today — so the numbers on each client's card grow day over day (e.g. 6/3 today,
@@ -154,30 +188,6 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     }
   }
 
-  // Group today's tasks by client. Each task's displayed target/completed is the
-  // cumulative-to-date figure (campaign start through today) rather than just today's
-  // slice, so the card grows day over day instead of showing the same number forever.
-  const tasksByClient = {};
-  todayTasks.forEach(t => {
-    if (!tasksByClient[t.client_id]) {
-      tasksByClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, website: t.website, tasks: [] };
-    }
-    const cumulative = cumulativeByClientType[t.client_id]?.[t.link_type];
-    tasksByClient[t.client_id].tasks.push({
-      ...t,
-      target_count: cumulative?.target ?? t.target_count,
-      completed_count: cumulative?.completed ?? t.completed_count,
-    });
-  });
-
-  const pendingByClient = {};
-  pendingTasks.forEach(t => {
-    if (!pendingByClient[t.client_id]) {
-      pendingByClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, tasks: [] };
-    }
-    pendingByClient[t.client_id].tasks.push(t);
-  });
-
   const todayTarget = dailyTarget;
   const todayCompleted = todayTasks.reduce((s, t) => s + t.completed_count, 0);
   const overallPercent = totalExpectedLinks > 0 ? Math.round((overallStats?.completed / totalExpectedLinks) * 100) : 0;
@@ -220,37 +230,6 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
             <StatCard title="All-Time Completed (Sheet)" value={associate.lifetime_completed_links || 0} sub="across all assigned clients, live from sheet" color="#16b293" />
             <StatCard title="Pending Tasks" value={pendingTasks.length} sub="overdue, not yet completed" color="#f59e0b" />
           </div>
-
-          {/* Pending (overdue) tasks */}
-          {Object.values(pendingByClient).length > 0 && (
-            <div className="card" style={{ border: '1px solid rgba(245, 158, 11, 0.4)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-                <h2 style={{ fontSize: '1.25rem', margin: 0, color: '#f59e0b' }}>Pending Tasks</h2>
-                <span style={{
-                  fontSize: '0.75rem', fontWeight: '600', color: '#f59e0b',
-                  backgroundColor: 'rgba(245, 158, 11, 0.12)', padding: '0.15rem 0.5rem', borderRadius: '1rem',
-                }}>
-                  {pendingTasks.length} overdue
-                </span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                {Object.values(pendingByClient).map(client => (
-                  <div key={client.client_id} style={{ padding: '1rem', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '0.5rem', backgroundColor: 'rgba(245, 158, 11, 0.03)' }}>
-                    <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600' }}>{client.client_name}</h3>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      {client.tasks.map(task => (
-                        <div key={task.id} style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--background)', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '0.5rem', fontSize: '0.875rem' }}>
-                          <span style={{ fontWeight: '500' }}>{LINK_TYPE_LABELS[task.link_type] || task.link_type}</span>
-                          <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>{task.completed_count}/{task.target_count}</span>
-                          <span style={{ marginLeft: '0.5rem', color: '#f59e0b', fontSize: '0.75rem' }}>Due {task.task_date}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Funnel Clients — separate from the regular link rotation above */}
           {funnelClients.length > 0 && (
@@ -301,41 +280,22 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
             </div>
           )}
 
-          {/* Today's Tasks by Client */}
+          {/* My Tasks — identical to what this associate sees on their own
+              /associate/tasks page, so admins/managers can view daily task
+              progress exactly the same way. */}
           <div className="card">
             <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-              Today&apos;s Tasks — {today}
+              My Tasks
             </h2>
-            {Object.values(tasksByClient).length === 0 ? (
-              <p style={{ color: 'var(--text-muted)' }}>No tasks scheduled for today.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                {Object.values(tasksByClient).map(client => (
-                  <div key={client.client_id} style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                      <div>
-                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>{client.client_name}</h3>
-                        {client.website && (
-                          <a href={client.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.875rem', color: 'var(--primary)', textDecoration: 'none' }}>
-                            {client.website}
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      {client.tasks.map(task => (
-                        <div key={task.id} style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '0.5rem', fontSize: '0.875rem' }}>
-                          <span style={{ fontWeight: '500' }}>{LINK_TYPE_LABELS[task.link_type] || task.link_type}</span>
-                          <span style={{ marginLeft: '0.5rem', color: task.completed_count >= task.target_count ? 'var(--success)' : 'var(--text-muted)' }}>
-                            {task.completed_count}/{task.target_count}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <TasksClient
+              tasksByClient={groupByClient(dateTasks)}
+              pendingByClient={groupByClient(pendingTasks)}
+              availableDates={availableDates}
+              selectedDate={date}
+              today={today}
+              linkTypeLabels={LINK_TYPE_LABELS}
+              basePath={basePath}
+            />
           </div>
 
           {/* Weekly Summary & Goals */}

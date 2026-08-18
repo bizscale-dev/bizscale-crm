@@ -12,7 +12,7 @@ export const maxDuration = 60;
  * from, instead of recalculating live off the task tables every time (which was
  * prone to a day's number silently drifting later as unrelated syncs ran).
  *
- * Scheduled for 12:10 AM local team time (see vercel.json) — by then the day's
+ * Scheduled for 12:25 AM local team time (see vercel.json) — by then the day's
  * final evening sync has already landed, and the server's current UTC calendar
  * date is still the day that just closed out locally, so we capture "today"
  * (not "yesterday") from the server's own clock.

@@ -3,11 +3,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function TasksClient({ tasksByClient, pendingByClient = [], availableDates, selectedDate, today, linkTypeLabels }) {
+export default function TasksClient({ tasksByClient, pendingByClient = [], availableDates, selectedDate, today, linkTypeLabels, basePath = '/associate/tasks' }) {
   const router = useRouter();
 
   const handleDateChange = (e) => {
-    router.push(`/associate/tasks?date=${e.target.value}`);
+    router.push(`${basePath}?date=${e.target.value}`);
   };
 
   return (

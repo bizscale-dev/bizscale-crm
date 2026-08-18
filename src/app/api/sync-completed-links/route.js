@@ -268,7 +268,7 @@ export async function POST(request) {
       await db.prepare('UPDATE users SET lifetime_completed_links = ? WHERE id = ?').run(total, associateId);
     }
 
-    // Accumulate today's backlog resolution — this route runs twice daily (plus any
+    // Accumulate today's backlog resolution — this route runs 4x daily (plus any
     // manual trigger), and each run's newly-applied backlog progress should add on
     // top of the day's earlier runs, not overwrite them.
     for (const [associateId, resolved] of Object.entries(backlogResolvedByAssociate)) {

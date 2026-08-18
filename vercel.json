@@ -2,7 +2,63 @@
   "crons": [
     {
       "path": "/api/cron/daily-sync",
-      "schedule": "0 9 * * *"
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/sync-completed-links",
+      "schedule": "2 12 * * *"
+    },
+    {
+      "path": "/api/sync-webseo-completed-links",
+      "schedule": "4 12 * * *"
+    },
+    {
+      "path": "/api/cron/sync-web-clients",
+      "schedule": "6 12 * * *"
+    },
+    {
+      "path": "/api/cron/sync-writer-offpage",
+      "schedule": "8 12 * * *"
+    },
+    {
+      "path": "/api/cron/daily-sync",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/sync-completed-links",
+      "schedule": "2 14 * * *"
+    },
+    {
+      "path": "/api/sync-webseo-completed-links",
+      "schedule": "4 14 * * *"
+    },
+    {
+      "path": "/api/cron/sync-web-clients",
+      "schedule": "6 14 * * *"
+    },
+    {
+      "path": "/api/cron/sync-writer-offpage",
+      "schedule": "8 14 * * *"
+    },
+    {
+      "path": "/api/cron/daily-sync",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/sync-completed-links",
+      "schedule": "2 16 * * *"
+    },
+    {
+      "path": "/api/sync-webseo-completed-links",
+      "schedule": "4 16 * * *"
+    },
+    {
+      "path": "/api/cron/sync-web-clients",
+      "schedule": "6 16 * * *"
+    },
+    {
+      "path": "/api/cron/sync-writer-offpage",
+      "schedule": "8 16 * * *"
     },
     {
       "path": "/api/cron/daily-sync",
@@ -10,15 +66,7 @@
     },
     {
       "path": "/api/sync-completed-links",
-      "schedule": "2 9 * * *"
-    },
-    {
-      "path": "/api/sync-completed-links",
       "schedule": "52 18 * * *"
-    },
-    {
-      "path": "/api/sync-webseo-completed-links",
-      "schedule": "4 9 * * *"
     },
     {
       "path": "/api/sync-webseo-completed-links",
@@ -26,15 +74,7 @@
     },
     {
       "path": "/api/cron/sync-web-clients",
-      "schedule": "6 9 * * *"
-    },
-    {
-      "path": "/api/cron/sync-web-clients",
       "schedule": "56 18 * * *"
-    },
-    {
-      "path": "/api/cron/sync-writer-offpage",
-      "schedule": "8 9 * * *"
     },
     {
       "path": "/api/cron/sync-writer-offpage",
@@ -42,7 +82,7 @@
     },
     {
       "path": "/api/cron/capture-daily-activity",
-      "schedule": "10 19 * * *"
+      "schedule": "25 19 * * *"
     }
   ]
 }
