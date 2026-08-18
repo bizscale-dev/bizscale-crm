@@ -213,8 +213,26 @@ async function WeeklySummary({ campaign, db }) {
       }
     });
   }
-  
+
+  // Campaign-wide daily view — same accurate per-day figures as the weekly table
+  // above, just grouped by date across every associate instead of by week, so the
+  // whole team's day-by-day history (not just this week's rotation) is visible
+  // from the main dashboard too.
+  const dailyByDate = new Map();
+  for (const d of dailyStats) {
+    if (!dailyByDate.has(d.task_date)) {
+      dailyByDate.set(d.task_date, { task_date: d.task_date, day_number: d.day_number, target: 0, completed: 0, clients: 0 });
+    }
+    const entry = dailyByDate.get(d.task_date);
+    entry.target += d.target;
+    entry.completed += d.completed;
+    entry.clients += d.clients;
+  }
+  const dailyRows = [...dailyByDate.values()].sort((a, b) => a.task_date.localeCompare(b.task_date));
+  const today = new Date().toISOString().split('T')[0];
+
   return (
+    <>
     <div className="card">
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
         <Logo width={32} height={32} />
@@ -222,7 +240,7 @@ async function WeeklySummary({ campaign, db }) {
           Weekly Summary & Goals
         </h2>
       </div>
-      
+
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
           <thead>
@@ -283,5 +301,60 @@ async function WeeklySummary({ campaign, db }) {
         </table>
       </div>
     </div>
+
+    <div className="card">
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+        <Logo width={32} height={32} />
+        <h2 style={{ fontSize: '1.25rem', margin: 0, color: 'var(--foreground)' }}>
+          Daily Summary — SEO Links
+        </h2>
+      </div>
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.75rem 0 1rem 0' }}>
+        Whole team, day by day. Past days show what was actually completed on that specific day — later
+        catch-up work counts toward the day it really happened, not backdated here.
+      </p>
+
+      {dailyRows.length === 0 ? (
+        <p style={{ color: 'var(--text-muted)' }}>No SEO tasks scheduled.</p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                <th style={{ padding: '0.75rem 0' }}>Day</th>
+                <th style={{ padding: '0.75rem 0' }}>Date</th>
+                <th style={{ padding: '0.75rem 0' }}>Clients</th>
+                <th style={{ padding: '0.75rem 0' }}>Links Target</th>
+                <th style={{ padding: '0.75rem 0' }}>Progress</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dailyRows.map(d => {
+                const pct = d.target > 0 ? Math.round((d.completed / d.target) * 100) : 0;
+                const isToday = d.task_date === today;
+                const isPast = d.task_date < today;
+                return (
+                  <tr key={d.task_date} style={{ borderBottom: '1px solid var(--border)', backgroundColor: isToday ? 'rgba(99, 102, 241, 0.05)' : 'transparent', opacity: isPast ? 0.85 : 1 }}>
+                    <td style={{ padding: '0.75rem 0', fontWeight: isToday ? '600' : 'normal' }}>Day {d.day_number} {isToday && <span style={{ color: BRAND_COLOR, marginLeft: '0.25rem' }}>(Today)</span>}</td>
+                    <td style={{ padding: '0.75rem 0' }}>{d.task_date}</td>
+                    <td style={{ padding: '0.75rem 0' }}>{d.clients}</td>
+                    <td style={{ padding: '0.75rem 0', fontWeight: '600', color: BRAND_COLOR }}>{d.target}</td>
+                    <td style={{ padding: '0.75rem 0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ flex: 1, height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', backgroundColor: BRAND_COLOR }}></div>
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{d.completed}/{d.target} ({pct}%)</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+    </>
   );
 }

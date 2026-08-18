@@ -8,9 +8,9 @@ import { LINK_TYPE_LABELS } from '@/lib/services';
  * specific date. Used by the "By Person" report on the admin Reports page.
  *
  * Reads from daily_activity_log — a permanent snapshot frozen once per day by
- * the 1 AM capture cron (src/lib/dailyActivityCapture.js), not computed live off
- * the task tables. A day only exists here once it's been captured, so "today"
- * (not yet captured — that happens tomorrow at 1 AM) has nothing to show yet.
+ * the 12:10 AM capture cron (src/lib/dailyActivityCapture.js), not computed live
+ * off the task tables. A day only exists here once it's been captured, so "today"
+ * (not yet captured — that happens tomorrow at 12:10 AM) has nothing to show yet.
  */
 export async function getUserActivityReport(userId, date) {
   const db = await getDb();
@@ -83,15 +83,23 @@ export async function getUserActivityReport(userId, date) {
   // Pending = how much is still outstanding for the day — target minus completed,
   // summed across every row (verified or not) that isn't fully done yet. Covers
   // both untouched rows (0 completed) and partially-done ones in one shortfall figure.
-  const pendingShortfall = sections.reduce((s, sec) =>
-    s + sec.rows.filter(r => r.completed_count < r.target_count).reduce((s2, r) => s2 + (r.target_count - r.completed_count), 0)
-  , 0);
+  // Computed per-row and only over still-incomplete rows (never as an aggregate
+  // target-minus-completed), so an overachieving row (completed > target, which
+  // the sync legitimately allows — see sync-completed-links) can never make this
+  // go negative by offsetting against a different row's shortfall.
+  const shortfallOf = rows => rows.filter(r => r.completed_count < r.target_count)
+    .reduce((s, r) => s + (r.target_count - r.completed_count), 0);
+  const pendingShortfall = sections.reduce((s, sec) => s + shortfallOf(sec.rows), 0);
 
   // Funnel = same day's work, but only for rows whose client was Funnel-active
   // (Month 1/2/3) at capture time — frozen per-row via is_funnel, not re-derived
-  // from the client's current (possibly since-changed) funnel status.
+  // from the client's current (possibly since-changed) funnel status. Pending is
+  // this same per-row shortfall, scoped to funnel rows — every row is either
+  // funnel or not, so funnelPendingShortfall + regularPendingShortfall always
+  // exactly equals pendingShortfall, both guaranteed non-negative.
   const funnelTarget = sections.reduce((s, sec) => s + sec.rows.filter(r => r.is_funnel).reduce((s2, r) => s2 + r.target_count, 0), 0);
   const funnelCompleted = sections.reduce((s, sec) => s + sec.rows.filter(r => r.is_funnel).reduce((s2, r) => s2 + r.completed_count, 0), 0);
+  const funnelPendingShortfall = sections.reduce((s, sec) => s + shortfallOf(sec.rows.filter(r => r.is_funnel)), 0);
 
   // Split each section's assigned rows into what was actually completed that
   // day vs. what was assigned but left incomplete (a partially-done row, e.g.
@@ -134,6 +142,7 @@ export async function getUserActivityReport(userId, date) {
     pendingShortfall,
     funnelTarget,
     funnelCompleted,
+    funnelPendingShortfall,
     pendingResolved,
     pendingRemaining,
     totalLogs,

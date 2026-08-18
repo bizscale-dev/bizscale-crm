@@ -42,7 +42,7 @@
     },
     {
       "path": "/api/cron/capture-daily-activity",
-      "schedule": "0 20 * * *"
+      "schedule": "10 19 * * *"
     }
   ]
 }

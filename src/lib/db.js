@@ -316,7 +316,7 @@ async function runMigrations(raw) {
       FOREIGN KEY (writer_campaign_id) REFERENCES writer_campaigns(id) ON DELETE CASCADE
     )`,
     // Permanent, immutable daily record of completed work — captured once per day
-    // (see src/lib/dailyActivityCapture.js, run by a 1 AM cron) from whatever the
+    // (see src/lib/dailyActivityCapture.js, run by a 12:10 AM cron) from whatever the
     // live task tables (seo_tasks/webseo_tasks/writer_offpage_tasks) show for the
     // day that just closed out. Once a day is captured here it is never
     // recalculated again, unlike the live tables which keep getting resynced —

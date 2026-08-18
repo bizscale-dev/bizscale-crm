@@ -221,7 +221,7 @@ export default function UserActivityReport({ users }) {
       {!loading && !error && report?.notFinalized && (
         <p style={{ color: '#f59e0b' }}>
           {report.date === today
-            ? 'Today isn\'t finalized yet — it gets captured into the permanent record at 1 AM tonight. Check back tomorrow for today\'s numbers.'
+            ? 'Today isn\'t finalized yet — it gets captured into the permanent record at 12:10 AM tonight. Check back tomorrow for today\'s numbers.'
             : 'This date hasn\'t been finalized yet.'}
         </p>
       )}
@@ -333,7 +333,10 @@ function StatBox({ title, accentColor, doneLabel, doneValue, pendingLabel, pendi
 // numbers. Only shown for seo_associate/web_seo_associate — writers have no
 // backlog-catchup mechanism (see dailyActivityCapture.js).
 function SummaryBoxes({ report }) {
-  const funnelPending = report.funnelTarget - report.funnelCompleted;
+  // Per-row shortfalls from the server (never an aggregate target-minus-completed —
+  // see actions.js), so an overachieving row can't offset another row's shortfall
+  // into a negative "pending" number.
+  const funnelPending = report.funnelPendingShortfall;
   const regularCompleted = report.totalCompleted - report.funnelCompleted;
   const regularPending = report.pendingShortfall - funnelPending;
   const showBacklogBox = report.user.role === 'seo_associate' || report.user.role === 'web_seo_associate';
