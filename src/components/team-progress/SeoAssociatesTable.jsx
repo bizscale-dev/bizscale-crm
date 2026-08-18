@@ -29,18 +29,24 @@ export default async function SeoAssociatesTable({ basePath }) {
   // Get all SEO associates with client and task information — scoped to the active
   // campaign only (a client/task from a past campaign shouldn't count here).
   // "total_clients" excludes ALL funnel-active clients (month 1, 2, or 3) — the
-  // funnel_m1/m2/m3 counts below cover those separately.
+  // funnel_m1/m2/m3 counts below cover those separately; the two are added back
+  // together for display (see the "Total Clients" column below), but kept apart
+  // here since expectedTotalLinks needs the non-funnel count on its own (funnel
+  // clients bill at a different rate, via funnelBonusTargetPerClient).
+  // is_active = 1 on every count — a client removed from the import sheet is
+  // deactivated, not deleted (see webClientsImport.js), and shouldn't keep
+  // counting toward an associate's totals here.
   const associates = campaign ? await db.prepare(`
     SELECT u.id, u.name, u.email, u.is_active, u.lifetime_completed_links,
       (SELECT COUNT(*) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as total_tasks,
       (SELECT SUM(completed_count) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as completed_tasks,
-      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ?
+      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
          AND (tunnel_status IS NULL OR tunnel_status != 'active')) as total_clients,
-      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ?
+      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
          AND tunnel_status = 'active' AND funnel_month = 1) as funnel_m1,
-      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ?
+      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
          AND tunnel_status = 'active' AND funnel_month = 2) as funnel_m2,
-      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ?
+      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
          AND tunnel_status = 'active' AND funnel_month = 3) as funnel_m3
     FROM users u
     WHERE u.role IN ('seo_associate', 'associate')
@@ -89,10 +95,15 @@ export default async function SeoAssociatesTable({ basePath }) {
                 {associates.map((associate) => {
                   // Total Expected Links = normal clients' target + this associate's
                   // Month 2/3 funnel clients' bonus-target totals (Month 1 excluded —
-                  // it's a fixed platform checklist, not "links").
+                  // it's a fixed platform checklist, not "links"). Uses the non-funnel
+                  // client count on its own, since funnel clients bill at a different
+                  // rate — the "Total Clients" column displayed below folds funnel
+                  // clients back in for a true headcount, but that combined number is
+                  // display-only and must not feed into this formula.
                   const funnelM2Expected = associate.funnel_m2 * funnelBonusTargetPerClient;
                   const funnelM3Expected = associate.funnel_m3 * funnelBonusTargetPerClient;
                   const expectedTotalLinks = (associate.total_clients * monthlyTargetPerClient) + funnelM2Expected + funnelM3Expected;
+                  const totalClientsDisplay = associate.total_clients + associate.funnel_m1 + associate.funnel_m2 + associate.funnel_m3;
                   // seo_tasks rows (and their completed_count) get wiped and rebuilt from
                   // scratch every time a new client is onboarded (see taskService.js's
                   // generateSEOTasks), so completed_tasks only reflects the current
@@ -116,7 +127,7 @@ export default async function SeoAssociatesTable({ basePath }) {
                           {associate.is_active ? 'active' : 'inactive'}
                         </span>
                       </td>
-                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{associate.total_clients}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{totalClientsDisplay}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--success)', whiteSpace: 'nowrap' }}>{monthlyTargetPerClient}</td>
                       <td style={{ padding: '0.75rem 0.5rem 0.75rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>{associate.funnel_m1 || 0}</td>
                       <td style={{ padding: '0.75rem 0.5rem 0.75rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>{associate.funnel_m2 || 0}</td>
