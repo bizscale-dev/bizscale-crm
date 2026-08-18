@@ -13,6 +13,7 @@ export default async function SEOAssociateDashboard({ params, searchParams }) {
       showFunnelLink
       basePath={`/admin/seo-associates/${id}`}
       selectedDate={resolvedSearchParams?.date}
+      showLegacyTasksView
     />
   );
 }
