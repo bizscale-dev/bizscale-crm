@@ -58,28 +58,36 @@ export async function submitEodReport(entries) {
 
   const cleaned = [];
   for (const entry of entries) {
-    const webClientId = parseInt(entry?.webClientId, 10);
+    const webClientId = parseInt(entry?.webClientId, 10) || 0;
     const pageUrl = (entry?.pageUrl || '').trim();
     const workDone = (entry?.workDone || '').trim();
     const description = (entry?.description || '').trim();
 
-    if (!webClientId || Number.isNaN(webClientId)) {
-      return { error: 'Every entry needs a web client' };
-    }
     if (!workDone) {
       return { error: 'Every entry needs the work done filled in' };
     }
 
-    // Resolve the name server-side rather than trusting what the browser sent, since
-    // it's stored permanently on the entry row.
-    const client = await db.prepare('SELECT id, business_name, name FROM web_clients WHERE id = ?').get(webClientId);
-    if (!client) {
-      return { error: 'One of the selected web clients no longer exists' };
+    let webClientName;
+    if (webClientId === 0) {
+      // No real web_clients row — a manually typed heading instead. There's nothing
+      // to resolve server-side, so trust what the manager typed (still required).
+      webClientName = (entry?.webClientName || '').trim();
+      if (!webClientName) {
+        return { error: 'Every entry needs a web client or a heading' };
+      }
+    } else {
+      // Resolve the name server-side rather than trusting what the browser sent, since
+      // it's stored permanently on the entry row.
+      const client = await db.prepare('SELECT id, business_name, name FROM web_clients WHERE id = ?').get(webClientId);
+      if (!client) {
+        return { error: 'One of the selected web clients no longer exists' };
+      }
+      webClientName = client.business_name || client.name;
     }
 
     cleaned.push({
       webClientId,
-      webClientName: client.business_name || client.name,
+      webClientName,
       pageUrl: pageUrl || null,
       workDone,
       description: description || null,

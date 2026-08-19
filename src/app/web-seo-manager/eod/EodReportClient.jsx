@@ -58,6 +58,7 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
   // 'details' -> fill in work done + description, 'saved' -> add more or submit
   const [step, setStep] = useState('select');
   const [selectedClientId, setSelectedClientId] = useState('');
+  const [manualHeading, setManualHeading] = useState('');
   const [pageLoading, setPageLoading] = useState(false);
   const [pages, setPages] = useState([]);
   const [pageFetchError, setPageFetchError] = useState(null);
@@ -72,6 +73,7 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
   const [message, setMessage] = useState(null);
 
   const selectedClient = webClients.find(c => String(c.id) === String(selectedClientId));
+  const entryLabel = selectedClient?.label || manualHeading.trim();
   const manualPageList = manualPageUrls.split('\n').map(u => u.trim()).filter(Boolean);
   const chosenPageUrls = allowManualPage
     ? [...new Set([...selectedPageUrls, ...manualPageList])]
@@ -84,18 +86,26 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
   };
 
   const handleContinueToPage = async () => {
-    if (!selectedClientId) {
-      setMessage({ type: 'error', text: 'Select a website first' });
+    if (!selectedClientId && !manualHeading.trim()) {
+      setMessage({ type: 'error', text: 'Select a website or enter a heading first' });
       return;
     }
     setMessage(null);
-    setPageLoading(true);
     setPages([]);
     setPageFetchError(null);
-    setAllowManualPage(false);
     setSelectedPageUrls([]);
     setManualPageUrls('');
 
+    if (!selectedClientId) {
+      // Manual heading — there's no real client to fetch a sitemap for, so skip
+      // straight to the page step with manual entry available.
+      setAllowManualPage(true);
+      setStep('page');
+      return;
+    }
+
+    setPageLoading(true);
+    setAllowManualPage(false);
     try {
       const result = await getWebClientPages(selectedClientId);
       if (result.error) {
@@ -126,18 +136,22 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
     const trimmedWorkDone = workDone.trim();
     const trimmedDescription = description.trim();
     const pageUrlsToStage = chosenPageUrls.length > 0 ? chosenPageUrls : [null];
+    // Manual-heading entries have no real web_clients row — 0 is a sentinel the
+    // server/admin viewer treat as "no client", keeping the manually-typed label.
+    const webClientId = selectedClientId || 0;
     setStaged(current => [
       ...current,
       ...pageUrlsToStage.map((pageUrl, i) => ({
-        key: `${selectedClientId}-${Date.now()}-${i}`,
-        webClientId: selectedClientId,
-        webClientName: selectedClient?.label || '',
+        key: `${webClientId}-${Date.now()}-${i}`,
+        webClientId,
+        webClientName: entryLabel,
         pageUrl,
         workDone: trimmedWorkDone,
         description: trimmedDescription,
       })),
     ]);
     setSelectedClientId('');
+    setManualHeading('');
     setPages([]);
     setPageFetchError(null);
     setAllowManualPage(false);
@@ -232,11 +246,11 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
               <h2 style={{ fontSize: '1.1rem', margin: 0, marginBottom: '1.25rem' }}>
                 {staged.length > 0 ? 'Add another website' : 'Select a website'}
               </h2>
-              <div style={{ maxWidth: '420px', marginBottom: '1.25rem' }}>
+              <div style={{ maxWidth: '420px', marginBottom: '1rem' }}>
                 <label style={labelStyle}>Website</label>
                 <select
                   value={selectedClientId}
-                  onChange={(e) => setSelectedClientId(e.target.value)}
+                  onChange={(e) => { setSelectedClientId(e.target.value); if (e.target.value) setManualHeading(''); }}
                   style={{ ...inputStyle, cursor: 'pointer' }}
                 >
                   <option value="">Select a website...</option>
@@ -244,6 +258,16 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
                     <option key={c.id} value={c.id}>{c.label}</option>
                   ))}
                 </select>
+              </div>
+              <div style={{ maxWidth: '420px', marginBottom: '1.25rem' }}>
+                <label style={labelStyle}>Or Enter a Heading Manually</label>
+                <input
+                  type="text"
+                  value={manualHeading}
+                  onChange={(e) => { setManualHeading(e.target.value); if (e.target.value) setSelectedClientId(''); }}
+                  placeholder="e.g. a client not in the list"
+                  style={inputStyle}
+                />
               </div>
               <button type="button" onClick={handleContinueToPage} disabled={pageLoading} style={{ ...primaryButtonStyle, opacity: pageLoading ? 0.6 : 1, cursor: pageLoading ? 'not-allowed' : 'pointer' }}>
                 {pageLoading ? 'Loading pages...' : 'Continue'}
@@ -254,7 +278,7 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
           {step === 'page' && (
             <>
               <h2 style={{ fontSize: '1.1rem', margin: 0, marginBottom: '0.35rem' }}>
-                {selectedClient?.label}
+                {entryLabel}
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, marginBottom: '1.25rem' }}>
                 Which page(s) was this work done on? Select as many as apply — the same work
@@ -337,7 +361,7 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
           {step === 'details' && (
             <>
               <h2 style={{ fontSize: '1.1rem', margin: 0, marginBottom: '0.35rem' }}>
-                {selectedClient?.label}
+                {entryLabel}
               </h2>
               <div style={{ margin: '0 0 0.35rem 0' }}>
                 {chosenPageUrls.length === 0 ? (

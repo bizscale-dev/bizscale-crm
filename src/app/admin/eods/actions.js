@@ -28,8 +28,13 @@ export async function getManagerEodReports(userId, filters = {}) {
   const conditions = ['r.user_id = ?'];
   const args = [userId];
 
-  const webClientId = filters.webClientId ? parseInt(filters.webClientId, 10) : null;
-  if (webClientId && !Number.isNaN(webClientId)) {
+  // web_client_id 0 is a valid sentinel (a manually-typed heading, no real web_clients
+  // row — see submitEodReport), so this can't be a plain truthy check on the parsed
+  // number or filtering by that option would silently no-op.
+  const webClientId = filters.webClientId !== undefined && filters.webClientId !== null && filters.webClientId !== ''
+    ? parseInt(filters.webClientId, 10)
+    : null;
+  if (webClientId !== null && !Number.isNaN(webClientId)) {
     conditions.push('e.web_client_id = ?');
     args.push(webClientId);
   }
