@@ -66,9 +66,6 @@ export async function submitEodReport(entries) {
     if (!webClientId || Number.isNaN(webClientId)) {
       return { error: 'Every entry needs a web client' };
     }
-    if (!pageUrl) {
-      return { error: 'Every entry needs a page selected' };
-    }
     if (!workDone) {
       return { error: 'Every entry needs the work done filled in' };
     }
@@ -83,7 +80,7 @@ export async function submitEodReport(entries) {
     cleaned.push({
       webClientId,
       webClientName: client.business_name || client.name,
-      pageUrl,
+      pageUrl: pageUrl || null,
       workDone,
       description: description || null,
     });

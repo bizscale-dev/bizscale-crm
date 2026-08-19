@@ -114,10 +114,6 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
   };
 
   const handleContinueToDetails = () => {
-    if (chosenPageUrls.length === 0) {
-      setMessage({ type: 'error', text: 'Select or enter at least one page first' });
-      return;
-    }
     setMessage(null);
     setStep('details');
   };
@@ -129,9 +125,10 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
     }
     const trimmedWorkDone = workDone.trim();
     const trimmedDescription = description.trim();
+    const pageUrlsToStage = chosenPageUrls.length > 0 ? chosenPageUrls : [null];
     setStaged(current => [
       ...current,
-      ...chosenPageUrls.map((pageUrl, i) => ({
+      ...pageUrlsToStage.map((pageUrl, i) => ({
         key: `${selectedClientId}-${Date.now()}-${i}`,
         webClientId: selectedClientId,
         webClientName: selectedClient?.label || '',
@@ -261,7 +258,8 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, marginBottom: '1.25rem' }}>
                 Which page(s) was this work done on? Select as many as apply — the same work
-                done/description will be recorded against each one.
+                done/description will be recorded against each one. Optional — leave none
+                selected to continue without a specific page.
               </p>
 
               <div style={{ maxWidth: '640px', marginBottom: '1.25rem' }}>
@@ -342,19 +340,27 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
                 {selectedClient?.label}
               </h2>
               <div style={{ margin: '0 0 0.35rem 0' }}>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, marginBottom: '0.25rem' }}>
-                  {chosenPageUrls.length} {chosenPageUrls.length === 1 ? 'page' : 'pages'} selected:
-                </p>
-                <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
-                  {chosenPageUrls.map(url => (
-                    <li key={url} style={{ fontSize: '0.75rem', wordBreak: 'break-all', marginBottom: '0.15rem' }}>
-                      <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: BRAND_COLOR, textDecoration: 'none' }}>{url}</a>
-                    </li>
-                  ))}
-                </ul>
+                {chosenPageUrls.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, marginBottom: '0.25rem' }}>
+                    No specific page selected.
+                  </p>
+                ) : (
+                  <>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, marginBottom: '0.25rem' }}>
+                      {chosenPageUrls.length} {chosenPageUrls.length === 1 ? 'page' : 'pages'} selected:
+                    </p>
+                    <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                      {chosenPageUrls.map(url => (
+                        <li key={url} style={{ fontSize: '0.75rem', wordBreak: 'break-all', marginBottom: '0.15rem' }}>
+                          <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: BRAND_COLOR, textDecoration: 'none' }}>{url}</a>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </div>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, marginBottom: '1.25rem' }}>
-                What was done{chosenPageUrls.length === 1 ? ' on this page' : ' on these pages'} today?
+                What was done{chosenPageUrls.length === 1 ? ' on this page' : ' today'}?
                 {chosenPageUrls.length > 1 && ' The same work done/description will be recorded against each one.'}
               </p>
 
@@ -422,7 +428,9 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
               <div key={entry.key} style={{ padding: '0.85rem 1rem', border: '1px solid var(--border)', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{entry.webClientName}</div>
-                  <div style={{ fontSize: '0.75rem', color: BRAND_COLOR, marginTop: '0.2rem', wordBreak: 'break-all' }}>{entry.pageUrl}</div>
+                  {entry.pageUrl && (
+                    <div style={{ fontSize: '0.75rem', color: BRAND_COLOR, marginTop: '0.2rem', wordBreak: 'break-all' }}>{entry.pageUrl}</div>
+                  )}
                   <div style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{entry.workDone}</div>
                   {entry.description && (
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{entry.description}</div>
