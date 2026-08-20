@@ -6,6 +6,24 @@ import { submitEodReport, getWebClientPages } from './actions';
 
 const BRAND_COLOR = 'var(--primary)';
 
+// Groups a flat list of entries by their client/heading name, in order of first
+// appearance — so repeated pages for the same client show the name once with each
+// page nested underneath, instead of repeating the full client name per entry.
+function groupByName(entries, nameKey) {
+  const groups = [];
+  const byName = new Map();
+  entries.forEach(e => {
+    const name = e[nameKey];
+    if (!byName.has(name)) {
+      const group = { name, items: [] };
+      byName.set(name, group);
+      groups.push(group);
+    }
+    byName.get(name).items.push(e);
+  });
+  return groups;
+}
+
 const labelStyle = {
   display: 'block',
   marginBottom: '0.4rem',
@@ -448,26 +466,32 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
-            {staged.map(entry => (
-              <div key={entry.key} style={{ padding: '0.85rem 1rem', border: '1px solid var(--border)', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{entry.webClientName}</div>
-                  {entry.pageUrl && (
-                    <div style={{ fontSize: '0.75rem', color: BRAND_COLOR, marginTop: '0.2rem', wordBreak: 'break-all' }}>{entry.pageUrl}</div>
-                  )}
-                  <div style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{entry.workDone}</div>
-                  {entry.description && (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{entry.description}</div>
-                  )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginBottom: '1.25rem' }}>
+            {groupByName(staged, 'webClientName').map(group => (
+              <div key={group.name} style={{ padding: '0.85rem 1rem', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
+                <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.6rem' }}>{group.name}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {group.items.map(entry => (
+                    <div key={entry.key} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', paddingLeft: '0.75rem', borderLeft: '2px solid var(--border)' }}>
+                      <div>
+                        {entry.pageUrl && (
+                          <div style={{ fontSize: '0.75rem', color: BRAND_COLOR, wordBreak: 'break-all' }}>{entry.pageUrl}</div>
+                        )}
+                        <div style={{ fontSize: '0.85rem', marginTop: entry.pageUrl ? '0.2rem' : 0 }}>{entry.workDone}</div>
+                        {entry.description && (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{entry.description}</div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveStaged(entry.key)}
+                        style={{ padding: '0.25rem 0.6rem', backgroundColor: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', whiteSpace: 'nowrap' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveStaged(entry.key)}
-                  style={{ padding: '0.25rem 0.6rem', backgroundColor: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', whiteSpace: 'nowrap' }}
-                >
-                  Remove
-                </button>
               </div>
             ))}
           </div>
@@ -497,19 +521,25 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
                     {report.entries.length} {report.entries.length === 1 ? 'entry' : 'entries'}
                   </span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {report.entries.map(entry => (
-                    <div key={entry.id} style={{ padding: '0.75rem 1rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
-                      <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{entry.web_client_name}</div>
-                      {entry.page_url && (
-                        <a href={entry.page_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontSize: '0.75rem', color: BRAND_COLOR, marginTop: '0.2rem', wordBreak: 'break-all', textDecoration: 'none' }}>
-                          {entry.page_url}
-                        </a>
-                      )}
-                      <div style={{ fontSize: '0.85rem', marginTop: '0.2rem' }}>{entry.work_done}</div>
-                      {entry.description && (
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{entry.description}</div>
-                      )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {groupByName(report.entries, 'web_client_name').map(group => (
+                    <div key={group.name} style={{ padding: '0.75rem 1rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
+                      <div style={{ fontWeight: '600', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{group.name}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {group.items.map(entry => (
+                          <div key={entry.id} style={{ paddingLeft: '0.75rem', borderLeft: '2px solid var(--border)' }}>
+                            {entry.page_url && (
+                              <a href={entry.page_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontSize: '0.75rem', color: BRAND_COLOR, wordBreak: 'break-all', textDecoration: 'none' }}>
+                                {entry.page_url}
+                              </a>
+                            )}
+                            <div style={{ fontSize: '0.85rem', marginTop: entry.page_url ? '0.2rem' : 0 }}>{entry.work_done}</div>
+                            {entry.description && (
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{entry.description}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
