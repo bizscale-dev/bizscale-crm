@@ -184,6 +184,7 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
     try {
       const result = await submitEodReport(staged.map(e => ({
         webClientId: e.webClientId,
+        webClientName: e.webClientName,
         pageUrl: e.pageUrl,
         workDone: e.workDone,
         description: e.description,
