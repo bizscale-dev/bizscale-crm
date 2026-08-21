@@ -4,37 +4,6 @@ import { LINK_TYPES } from './services';
 import { getOffDaysSet, getWorkingDays } from './offDays';
 import { FUNNEL_BONUS_FIELDS, FUNNEL_MONTH1_WEEK_TARGETS } from './funnelConstants';
 
-// Rotation formula: 16 total days ÷ 5 rotation groups = 3.2 times per month per
-// client — converts a set of MONTHLY per-link-type targets into DAILY targets,
-// flooring each one and then handing any remainder (from the floor rounding) to
-// the highest-value link types first. Shared by both the normal campaign targets
-// and a funnel Month 2/3 client's own (smaller, bonus-field-sourced) targets, so
-// both follow the identical distribution shape.
-function computeDailyLinkTargets(monthlyTargets) {
-  const dailyLinkTargets = {};
-  let totalDailyTarget = 0;
-
-  for (const [linkType, monthlyTarget] of Object.entries(monthlyTargets)) {
-    const dailyValue = monthlyTarget / 3.2;
-    dailyLinkTargets[linkType] = Math.floor(dailyValue);
-    totalDailyTarget += dailyLinkTargets[linkType];
-  }
-
-  const totalMonthlyTarget = Object.values(monthlyTargets).reduce((a, b) => a + b, 0);
-  const rotationDivisor = 3.2;
-  const expectedDailyPerClient = Math.floor(totalMonthlyTarget / rotationDivisor);
-
-  if (totalDailyTarget < expectedDailyPerClient) {
-    const remaining = expectedDailyPerClient - totalDailyTarget;
-    const priorityOrder = ['profile', 'citation', 'image', 'pdf', 'guestpost', 'web2'];
-    for (let i = 0; i < remaining && i < priorityOrder.length; i++) {
-      dailyLinkTargets[priorityOrder[i]]++;
-    }
-  }
-
-  return dailyLinkTargets;
-}
-
 // A funnel client in Month 2 or 3 is tracked through this same seo_tasks pipeline
 // (day-distributed, Google Sheet-synced) — their target for each link type is ONLY the
 // Month 2 & 3 Bonus Link Targets configured on the campaign (Admin → Funnel),
@@ -116,13 +85,10 @@ export async function generateSEOTasks(campaignId) {
 
   const allTasks = [];
 
-  // Daily targets for normal clients, from the campaign's monthly link-type targets.
-  const dailyLinkTargets = computeDailyLinkTargets(monthlyLinkTargets);
-
   // Monthly targets for funnel Month 2/3 clients, from the campaign's Month 2 & 3
   // Bonus Link Targets (Admin → Funnel) instead — this is their WHOLE target for
   // that month, not the normal target plus the bonus. Split exactly across their
-  // occurrences below (not approximated via computeDailyLinkTargets).
+  // occurrences below.
   const funnelMonthlyLinkTargets = {};
   for (const linkType of LINK_TYPES) {
     funnelMonthlyLinkTargets[linkType] = campaign[FUNNEL_BONUS_FIELDS[linkType]] || 0;
@@ -293,24 +259,37 @@ export async function generateSEOTasks(campaignId) {
           });
         }
       } else {
-        // Normal clients: existing shared daily-rate approach, applied on each
-        // of their occurrence days.
-        for (const { dayNumber, dateStr } of occurrences) {
-          for (const [linkType, dailyTarget] of Object.entries(dailyLinkTargets)) {
-            if (dailyTarget > 0) {
-              const priorKey = `${client.id}|${dayNumber}|${linkType}`;
-              allTasks.push({
-                campaign_id: campaignId,
-                associate_id: associate.user_id,
-                client_id: client.id,
-                day_number: dayNumber,
-                task_date: dateStr,
-                link_type: linkType,
-                target_count: dailyTarget,
-                completed_count: priorCompleted.get(priorKey) || 0
-              });
-            }
-          }
+        // Normal clients: exact distribution, same as funnel Month 2/3 clients
+        // above — split each link type's WHOLE monthly target across this
+        // client's own occurrence count, front-loaded remainder, so the full
+        // defined number is always delivered by month's end regardless of how
+        // many times campaign.total_days actually lets their rotation slot
+        // recur (previously approximated via a shared daily rate derived from
+        // a hardcoded 16-day/3.2-occurrence assumption, which silently
+        // shorted every client whenever a campaign didn't run exactly 16 days).
+        for (const linkType of LINK_TYPES) {
+          const monthlyTarget = monthlyLinkTargets[linkType];
+          if (monthlyTarget <= 0) continue;
+
+          const base = Math.floor(monthlyTarget / occurrences.length);
+          const remainder = monthlyTarget % occurrences.length;
+
+          occurrences.forEach(({ dayNumber, dateStr }, i) => {
+            const chunkSize = base + (i < remainder ? 1 : 0);
+            if (chunkSize <= 0) return;
+
+            const priorKey = `${client.id}|${dayNumber}|${linkType}`;
+            allTasks.push({
+              campaign_id: campaignId,
+              associate_id: associate.user_id,
+              client_id: client.id,
+              day_number: dayNumber,
+              task_date: dateStr,
+              link_type: linkType,
+              target_count: chunkSize,
+              completed_count: priorCompleted.get(priorKey) || 0
+            });
+          });
         }
       }
     }
