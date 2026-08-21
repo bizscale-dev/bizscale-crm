@@ -195,6 +195,33 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
     });
   };
 
+  // Pulls a staged entry back out of the list and into the details form so it can
+  // be changed — it's removed from `staged` now and re-added (as a new entry) when
+  // Save is clicked again, same as any other entry.
+  const handleEditStaged = (key) => {
+    const entry = staged.find(e => e.key === key);
+    if (!entry) return;
+
+    setStaged(current => current.filter(e => e.key !== key));
+
+    if (entry.webClientId && entry.webClientId !== 0) {
+      setSelectedClientId(String(entry.webClientId));
+      setManualHeading('');
+    } else {
+      setSelectedClientId('');
+      setManualHeading(entry.webClientName);
+    }
+    setPages([]);
+    setPageFetchError(null);
+    setAllowManualPage(true);
+    setSelectedPageUrls([]);
+    setManualPageUrls(entry.pageUrl || '');
+    setWorkDone(entry.workDone);
+    setDescription(entry.description || '');
+    setStep('details');
+    setMessage(null);
+  };
+
   const handleSubmit = async () => {
     if (staged.length === 0) return;
     setSubmitting(true);
@@ -482,13 +509,22 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{entry.description}</div>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveStaged(entry.key)}
-                        style={{ padding: '0.25rem 0.6rem', backgroundColor: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', whiteSpace: 'nowrap' }}
-                      >
-                        Remove
-                      </button>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          onClick={() => handleEditStaged(entry.key)}
+                          style={{ padding: '0.25rem 0.6rem', backgroundColor: 'transparent', color: BRAND_COLOR, border: `1px solid ${BRAND_COLOR}`, borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', whiteSpace: 'nowrap' }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStaged(entry.key)}
+                          style={{ padding: '0.25rem 0.6rem', backgroundColor: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', whiteSpace: 'nowrap' }}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
