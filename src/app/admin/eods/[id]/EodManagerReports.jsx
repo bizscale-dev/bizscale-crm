@@ -5,22 +5,33 @@ import { getManagerEodReports } from '../actions';
 
 const BRAND_COLOR = 'var(--primary)';
 
-// Groups a flat list of entries by their client/heading name, in order of first
-// appearance — so repeated pages for the same client show the name once with each
-// page nested underneath, instead of repeating the full client name per entry.
-function groupByName(entries, nameKey) {
-  const groups = [];
-  const byName = new Map();
+// Groups a flat list of entries first by client/heading name, then within each
+// client by the exact (work done, description) pair — so pages saved together in
+// one go (same work done/description, e.g. several pages picked in a single Save)
+// collapse into one block listing every page once, while a later save for the same
+// client with different work still shows as its own separate block underneath the
+// same name.
+function groupEntriesForDisplay(entries, { nameKey, workKey, descKey }) {
+  const clientGroups = [];
+  const byClient = new Map();
   entries.forEach(e => {
     const name = e[nameKey];
-    if (!byName.has(name)) {
-      const group = { name, items: [] };
-      byName.set(name, group);
-      groups.push(group);
+    if (!byClient.has(name)) {
+      const group = { name, workGroups: [] };
+      byClient.set(name, group);
+      clientGroups.push(group);
     }
-    byName.get(name).items.push(e);
+    const clientGroup = byClient.get(name);
+    const workDone = e[workKey];
+    const description = e[descKey] || '';
+    let workGroup = clientGroup.workGroups.find(w => w.workDone === workDone && w.description === description);
+    if (!workGroup) {
+      workGroup = { workDone, description, items: [] };
+      clientGroup.workGroups.push(workGroup);
+    }
+    workGroup.items.push(e);
   });
-  return groups;
+  return clientGroups;
 }
 
 const labelStyle = {
@@ -181,20 +192,26 @@ export default function EodManagerReports({ managerId, webClients, initialReport
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {groupByName(report.entries, 'web_client_name').map(group => (
+                  {groupEntriesForDisplay(report.entries, { nameKey: 'web_client_name', workKey: 'work_done', descKey: 'description' }).map(group => (
                     <div key={group.name} style={{ padding: '0.85rem 1rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
                       <div style={{ fontWeight: '600', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{group.name}</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {group.items.map(entry => (
-                          <div key={entry.id} style={{ paddingLeft: '0.75rem', borderLeft: '2px solid var(--border)' }}>
-                            {entry.page_url && (
-                              <a href={entry.page_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontSize: '0.75rem', color: BRAND_COLOR, wordBreak: 'break-all', textDecoration: 'none' }}>
-                                {entry.page_url}
-                              </a>
-                            )}
-                            <div style={{ fontSize: '0.85rem', marginTop: entry.page_url ? '0.2rem' : 0 }}>{entry.work_done}</div>
-                            {entry.description && (
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{entry.description}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                        {group.workGroups.map((wg, wi) => (
+                          <div key={wi} style={{ paddingLeft: '0.75rem', borderLeft: '2px solid var(--border)' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginBottom: '0.35rem' }}>
+                              {wg.items.map(entry => (
+                                entry.page_url ? (
+                                  <a key={entry.id} href={entry.page_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontSize: '0.75rem', color: BRAND_COLOR, wordBreak: 'break-all', textDecoration: 'none' }}>
+                                    {entry.page_url}
+                                  </a>
+                                ) : (
+                                  <div key={entry.id} style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No specific page</div>
+                                )
+                              ))}
+                            </div>
+                            <div style={{ fontSize: '0.85rem' }}>{wg.workDone}</div>
+                            {wg.description && (
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{wg.description}</div>
                             )}
                           </div>
                         ))}

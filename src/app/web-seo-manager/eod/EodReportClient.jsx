@@ -6,22 +6,33 @@ import { submitEodReport, getWebClientPages } from './actions';
 
 const BRAND_COLOR = 'var(--primary)';
 
-// Groups a flat list of entries by their client/heading name, in order of first
-// appearance — so repeated pages for the same client show the name once with each
-// page nested underneath, instead of repeating the full client name per entry.
-function groupByName(entries, nameKey) {
-  const groups = [];
-  const byName = new Map();
+// Groups a flat list of entries first by client/heading name, then within each
+// client by the exact (work done, description) pair — so pages saved together in
+// one go (same work done/description, e.g. several pages picked in a single Save)
+// collapse into one block listing every page once, while a later save for the same
+// client with different work still shows as its own separate block underneath the
+// same name.
+function groupEntriesForDisplay(entries, { nameKey, workKey, descKey }) {
+  const clientGroups = [];
+  const byClient = new Map();
   entries.forEach(e => {
     const name = e[nameKey];
-    if (!byName.has(name)) {
-      const group = { name, items: [] };
-      byName.set(name, group);
-      groups.push(group);
+    if (!byClient.has(name)) {
+      const group = { name, workGroups: [] };
+      byClient.set(name, group);
+      clientGroups.push(group);
     }
-    byName.get(name).items.push(e);
+    const clientGroup = byClient.get(name);
+    const workDone = e[workKey];
+    const description = e[descKey] || '';
+    let workGroup = clientGroup.workGroups.find(w => w.workDone === workDone && w.description === description);
+    if (!workGroup) {
+      workGroup = { workDone, description, items: [] };
+      clientGroup.workGroups.push(workGroup);
+    }
+    workGroup.items.push(e);
   });
-  return groups;
+  return clientGroups;
 }
 
 const labelStyle = {
@@ -89,6 +100,8 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
   const [lastSavedCount, setLastSavedCount] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [expandedReportId, setExpandedReportId] = useState(null);
 
   const selectedClient = webClients.find(c => String(c.id) === String(selectedClientId));
   const entryLabel = selectedClient?.label || manualHeading.trim();
@@ -494,37 +507,43 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginBottom: '1.25rem' }}>
-            {groupByName(staged, 'webClientName').map(group => (
+            {groupEntriesForDisplay(staged, { nameKey: 'webClientName', workKey: 'workDone', descKey: 'description' }).map(group => (
               <div key={group.name} style={{ padding: '0.85rem 1rem', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
                 <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.6rem' }}>{group.name}</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                  {group.items.map(entry => (
-                    <div key={entry.key} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', paddingLeft: '0.75rem', borderLeft: '2px solid var(--border)' }}>
-                      <div>
-                        {entry.pageUrl && (
-                          <div style={{ fontSize: '0.75rem', color: BRAND_COLOR, wordBreak: 'break-all' }}>{entry.pageUrl}</div>
-                        )}
-                        <div style={{ fontSize: '0.85rem', marginTop: entry.pageUrl ? '0.2rem' : 0 }}>{entry.workDone}</div>
-                        {entry.description && (
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{entry.description}</div>
-                        )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  {group.workGroups.map((wg, wi) => (
+                    <div key={wi} style={{ paddingLeft: '0.75rem', borderLeft: '2px solid var(--border)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                        {wg.items.map(entry => (
+                          <div key={entry.key} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
+                            {entry.pageUrl ? (
+                              <div style={{ fontSize: '0.75rem', color: BRAND_COLOR, wordBreak: 'break-all' }}>{entry.pageUrl}</div>
+                            ) : (
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No specific page</div>
+                            )}
+                            <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                              <button
+                                type="button"
+                                onClick={() => handleEditStaged(entry.key)}
+                                style={{ padding: '0.25rem 0.6rem', backgroundColor: 'transparent', color: BRAND_COLOR, border: `1px solid ${BRAND_COLOR}`, borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', whiteSpace: 'nowrap' }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveStaged(entry.key)}
+                                style={{ padding: '0.25rem 0.6rem', backgroundColor: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', whiteSpace: 'nowrap' }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                        <button
-                          type="button"
-                          onClick={() => handleEditStaged(entry.key)}
-                          style={{ padding: '0.25rem 0.6rem', backgroundColor: 'transparent', color: BRAND_COLOR, border: `1px solid ${BRAND_COLOR}`, borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', whiteSpace: 'nowrap' }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveStaged(entry.key)}
-                          style={{ padding: '0.25rem 0.6rem', backgroundColor: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: '600', whiteSpace: 'nowrap' }}
-                        >
-                          Remove
-                        </button>
-                      </div>
+                      <div style={{ fontSize: '0.85rem' }}>{wg.workDone}</div>
+                      {wg.description && (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{wg.description}</div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -539,49 +558,99 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
       )}
 
       <div className="card">
-        <h2 style={{ fontSize: '1.1rem', margin: 0, marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-          My Submitted Reports
-        </h2>
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(o => !o)}
+          style={{
+            width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+            color: 'inherit', font: 'inherit', textAlign: 'left',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1.1rem', fontWeight: '600' }}>
+            🕐 My Previous EODs
+            <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '999px', padding: '0.1rem 0.55rem' }}>
+              {history.length}
+            </span>
+          </span>
+          <span style={{ color: 'var(--text-muted)' }}>{historyOpen ? '▾' : '▸'}</span>
+        </button>
 
-        {history.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>No reports submitted yet.</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {history.map(report => (
-              <div key={report.id}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                  <h3 style={{ margin: 0, fontSize: '0.95rem', color: BRAND_COLOR }}>
-                    {report.report_date}{report.report_date === today ? ' (today)' : ''}
-                  </h3>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    {report.entries.length} {report.entries.length === 1 ? 'entry' : 'entries'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {groupByName(report.entries, 'web_client_name').map(group => (
-                    <div key={group.name} style={{ padding: '0.75rem 1rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
-                      <div style={{ fontWeight: '600', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{group.name}</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {group.items.map(entry => (
-                          <div key={entry.id} style={{ paddingLeft: '0.75rem', borderLeft: '2px solid var(--border)' }}>
-                            {entry.page_url && (
-                              <a href={entry.page_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontSize: '0.75rem', color: BRAND_COLOR, wordBreak: 'break-all', textDecoration: 'none' }}>
-                                {entry.page_url}
-                              </a>
-                            )}
-                            <div style={{ fontSize: '0.85rem', marginTop: entry.page_url ? '0.2rem' : 0 }}>{entry.work_done}</div>
-                            {entry.description && (
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{entry.description}</div>
-                            )}
+        {historyOpen && (
+          history.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '1rem 0 0 0' }}>No reports submitted yet.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '1rem' }}>
+              {history.map(report => {
+                const siteCount = new Set(report.entries.map(e => e.web_client_name)).size;
+                const isOpen = expandedReportId === report.id;
+                return (
+                  <div key={report.id} style={{ border: '1px solid var(--border)', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedReportId(isOpen ? null : report.id)}
+                      style={{
+                        width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '0.85rem 1rem', backgroundColor: 'transparent', border: 'none', cursor: 'pointer',
+                        color: 'inherit', font: 'inherit', textAlign: 'left', gap: '1rem',
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>{isOpen ? '▾' : '▸'}</span>
+                        <span>
+                          <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>
+                            {report.report_date}{report.report_date === today ? ' (today)' : ''}
                           </div>
-                        ))}
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                            {report.entries.length} {report.entries.length === 1 ? 'page' : 'pages'} across {siteCount} {siteCount === 1 ? 'site' : 'sites'}
+                          </div>
+                        </span>
+                      </span>
+                      <span style={{
+                        fontSize: '0.7rem', fontWeight: '600', color: 'var(--success)',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)', padding: '0.25rem 0.65rem', borderRadius: '999px', whiteSpace: 'nowrap',
+                      }}>
+                        ✓ SUBMITTED
+                      </span>
+                    </button>
+
+                    {isOpen && (
+                      <div style={{ padding: '0 1rem 1rem 1rem', borderTop: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
+                          {groupEntriesForDisplay(report.entries, { nameKey: 'web_client_name', workKey: 'work_done', descKey: 'description' }).map(group => (
+                            <div key={group.name} style={{ padding: '0.75rem 1rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
+                              <div style={{ fontWeight: '600', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{group.name}</div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                                {group.workGroups.map((wg, wi) => (
+                                  <div key={wi} style={{ paddingLeft: '0.75rem', borderLeft: '2px solid var(--border)' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginBottom: '0.35rem' }}>
+                                      {wg.items.map(entry => (
+                                        entry.page_url ? (
+                                          <a key={entry.id} href={entry.page_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontSize: '0.75rem', color: BRAND_COLOR, wordBreak: 'break-all', textDecoration: 'none' }}>
+                                            {entry.page_url}
+                                          </a>
+                                        ) : (
+                                          <div key={entry.id} style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No specific page</div>
+                                        )
+                                      ))}
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem' }}>{wg.workDone}</div>
+                                    {wg.description && (
+                                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{wg.description}</div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )
         )}
       </div>
     </div>
