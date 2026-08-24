@@ -190,7 +190,12 @@ export async function POST(request) {
         // rather than silently vanishing into old debt — and only once today is
         // fully covered does the leftover pay down the oldest unfinished
         // "Pending" row(s), so a Pending task can still clear itself once there's
-        // more than enough to cover both.
+        // more than enough to cover both. No row is ever pushed past its own
+        // target — if the sheet shows more than every due row's target combined,
+        // the remainder is simply left unapplied for now rather than piled onto
+        // today; it's picked up automatically on a later sync once a new
+        // occurrence day opens up more room (alreadyRecorded stays capped, so
+        // the gap against the sheet's total reappears as newProgress then).
         const dueTasks = await db.prepare(`
           SELECT id, task_date, target_count, completed_count
           FROM seo_tasks
@@ -217,23 +222,6 @@ export async function POST(request) {
             updates.push({ id: task.id, newCompleted: task.completed_count + applied });
             if (task.task_date < today) backlogApplied += applied;
             newProgress -= applied;
-          }
-
-          // Anything left over once every due row is already at its own target
-          // means the sheet shows more than everything assigned so far — attribute
-          // it to today specifically (allowed to exceed today's target), same as
-          // the old "overachievement" behavior, rather than discarding it.
-          if (newProgress > 0) {
-            const todayTask = dueTasks.find(t => t.task_date === today);
-            if (todayTask) {
-              const existingUpdate = updates.find(u => u.id === todayTask.id);
-              if (existingUpdate) {
-                existingUpdate.newCompleted += newProgress;
-              } else {
-                updates.push({ id: todayTask.id, newCompleted: todayTask.completed_count + newProgress });
-              }
-              newProgress = 0;
-            }
           }
 
           for (const { id, newCompleted } of updates) {

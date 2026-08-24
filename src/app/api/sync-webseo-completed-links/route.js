@@ -148,7 +148,10 @@ export async function POST(request) {
         // associate's real same-day work is credited to today rather than
         // silently vanishing into old debt — and only once today is fully
         // covered does the leftover pay down the oldest unfinished "Pending"
-        // row(s) (see sync-completed-links for the full rationale).
+        // row(s) (see sync-completed-links for the full rationale). No row is
+        // ever pushed past its own target — a remainder beyond every due row's
+        // target simply stays unapplied until a new occurrence day opens up
+        // more room on a later sync.
         const dueTasks = await db.prepare(`
           SELECT id, task_date, target_count, completed_count
           FROM webseo_tasks
@@ -176,22 +179,6 @@ export async function POST(request) {
           updates.push({ id: task.id, newCompleted: task.completed_count + applied });
           if (task.task_date < today) backlogApplied += applied;
           newProgress -= applied;
-        }
-
-        // Leftover once every due row is already at its own target means the sheet
-        // shows more than everything assigned so far — attribute it to today
-        // specifically (allowed to exceed today's target), same as the old
-        // "overachievement" behavior, rather than discarding it.
-        if (newProgress > 0) {
-          const todayTask = dueTasks.find(t => t.task_date === today);
-          if (todayTask) {
-            const existingUpdate = updates.find(u => u.id === todayTask.id);
-            if (existingUpdate) {
-              existingUpdate.newCompleted += newProgress;
-            } else {
-              updates.push({ id: todayTask.id, newCompleted: todayTask.completed_count + newProgress });
-            }
-          }
         }
 
         for (const { id, newCompleted } of updates) {
