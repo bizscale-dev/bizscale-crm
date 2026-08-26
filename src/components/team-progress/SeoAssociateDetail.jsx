@@ -255,7 +255,6 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
             <StatCard title="Today's Target" value={todayTarget} sub={`${todayCompleted} completed (${todayPercent}%)`} color="var(--primary)" />
             <StatCard title="Overall Target" value={totalExpectedLinks} sub={`${overallStats?.completed || 0} completed (${overallPercent}%)`} color="var(--success)" />
             <StatCard title="Upcoming Days" value={upcomingDays.length} sub="remaining days with tasks" color="#f59e0b" />
-            <StatCard title="Recent Logs" value={recentLogs.length} sub="links logged recently" color="#8b5cf6" />
             <StatCard title="All-Time Completed (Sheet)" value={associate.lifetime_completed_links || 0} sub="across all assigned clients, live from sheet" color="#16b293" />
             <StatCard title="Pending Tasks" value={pendingLinksMissing} sub="overdue, not yet completed" color="#f59e0b" />
           </div>
