@@ -62,24 +62,9 @@ export async function runSyncJob() {
         const syncData = await syncResponse.json();
         console.log(`[CRON] Sync complete for ${campaign.name}:`, syncData.message);
 
-        // Advance/graduate funnel clients before regular tasks get regenerated below,
-        // so a same-day graduation is picked up in today's regeneration.
-        try {
-          const funnelResponse = await fetch(`${baseUrl}/api/google-sheets/sync-funnel-progression`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ campaignId: campaign.id }),
-          });
-
-          if (funnelResponse.ok) {
-            const funnelData = await funnelResponse.json();
-            console.log(`[CRON] Funnel progression for ${campaign.name}:`, funnelData);
-          } else {
-            console.warn(`[CRON] Funnel progression failed for ${campaign.name}:`, await funnelResponse.text());
-          }
-        } catch (funnelErr) {
-          console.error(`[CRON] Error running funnel progression for ${campaign.name}:`, funnelErr);
-        }
+        // Funnel month advancement/graduation is manual only now (admin's "force
+        // advance" action on /admin/funnel — see advanceOneFunnelClient in
+        // src/lib/funnel.js) — no automatic date-based sweep runs here anymore.
 
         // Import writers from sheet (ensure they exist before assignment)
         if (syncData.writerAssignments && Object.keys(syncData.writerAssignments).length > 0) {

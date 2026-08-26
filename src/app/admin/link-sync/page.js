@@ -164,7 +164,7 @@ export default async function LinkSyncPage() {
           <div>
             <h3 style={{ margin: 0, marginBottom: '0.5rem', color: 'var(--foreground)' }}>Daily Automation</h3>
             <p style={{ margin: 0 }}>
-              The regular SEO Associate completed-links sync above runs at 5 PM, 7 PM, 9 PM, and 11:50 PM (Pakistan Time) daily. The main Client sheet (SEO clients added/removed, funnel progression) now syncs once daily at 11:52 PM; the Web SEO Associate completed-links sync below and the Web Clients sheet (Web SEO clients added/removed) sync once daily at 11:54 PM and 11:56 PM (Pakistan Time) respectively, using the Settings-configured URLs. You can also manually trigger the completed-links syncs anytime using the buttons above, or the Web Clients import from Admin → Web Clients.
+              The regular SEO Associate completed-links sync above runs at 5 PM, 7 PM, 9 PM, and 11:50 PM (Pakistan Time) daily. The main Client sheet (SEO clients added/removed) now syncs once daily at 11:52 PM; the Web SEO Associate completed-links sync below and the Web Clients sheet (Web SEO clients added/removed) sync once daily at 11:54 PM and 11:56 PM (Pakistan Time) respectively, using the Settings-configured URLs. Funnel month advancement is manual only — see Admin → Funnel. You can also manually trigger the completed-links syncs anytime using the buttons above, or the Web Clients import from Admin → Web Clients.
             </p>
           </div>
 

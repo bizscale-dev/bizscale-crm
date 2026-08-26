@@ -1,7 +1,7 @@
 import { getDb, initDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { generateSEOTasks } from '@/lib/taskService';
-import { enrollClientInFunnel, runFunnelProgressionForCampaign } from '@/lib/funnel';
+import { enrollClientInFunnel } from '@/lib/funnel';
 
 // 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
 // for why this matters (a killed function fails silently with no error surfaced). This
@@ -29,13 +29,8 @@ export async function POST(request) {
       );
     }
 
-    // Self-healing: advance/graduate any funnel clients whose month has ended before
-    // regenerating regular tasks below, in case the dedicated cron step didn't run today.
-    try {
-      await runFunnelProgressionForCampaign(campaign.id);
-    } catch (err) {
-      console.error('Funnel progression (inline) failed:', err.message);
-    }
+    // Funnel month advancement/graduation is manual only now (admin's "force advance"
+    // action on /admin/funnel) — no automatic date-based sweep runs here anymore.
 
     if (!newClients || !Array.isArray(newClients)) {
       return Response.json(

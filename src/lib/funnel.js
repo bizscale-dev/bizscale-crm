@@ -196,8 +196,13 @@ export async function graduateFunnelClientsNow(clientIds) {
 }
 
 /**
- * Daily sweep: advance/graduate every active-funnel client in a campaign whose current
- * month has ended. Idempotent — safe to call more than once on the same day.
+ * Batch sweep: advance/graduate every active-funnel client in a campaign whose current
+ * month has ended, based on the 16-day cycle window. Idempotent — safe to call more
+ * than once on the same day.
+ *
+ * Not called automatically anymore — funnel month advancement is manual only now
+ * (see advanceOneFunnelClient, used by the admin's per-client "force advance" action
+ * on /admin/funnel). Kept here in case a manual bulk-advance action is wanted later.
  */
 export async function runFunnelProgressionForCampaign(campaignId, today = todayStr()) {
   const db = await getDb();
