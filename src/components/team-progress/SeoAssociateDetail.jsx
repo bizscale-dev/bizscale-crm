@@ -217,6 +217,10 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   const todayCompleted = todayTasks.reduce((s, t) => s + t.completed_count, 0);
   const overallPercent = totalExpectedLinks > 0 ? Math.round((overallStats?.completed / totalExpectedLinks) * 100) : 0;
   const todayPercent = todayTarget > 0 ? Math.round((todayCompleted / todayTarget) * 100) : 0;
+  // The real count of still-missing links (target - completed) summed across every
+  // pending row — not just the number of distinct client/link-type rows, which
+  // undercounts whenever a row is short by more than one link.
+  const pendingLinksMissing = pendingTasks.reduce((s, t) => s + Math.max(0, t.target_count - t.completed_count), 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -253,7 +257,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
             <StatCard title="Upcoming Days" value={upcomingDays.length} sub="remaining days with tasks" color="#f59e0b" />
             <StatCard title="Recent Logs" value={recentLogs.length} sub="links logged recently" color="#8b5cf6" />
             <StatCard title="All-Time Completed (Sheet)" value={associate.lifetime_completed_links || 0} sub="across all assigned clients, live from sheet" color="#16b293" />
-            <StatCard title="Pending Tasks" value={pendingTasks.length} sub="overdue, not yet completed" color="#f59e0b" />
+            <StatCard title="Pending Tasks" value={pendingLinksMissing} sub="overdue, not yet completed" color="#f59e0b" />
           </div>
 
           {/* Funnel Clients — separate from the regular link rotation above */}
@@ -336,7 +340,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
                       fontSize: '0.75rem', fontWeight: '600', color: '#f59e0b',
                       backgroundColor: 'rgba(245, 158, 11, 0.12)', padding: '0.15rem 0.5rem', borderRadius: '1rem',
                     }}>
-                      {pendingTasks.length} overdue
+                      {pendingLinksMissing} overdue
                     </span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

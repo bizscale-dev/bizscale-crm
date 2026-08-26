@@ -81,7 +81,13 @@ export default function TasksClient({ tasksByClient, pendingByClient = [], avail
 function PendingSection({ pendingByClient, linkTypeLabels }) {
   if (pendingByClient.length === 0) return null;
 
-  const totalCount = pendingByClient.reduce((s, c) => s + c.tasks.length, 0);
+  // The real count of still-missing links (target - completed) summed across every
+  // pending row — not just the number of distinct client/link-type rows, which
+  // undercounts whenever a row is short by more than one link.
+  const totalCount = pendingByClient.reduce(
+    (s, c) => s + c.tasks.reduce((rowSum, t) => rowSum + Math.max(0, t.target_count - t.completed_count), 0),
+    0
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

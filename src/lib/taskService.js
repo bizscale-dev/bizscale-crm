@@ -223,7 +223,7 @@ export async function generateSEOTasks(campaignId) {
                 task_date: dateStr,
                 link_type: linkType,
                 target_count: chunkSize,
-                completed_count: priorCompleted.get(priorKey) || 0
+                completed_count: Math.min(priorCompleted.get(priorKey) || 0, chunkSize)
               });
             });
           }
@@ -254,7 +254,7 @@ export async function generateSEOTasks(campaignId) {
               task_date: dateStr,
               link_type: linkType,
               target_count: chunkSize,
-              completed_count: priorCompleted.get(priorKey) || 0
+              completed_count: Math.min(priorCompleted.get(priorKey) || 0, chunkSize)
             });
           });
         }
@@ -287,7 +287,7 @@ export async function generateSEOTasks(campaignId) {
               task_date: dateStr,
               link_type: linkType,
               target_count: chunkSize,
-              completed_count: priorCompleted.get(priorKey) || 0
+              completed_count: Math.min(priorCompleted.get(priorKey) || 0, chunkSize)
             });
           });
         }
