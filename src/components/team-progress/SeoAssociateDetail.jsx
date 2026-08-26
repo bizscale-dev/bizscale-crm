@@ -457,8 +457,8 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
               Daily Summary
             </h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.75rem 0 1rem 0' }}>
-              Past days show what was actually completed on that specific day — later catch-up work
-              counts toward the day it really happened, not backdated here.
+              Each day&apos;s own assigned target vs. what was done against it specifically, not blended
+              with backlog caught up from other days.
             </p>
             {dailySummary.length === 0 ? (
               <p style={{ color: 'var(--text-muted)' }}>No tasks scheduled.</p>
@@ -476,7 +476,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
                   </thead>
                   <tbody>
                     {dailySummary.map(d => {
-                      const pct = d.target > 0 ? Math.round((d.completed / d.target) * 100) : 0;
+                      const pct = d.target > 0 ? Math.round((d.dayCompleted / d.target) * 100) : 0;
                       const isToday = d.task_date === today;
                       const isPast = d.task_date < today;
                       return (
@@ -490,7 +490,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
                               <div style={{ flex: 1, height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
                                 <div style={{ width: `${pct}%`, height: '100%', backgroundColor: 'var(--primary)' }}></div>
                               </div>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{d.completed}/{d.target} ({pct}%)</span>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{d.dayCompleted}/{d.target} ({pct}%)</span>
                             </div>
                           </td>
                         </tr>

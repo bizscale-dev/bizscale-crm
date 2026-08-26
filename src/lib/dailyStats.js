@@ -82,7 +82,16 @@ export async function getAccurateSeoDailyStats(db, { campaignId, associateId = n
       task_date: row.task_date,
       target: row.target,
       clients: row.clients,
+      // completed: own-day progress + backlog from OTHER (earlier) days resolved
+      // on this day — used for weekly/period totals, so catch-up work counts
+      // toward the day it actually happened rather than backdating into the
+      // original day. dayCompleted: just this day's own assigned rows, for a
+      // per-day "assigned today vs done today" display where blending in
+      // unrelated backlog would make the ratio against that day's own target
+      // meaningless (e.g. showing >100% from work that was never part of that
+      // day's quota to begin with).
       completed,
+      dayCompleted: ownRowCompleted,
     };
   });
 }

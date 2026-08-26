@@ -221,11 +221,12 @@ async function WeeklySummary({ campaign, db }) {
   const dailyByDate = new Map();
   for (const d of dailyStats) {
     if (!dailyByDate.has(d.task_date)) {
-      dailyByDate.set(d.task_date, { task_date: d.task_date, day_number: d.day_number, target: 0, completed: 0, clients: 0 });
+      dailyByDate.set(d.task_date, { task_date: d.task_date, day_number: d.day_number, target: 0, completed: 0, dayCompleted: 0, clients: 0 });
     }
     const entry = dailyByDate.get(d.task_date);
     entry.target += d.target;
     entry.completed += d.completed;
+    entry.dayCompleted += d.dayCompleted;
     entry.clients += d.clients;
   }
   const dailyRows = [...dailyByDate.values()].sort((a, b) => a.task_date.localeCompare(b.task_date));
@@ -310,8 +311,8 @@ async function WeeklySummary({ campaign, db }) {
         </h2>
       </div>
       <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.75rem 0 1rem 0' }}>
-        Whole team, day by day. Past days show what was actually completed on that specific day — later
-        catch-up work counts toward the day it really happened, not backdated here.
+        Whole team, day by day — each day&apos;s own assigned target vs. what was done against it specifically,
+        not blended with backlog caught up from other days.
       </p>
 
       {dailyRows.length === 0 ? (
@@ -330,7 +331,7 @@ async function WeeklySummary({ campaign, db }) {
             </thead>
             <tbody>
               {dailyRows.map(d => {
-                const pct = d.target > 0 ? Math.round((d.completed / d.target) * 100) : 0;
+                const pct = d.target > 0 ? Math.round((d.dayCompleted / d.target) * 100) : 0;
                 const isToday = d.task_date === today;
                 const isPast = d.task_date < today;
                 return (
@@ -344,7 +345,7 @@ async function WeeklySummary({ campaign, db }) {
                         <div style={{ flex: 1, height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
                           <div style={{ width: `${pct}%`, height: '100%', backgroundColor: BRAND_COLOR }}></div>
                         </div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{d.completed}/{d.target} ({pct}%)</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{d.dayCompleted}/{d.target} ({pct}%)</span>
                       </div>
                     </td>
                   </tr>
