@@ -41,7 +41,6 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   let todayTasks = [], overallStats = null, recentLogs = [], upcomingDays = [], dailySummary = [], pendingTasks = [], weeklySummary = [], funnelClients = [];
   let dateTasks = [], availableDates = [];
   let totalExpectedLinks = 0;
-  let dailyTarget = 0;
   let cumulativeByClientType = {};
 
   if (campaign) {
@@ -79,9 +78,13 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     };
     const totalMonthlyTarget = Object.values(monthlyLinkTargets).reduce((a, b) => a + b, 0);
 
-    // Calculate daily target: (total clients × total monthly per client) / 16 working days
-    totalExpectedLinks = (assignedClients?.count || 0) * totalMonthlyTarget;
-    dailyTarget = Math.round(totalExpectedLinks / 16);
+    // Funnel clients' real target (all 3 months, straight from their own seo_tasks
+    // rows) — overallStats.completed below counts every seo_tasks row for this
+    // associate including funnel ones, so funnel targets need to be included here
+    // too or Overall Target's percentage can run past 100%.
+    const funnelExpectedLinks = funnelClients.reduce((s, fc) => s + (fc.total_tasks || 0), 0);
+
+    totalExpectedLinks = (assignedClients?.count || 0) * totalMonthlyTarget + funnelExpectedLinks;
 
     todayTasks = await db.prepare(`
       SELECT st.*, c.name as client_name, c.website
@@ -213,7 +216,10 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     pendingByClient[t.client_id].tasks.push(t);
   });
 
-  const todayTarget = dailyTarget;
+  // Today's real assigned target, summed straight from today's own seo_tasks rows —
+  // not an approximation (previously totalExpectedLinks / 16, a rough average that
+  // didn't match any specific day's actual front-loaded-remainder target).
+  const todayTarget = todayTasks.reduce((s, t) => s + t.target_count, 0);
   const todayCompleted = todayTasks.reduce((s, t) => s + t.completed_count, 0);
   const overallPercent = totalExpectedLinks > 0 ? Math.round((overallStats?.completed / totalExpectedLinks) * 100) : 0;
   const todayPercent = todayTarget > 0 ? Math.round((todayCompleted / todayTarget) * 100) : 0;
