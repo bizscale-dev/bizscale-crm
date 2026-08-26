@@ -2,7 +2,7 @@ import { getDb } from '@/lib/db';
 import Link from 'next/link';
 import { getActiveCampaign, getTotalLinksPerClient } from '@/lib/services';
 import { LINK_TYPES } from '@/lib/linkTargetConstants';
-import { FUNNEL_BONUS_FIELDS } from '@/lib/funnelConstants';
+import { FUNNEL_BONUS_FIELDS, FUNNEL_MONTH1_WEEK_TARGETS } from '@/lib/funnelConstants';
 
 /**
  * The full SEO Associates listing table — Funnel Clients/Tasks breakdown, Total
@@ -25,6 +25,16 @@ export default async function SeoAssociatesTable({ basePath }) {
   const funnelBonusTargetPerClient = campaign
     ? LINK_TYPES.reduce((sum, type) => sum + (campaign[FUNNEL_BONUS_FIELDS[type]] || 0), 0)
     : 0;
+
+  // A funnel Month 1 client's fixed 4-week target (citation/profile/image/pdf across
+  // weeks 1-3, web2 in week 4 — see FUNNEL_MONTH1_WEEK_TARGETS), summed to one
+  // per-client total. Counted toward expectedTotalLinks below (unlike the comment
+  // that used to live here) since Month 1 clients' completed work IS included in
+  // lifetime_completed_links (the sheet doesn't distinguish funnel month when
+  // logging completions) — excluding Month 1's target while including its
+  // completions in the numerator was pushing Progress past 100%.
+  const funnelMonth1TargetPerClient = Object.values(FUNNEL_MONTH1_WEEK_TARGETS)
+    .reduce((sum, weekTargets) => sum + Object.values(weekTargets).reduce((s, v) => s + v, 0), 0);
 
   // Get all SEO associates with client and task information — scoped to the active
   // campaign only (a client/task from a past campaign shouldn't count here).
@@ -76,7 +86,7 @@ export default async function SeoAssociatesTable({ basePath }) {
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Total Clients</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Total Tasks Per Client</th>
                   <th colSpan={3} style={{ padding: '0.4rem 1rem 0.4rem 0', textAlign: 'center', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: '600', borderBottom: '1px solid var(--border)' }}>Funnel Clients</th>
-                  <th colSpan={2} style={{ padding: '0.4rem 1rem 0.4rem 0', textAlign: 'center', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: '600', borderBottom: '1px solid var(--border)' }}>Funnel Tasks</th>
+                  <th colSpan={3} style={{ padding: '0.4rem 1rem 0.4rem 0', textAlign: 'center', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: '600', borderBottom: '1px solid var(--border)' }}>Funnel Tasks</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Total Expected Links</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Completed</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>All-Time (Sheet)</th>
@@ -87,6 +97,7 @@ export default async function SeoAssociatesTable({ basePath }) {
                   <th style={{ padding: '0.4rem 0.5rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M1</th>
                   <th style={{ padding: '0.4rem 0.5rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M2</th>
                   <th style={{ padding: '0.4rem 1rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M3</th>
+                  <th style={{ padding: '0.4rem 0.5rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M1</th>
                   <th style={{ padding: '0.4rem 0.5rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M2</th>
                   <th style={{ padding: '0.4rem 1rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M3</th>
                 </tr>
@@ -100,9 +111,10 @@ export default async function SeoAssociatesTable({ basePath }) {
                   // rate — the "Total Clients" column displayed below folds funnel
                   // clients back in for a true headcount, but that combined number is
                   // display-only and must not feed into this formula.
+                  const funnelM1Expected = associate.funnel_m1 * funnelMonth1TargetPerClient;
                   const funnelM2Expected = associate.funnel_m2 * funnelBonusTargetPerClient;
                   const funnelM3Expected = associate.funnel_m3 * funnelBonusTargetPerClient;
-                  const expectedTotalLinks = (associate.total_clients * monthlyTargetPerClient) + funnelM2Expected + funnelM3Expected;
+                  const expectedTotalLinks = (associate.total_clients * monthlyTargetPerClient) + funnelM1Expected + funnelM2Expected + funnelM3Expected;
                   const totalClientsDisplay = associate.total_clients + associate.funnel_m1 + associate.funnel_m2 + associate.funnel_m3;
                   // seo_tasks rows (and their completed_count) get wiped and rebuilt from
                   // scratch every time a new client is onboarded (see taskService.js's
@@ -132,6 +144,7 @@ export default async function SeoAssociatesTable({ basePath }) {
                       <td style={{ padding: '0.75rem 0.5rem 0.75rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>{associate.funnel_m1 || 0}</td>
                       <td style={{ padding: '0.75rem 0.5rem 0.75rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>{associate.funnel_m2 || 0}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>{associate.funnel_m3 || 0}</td>
+                      <td style={{ padding: '0.75rem 0.5rem 0.75rem 0', textAlign: 'center', color: 'var(--primary)', fontWeight: '600' }}>{funnelM1Expected || 0}</td>
                       <td style={{ padding: '0.75rem 0.5rem 0.75rem 0', textAlign: 'center', color: 'var(--primary)', fontWeight: '600' }}>{funnelM2Expected || 0}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', textAlign: 'center', color: 'var(--primary)', fontWeight: '600' }}>{funnelM3Expected || 0}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{expectedTotalLinks}</td>
