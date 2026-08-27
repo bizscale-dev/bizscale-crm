@@ -6,7 +6,7 @@ import { FUNNEL_BONUS_FIELDS, FUNNEL_MONTH1_WEEK_TARGETS } from '@/lib/funnelCon
 
 /**
  * The full SEO Associates listing table — Funnel Clients/Tasks breakdown, Total
- * Expected Links (including funnel bonus), All-Time (Sheet), progress. Shared by
+ * Expected Links (including funnel bonus), Completed, progress. Shared by
  * the admin's own page (src/app/admin/seo-associates/page.js) and the SEO
  * Manager's equivalent (src/app/seo-manager/page.js) so both roles see the exact
  * same view — basePath controls where "View Dashboard" links to.
@@ -47,7 +47,7 @@ export default async function SeoAssociatesTable({ basePath }) {
   // deactivated, not deleted (see webClientsImport.js), and shouldn't keep
   // counting toward an associate's totals here.
   const associates = campaign ? await db.prepare(`
-    SELECT u.id, u.name, u.email, u.is_active, u.lifetime_completed_links,
+    SELECT u.id, u.name, u.email, u.is_active,
       (SELECT COUNT(*) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as total_tasks,
       (SELECT SUM(completed_count) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as completed_tasks,
       (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
@@ -89,7 +89,6 @@ export default async function SeoAssociatesTable({ basePath }) {
                   <th colSpan={3} style={{ padding: '0.4rem 1rem 0.4rem 0', textAlign: 'center', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: '600', borderBottom: '1px solid var(--border)' }}>Funnel Tasks</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Total Expected Links</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Completed</th>
-                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>All-Time (Sheet)</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Progress</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Action</th>
                 </tr>
@@ -116,13 +115,7 @@ export default async function SeoAssociatesTable({ basePath }) {
                   const funnelM3Expected = associate.funnel_m3 * funnelBonusTargetPerClient;
                   const expectedTotalLinks = (associate.total_clients * monthlyTargetPerClient) + funnelM1Expected + funnelM2Expected + funnelM3Expected;
                   const totalClientsDisplay = associate.total_clients + associate.funnel_m1 + associate.funnel_m2 + associate.funnel_m3;
-                  // seo_tasks rows (and their completed_count) get wiped and rebuilt from
-                  // scratch every time a new client is onboarded (see taskService.js's
-                  // generateSEOTasks), so completed_tasks only reflects the current
-                  // rotation cycle, not the associate's real history. lifetime_completed_links
-                  // is a running total from the sheet that's never reset — use that for the
-                  // overall progress percentage instead (same number shown in All-Time (Sheet)).
-                  const progressPercent = expectedTotalLinks > 0 ? Math.round(((associate.lifetime_completed_links || 0) / expectedTotalLinks) * 100) : 0;
+                  const progressPercent = expectedTotalLinks > 0 ? Math.round(((associate.completed_tasks || 0) / expectedTotalLinks) * 100) : 0;
                   return (
                     <tr key={associate.id} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '500', whiteSpace: 'nowrap' }}>{associate.name}</td>
@@ -149,7 +142,6 @@ export default async function SeoAssociatesTable({ basePath }) {
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', textAlign: 'center', color: 'var(--primary)', fontWeight: '600' }}>{funnelM3Expected || 0}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{expectedTotalLinks}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>{associate.completed_tasks || 0}</td>
-                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--success)', whiteSpace: 'nowrap' }}>{associate.lifetime_completed_links || 0}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <div style={{ width: '80px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
