@@ -46,10 +46,16 @@ export default async function SeoAssociatesTable({ basePath }) {
   // is_active = 1 on every count — a client removed from the import sheet is
   // deactivated, not deleted (see webClientsImport.js), and shouldn't keep
   // counting toward an associate's totals here.
+  const today = new Date().toISOString().split('T')[0];
+
   const associates = campaign ? await db.prepare(`
     SELECT u.id, u.name, u.email, u.is_active,
       (SELECT COUNT(*) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as total_tasks,
       (SELECT SUM(completed_count) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as completed_tasks,
+      (SELECT COALESCE(SUM(st.target_count - st.completed_count), 0)
+         FROM seo_tasks st JOIN clients c ON c.id = st.client_id
+         WHERE st.associate_id = u.id AND st.campaign_id = ? AND st.task_date < ?
+           AND st.completed_count < st.target_count AND c.is_active = 1) as pending_links,
       (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
          AND (tunnel_status IS NULL OR tunnel_status != 'active')) as total_clients,
       (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
@@ -61,7 +67,7 @@ export default async function SeoAssociatesTable({ basePath }) {
     FROM users u
     WHERE u.role IN ('seo_associate', 'associate')
     ORDER BY u.name ASC
-  `).all(campaign.id, campaign.id, campaign.id, campaign.id, campaign.id, campaign.id) : [];
+  `).all(campaign.id, campaign.id, campaign.id, today, campaign.id, campaign.id, campaign.id, campaign.id) : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -89,6 +95,7 @@ export default async function SeoAssociatesTable({ basePath }) {
                   <th colSpan={3} style={{ padding: '0.4rem 1rem 0.4rem 0', textAlign: 'center', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: '600', borderBottom: '1px solid var(--border)' }}>Funnel Tasks</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Total Expected Links</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Completed</th>
+                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Pending</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Progress</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Action</th>
                 </tr>
@@ -142,6 +149,7 @@ export default async function SeoAssociatesTable({ basePath }) {
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', textAlign: 'center', color: 'var(--primary)', fontWeight: '600' }}>{funnelM3Expected || 0}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{expectedTotalLinks}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>{associate.completed_tasks || 0}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: '#f59e0b', whiteSpace: 'nowrap' }}>{associate.pending_links || 0}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <div style={{ width: '80px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
