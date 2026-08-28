@@ -3,6 +3,7 @@ import { getActiveCampaign, getCampaignProgress, getLinkTargetsFromCampaign, get
 import { getAccurateSeoDailyStats } from '@/lib/dailyStats';
 import Link from 'next/link';
 import LinkTargetsManager from './LinkTargetsManager';
+import AssociateProgressList from './AssociateProgressList';
 import Logo from '@/components/Logo';
 import StatCard from '@/components/ui/StatCard';
 import PageHeader from '@/components/ui/PageHeader';
@@ -25,6 +26,7 @@ export default async function AdminDashboard() {
   let progress = null;
   let associateProgress = [];
   let writerProgress = [];
+  let dailyByAssociate = {};
 
   if (campaign) {
     progress = await getCampaignProgress(campaign.id);
@@ -39,6 +41,15 @@ export default async function AdminDashboard() {
       GROUP BY st.associate_id
       ORDER BY u.name
     `).all(campaign.id);
+
+    // Each associate's own day-by-day breakdown (own-day progress only, same
+    // dayCompleted convention as the Daily Summary tables), for the "SEO Associate
+    // Progress" card's click-to-expand daily list below.
+    const associateDailyStats = await getAccurateSeoDailyStats(db, { campaignId: campaign.id });
+    for (const row of associateDailyStats) {
+      if (!dailyByAssociate[row.associate_id]) dailyByAssociate[row.associate_id] = [];
+      dailyByAssociate[row.associate_id].push(row);
+    }
 
     writerProgress = await db.prepare(`
       SELECT u.name, u.id,
@@ -100,22 +111,7 @@ export default async function AdminDashboard() {
             {associateProgress.length === 0 ? (
               <p style={{ color: 'var(--text-muted)' }}>No associates assigned to this campaign.</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {associateProgress.slice(0, 5).map(ap => (
-                  <ProgressRow 
-                    key={ap.id} 
-                    name={ap.name} 
-                    target={ap.target} 
-                    completed={ap.completed} 
-                    color="var(--primary)" 
-                  />
-                ))}
-                {associateProgress.length > 5 && (
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.5rem' }}>
-                    +{associateProgress.length - 5} more associates
-                  </p>
-                )}
-              </div>
+              <AssociateProgressList associates={associateProgress} dailyByAssociate={dailyByAssociate} />
             )}
           </div>
 
