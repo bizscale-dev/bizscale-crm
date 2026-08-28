@@ -4,6 +4,7 @@ import { LINK_TYPES, LINK_TYPE_LABELS } from '@/lib/linkTargetConstants';
 import FunnelTemplatesClient from './FunnelTemplatesClient';
 import FunnelSettingsClient from './FunnelSettingsClient';
 import FunnelClientsTable from './FunnelClientsTable';
+import FunnelHoldClientsTable from './FunnelHoldClientsTable';
 
 export const revalidate = 0;
 
@@ -14,18 +15,30 @@ export default async function FunnelPage() {
   let funnelClients = [];
   let funnelStats = null;
   let existingTemplates = [];
+  let holdClients = [];
 
   if (campaign) {
     // All 3 funnel months are now tracked through seo_tasks (see taskService.js's
-    // generateSEOTasks) — Month 1 uses its fixed 4-week schedule, Month 2/3 use the
-    // Month 2 & 3 Bonus Link Targets, both day-distributed and Google Sheet-synced.
+    // generateSEOTasks) — Month 1 uses its fixed 4-week schedule (manually advanced
+    // week by week — see funnel_month1_start_week/current_week), Month 2/3 use the
+    // Month 2 & 3 Bonus Link Targets, all day-distributed and Google Sheet-synced.
     funnelClients = await db.prepare(`
       SELECT c.id, c.name, c.website, c.tunnel_start_date, c.funnel_month, c.assigned_associate_id,
+        c.funnel_month1_start_week, c.funnel_month1_current_week,
         (SELECT COALESCE(SUM(completed_count), 0) FROM seo_tasks WHERE client_id = c.id AND campaign_id = c.campaign_id) as completed_tasks,
         (SELECT COALESCE(SUM(target_count), 0) FROM seo_tasks WHERE client_id = c.id AND campaign_id = c.campaign_id) as total_tasks
       FROM clients c
       WHERE c.campaign_id = ? AND c.tunnel_status = 'active' AND c.is_active = 1
       ORDER BY c.tunnel_start_date DESC
+    `).all(campaign.id);
+
+    // Newly-discovered clients sit here — zero tasks, awaiting a manual decision
+    // (see src/lib/funnel.js) — instead of auto-enrolling into the Funnel.
+    holdClients = await db.prepare(`
+      SELECT id, name, website, assigned_associate_id
+      FROM clients
+      WHERE campaign_id = ? AND tunnel_status = 'hold' AND is_active = 1
+      ORDER BY id DESC
     `).all(campaign.id);
 
     const funnelSeoStats = await db.prepare(`
@@ -68,11 +81,12 @@ export default async function FunnelPage() {
           <div>
             <h1 style={{ fontSize: '1.75rem', margin: 0, marginBottom: '0.5rem' }}>Funnel</h1>
             <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-              New clients onboard through a 3-month program, tracked day-by-day and Google Sheet-synced the same
-              way as a normal client. Month 1 runs a fixed 4-week schedule (citations, profiles, image and PDF
-              submissions each week, Web 2.0 on the single last day). Months 2 &amp; 3 use the campaign&apos;s
-              Month 2 &amp; 3 Bonus Link Targets as that month&apos;s target. Clients advance automatically each
-              day and graduate to the main campaign after Month 3.
+              New clients land on hold with zero tasks until manually placed. Once placed, a client onboards
+              through a 3-month program, tracked day-by-day and Google Sheet-synced the same way as a normal
+              client. Month 1 runs a fixed 4-week schedule (citations, profiles, image and PDF submissions each
+              week, Web 2.0 on the single last day) — advanced one week at a time, manually. Months 2 &amp; 3 use
+              the campaign&apos;s Month 2 &amp; 3 Bonus Link Targets as that month&apos;s target. Every
+              advance — week, month, or graduation to the main campaign — is a manual action here, not automatic.
             </p>
           </div>
 
@@ -109,6 +123,19 @@ export default async function FunnelPage() {
                 {funnelStats?.pending_tasks || 0}
               </div>
             </div>
+          </div>
+
+          <div className="card" style={{ border: '1px solid #f59e0b' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+              <h2 style={{ fontSize: '1.25rem', margin: 0, color: '#f59e0b' }}>On Hold</h2>
+              <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{holdClients.length} awaiting placement</span>
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0 0 1.5rem 0' }}>
+              Newly-discovered clients land here with zero tasks instead of auto-joining the Funnel. Place each
+              one into Funnel Month 1 (optionally starting past week 1, if some of their work already happened
+              outside the system) whenever you&apos;re ready.
+            </p>
+            <FunnelHoldClientsTable holdClients={holdClients} campaignId={campaign.id} />
           </div>
 
           <div className="card">

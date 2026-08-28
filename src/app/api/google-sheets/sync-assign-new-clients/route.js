@@ -1,7 +1,6 @@
 import { getDb, initDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { generateSEOTasks } from '@/lib/taskService';
-import { enrollClientInFunnel } from '@/lib/funnel';
 
 // 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
 // for why this matters (a killed function fails silently with no error surfaced). This
@@ -163,15 +162,15 @@ export async function POST(request) {
         const assignedAssociateId = clientAssignmentMap[clientData.name] || null;
         const assignedWriterId = clientWriterMap[clientData.name] || null;
 
-        // Add client to database with sort_order, assigned associate, and writer
+        // Add client to database with sort_order, assigned associate, and writer.
+        // tunnel_status = 'hold' — a newly-discovered client sits on hold with zero
+        // tasks until an admin manually places them into the Funnel (or straight
+        // into the normal rotation) from /admin/funnel. No more automatic
+        // enrollment (see src/lib/funnel.js's enrollClientInFunnel).
         const insertResult = await db.prepare(`
-          INSERT INTO clients (campaign_id, name, website, is_active, sort_order, assigned_associate_id, assigned_writer_id)
-          VALUES (?, ?, ?, 1, ?, ?, ?)
+          INSERT INTO clients (campaign_id, name, website, is_active, sort_order, assigned_associate_id, assigned_writer_id, tunnel_status)
+          VALUES (?, ?, ?, 1, ?, ?, ?, 'hold')
         `).run(campaign.id, clientData.name, clientData.website || '', maxSortOrder, assignedAssociateId, assignedWriterId);
-
-        // Newly-discovered clients go through the Funnel onboarding checklist instead
-        // of straight into the regular task rotation.
-        await enrollClientInFunnel(insertResult.lastInsertRowid, campaign.id);
 
         results.clientsAdded++;
 

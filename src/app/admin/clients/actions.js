@@ -2,7 +2,6 @@
 
 import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
-import { enrollClientInFunnel } from '@/lib/funnel';
 import { revalidatePath } from 'next/cache';
 
 export async function triggerManualSync(campaignId) {
@@ -123,19 +122,16 @@ export async function createClient(formData) {
       sortOrder = parseInt(sortOrder);
     }
 
+    // tunnel_status = 'hold' — sits with zero tasks until manually placed into the
+    // Funnel (or straight into the normal rotation) from /admin/funnel.
     const result = await db.prepare(`
-      INSERT INTO clients (campaign_id, name, website, niche, sort_order, notes, is_active)
-      VALUES (?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO clients (campaign_id, name, website, niche, sort_order, notes, is_active, tunnel_status)
+      VALUES (?, ?, ?, ?, ?, ?, 1, 'hold')
     `).run(campaign.id, name, website || null, niche || null, sortOrder, notes || null);
-
-    const clientId = result.lastInsertRowid;
-
-    // New clients go through the Funnel onboarding checklist, not straight into the main campaign.
-    await enrollClientInFunnel(clientId, campaign.id);
 
     revalidatePath('/admin/clients');
     revalidatePath('/admin/funnel');
-    return { success: 'Client added to the Funnel successfully' };
+    return { success: 'Client added — on hold until placed into the Funnel or a client list' };
   } catch (error) {
     console.error('Create client error:', error);
     return { error: error.message };

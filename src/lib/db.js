@@ -134,6 +134,14 @@ async function runMigrations(raw) {
     // report can break out funnel work without re-deriving it from current (possibly
     // since-changed) client state.
     "ALTER TABLE daily_activity_log ADD COLUMN is_funnel INTEGER NOT NULL DEFAULT 0",
+    // Manual week-by-week control within Funnel Month 1 (tunnel_status='active',
+    // funnel_month=1) — see src/lib/funnel.js. start_week is fixed at enrollment
+    // (weeks before it never get seo_tasks rows); current_week advances one at a
+    // time via the admin's manual action and gates how far generateSEOTasks goes —
+    // weeks between start and current (inclusive) all get generated, so advancing
+    // preserves prior weeks' history instead of replacing it.
+    "ALTER TABLE clients ADD COLUMN funnel_month1_start_week INTEGER",
+    "ALTER TABLE clients ADD COLUMN funnel_month1_current_week INTEGER",
   ];
 
   for (const sql of alterStatements) {

@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { moveFunnelClientToNormalAction, moveFunnelClientsToNormalAction, jumpFunnelClientToMonthAction } from './actions';
+import { moveFunnelClientToNormalAction, moveFunnelClientsToNormalAction, jumpFunnelClientToMonthAction, advanceMonth1WeekAction } from './actions';
 
 const BRAND_COLOR = '#16b293';
 
@@ -33,6 +33,21 @@ export default function FunnelClientsTable({ funnelClients }) {
         setMessage({ type: 'error', text: result.error });
       } else {
         setSelected(current => current.filter(x => x !== clientId));
+        router.refresh();
+      }
+    });
+  };
+
+  const handleAdvanceWeek = (clientId, clientName, nextWeek) => {
+    if (!confirm(`Advance "${clientName}" to Week ${nextWeek}? Their earlier week(s) stay recorded — this just opens up Week ${nextWeek}'s tasks.`)) return;
+
+    setMessage(null);
+    startTransition(async () => {
+      const result = await advanceMonth1WeekAction(clientId);
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error });
+      } else {
+        setMessage({ type: 'success', text: result.success });
         router.refresh();
       }
     });
@@ -152,6 +167,7 @@ export default function FunnelClientsTable({ funnelClients }) {
                       fontWeight: '600'
                     }}>
                       Month {client.funnel_month} of 3
+                      {client.funnel_month === 1 && ` — Week ${client.funnel_month1_current_week || client.funnel_month1_start_week || 1} of 4`}
                     </span>
                   </td>
                   <td style={{ padding: '0.75rem 0' }}>
@@ -178,6 +194,26 @@ export default function FunnelClientsTable({ funnelClients }) {
                       }}>
                         View Details
                       </Link>
+                      {client.funnel_month === 1 && (client.funnel_month1_current_week || client.funnel_month1_start_week || 1) < 4 && (
+                        <button
+                          type="button"
+                          onClick={() => handleAdvanceWeek(client.id, client.name, (client.funnel_month1_current_week || client.funnel_month1_start_week || 1) + 1)}
+                          disabled={isPending}
+                          style={{
+                            padding: '0.4rem 0.75rem',
+                            backgroundColor: 'transparent',
+                            border: '1px solid #f59e0b',
+                            color: '#f59e0b',
+                            borderRadius: '0.25rem',
+                            fontSize: '0.75rem',
+                            fontWeight: '500',
+                            cursor: isPending ? 'not-allowed' : 'pointer',
+                            opacity: isPending ? 0.6 : 1
+                          }}
+                        >
+                          Advance to Week {(client.funnel_month1_current_week || client.funnel_month1_start_week || 1) + 1}
+                        </button>
+                      )}
                       {[2, 3].filter(m => m > client.funnel_month).map(m => (
                         <button
                           key={m}

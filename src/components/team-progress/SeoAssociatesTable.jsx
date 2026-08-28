@@ -57,7 +57,9 @@ export default async function SeoAssociatesTable({ basePath }) {
          WHERE st.associate_id = u.id AND st.campaign_id = ? AND st.task_date < ?
            AND st.completed_count < st.target_count AND c.is_active = 1) as pending_links,
       (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
-         AND (tunnel_status IS NULL OR tunnel_status != 'active')) as total_clients,
+         AND (tunnel_status IS NULL OR tunnel_status NOT IN ('active', 'hold'))) as total_clients,
+      (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
+         AND tunnel_status = 'hold') as held_clients,
       (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
          AND tunnel_status = 'active' AND funnel_month = 1) as funnel_m1,
       (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
@@ -67,7 +69,7 @@ export default async function SeoAssociatesTable({ basePath }) {
     FROM users u
     WHERE u.role IN ('seo_associate', 'associate')
     ORDER BY u.name ASC
-  `).all(campaign.id, campaign.id, campaign.id, today, campaign.id, campaign.id, campaign.id, campaign.id) : [];
+  `).all(campaign.id, campaign.id, campaign.id, today, campaign.id, campaign.id, campaign.id, campaign.id, campaign.id) : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -90,6 +92,7 @@ export default async function SeoAssociatesTable({ basePath }) {
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Email</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Status</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Total Clients</th>
+                  <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>On Hold</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Total Tasks Per Client</th>
                   <th colSpan={3} style={{ padding: '0.4rem 1rem 0.4rem 0', textAlign: 'center', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: '600', borderBottom: '1px solid var(--border)' }}>Funnel Clients</th>
                   <th colSpan={3} style={{ padding: '0.4rem 1rem 0.4rem 0', textAlign: 'center', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: '600', borderBottom: '1px solid var(--border)' }}>Funnel Tasks</th>
@@ -140,6 +143,7 @@ export default async function SeoAssociatesTable({ basePath }) {
                         </span>
                       </td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{totalClientsDisplay}</td>
+                      <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: '#f59e0b', whiteSpace: 'nowrap' }}>{associate.held_clients || 0}</td>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--success)', whiteSpace: 'nowrap' }}>{monthlyTargetPerClient}</td>
                       <td style={{ padding: '0.75rem 0.5rem 0.75rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>{associate.funnel_m1 || 0}</td>
                       <td style={{ padding: '0.75rem 0.5rem 0.75rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>{associate.funnel_m2 || 0}</td>

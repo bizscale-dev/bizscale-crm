@@ -38,8 +38,11 @@ export async function generateSEOTasks(campaignId) {
   // 1 (fixed 4-week reference schedule), Month 2/3 (bonus-field-sourced monthly
   // target), and normal clients (campaign's normal monthly target) all get real
   // day-distributed, sheet-synced seo_tasks rows, just with different targets.
+  // tunnel_status = 'hold' clients are excluded entirely — a newly-discovered
+  // client sits on hold with zero tasks until an admin manually places them into
+  // the Funnel (or straight into the normal rotation) — see src/lib/funnel.js.
   const clients = await db.prepare(`
-    SELECT * FROM clients WHERE campaign_id = ? AND is_active = 1
+    SELECT * FROM clients WHERE campaign_id = ? AND is_active = 1 AND (tunnel_status IS NULL OR tunnel_status != 'hold')
     ORDER BY sort_order, id
   `).all(campaignId);
 
@@ -99,7 +102,7 @@ export async function generateSEOTasks(campaignId) {
     SELECT c.*, u.id as associate_id
     FROM clients c
     LEFT JOIN users u ON u.id = c.assigned_associate_id
-    WHERE c.campaign_id = ? AND c.is_active = 1
+    WHERE c.campaign_id = ? AND c.is_active = 1 AND (c.tunnel_status IS NULL OR c.tunnel_status != 'hold')
     ORDER BY c.sort_order
   `).all(campaignId);
 
@@ -200,7 +203,17 @@ export async function generateSEOTasks(campaignId) {
           occurrencesByWeek.get(occurrence.week).push(occurrence);
         }
 
+        // Manual week-by-week control (see advanceMonth1Week in src/lib/funnel.js):
+        // only weeks from this client's start week through their current week
+        // (inclusive) ever get task rows — weeks before start never existed for
+        // this client, weeks after current haven't been reached yet. Both default
+        // to week 1 for a normal enrollment (all 4 weeks still generate as before
+        // once current_week is advanced up to 4).
+        const month1StartWeek = client.funnel_month1_start_week || 1;
+        const month1CurrentWeek = client.funnel_month1_current_week || month1StartWeek;
+
         for (const [week, weekOccurrences] of occurrencesByWeek.entries()) {
+          if (week < month1StartWeek || week > month1CurrentWeek) continue;
           const weekTargets = FUNNEL_MONTH1_WEEK_TARGETS[week] || {};
 
           for (const linkType of LINK_TYPES) {

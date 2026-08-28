@@ -45,12 +45,12 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
 
   if (campaign) {
     // Get clients assigned to this associate — excludes clients currently in the
-    // Funnel, since they don't get regular seo_tasks and shouldn't count toward
-    // this associate's regular link quota.
+    // Funnel (no regular seo_tasks) and clients still on hold (no tasks at all
+    // yet), neither of which should count toward this associate's regular quota.
     const assignedClients = await db.prepare(`
       SELECT COUNT(*) as count FROM clients
       WHERE assigned_associate_id = ? AND campaign_id = ?
-        AND (tunnel_status IS NULL OR tunnel_status != 'active')
+        AND (tunnel_status IS NULL OR tunnel_status NOT IN ('active', 'hold'))
     `).get(associateId, campaign.id);
 
     // Clients currently in the Funnel, shown separately since they work a different

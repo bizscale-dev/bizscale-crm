@@ -2,7 +2,7 @@
 
 import { getDb } from '@/lib/db';
 import { LINK_TYPES } from '@/lib/linkTargetConstants';
-import { enrollClientInFunnel, advanceOneFunnelClient, jumpFunnelClientToMonth, graduateFunnelClientNow, graduateFunnelClientsNow } from '@/lib/funnel';
+import { enrollClientInFunnel, advanceOneFunnelClient, advanceMonth1Week, jumpFunnelClientToMonth, graduateFunnelClientNow, graduateFunnelClientsNow, enrollHeldClientAtMonth, moveHeldClientToNormal } from '@/lib/funnel';
 import { revalidatePath } from 'next/cache';
 
 export async function addFunnelTemplate(campaignId, templateData) {
@@ -50,12 +50,64 @@ export async function deleteFunnelTemplate(templateId) {
   }
 }
 
-export async function enrollClientInFunnelAction(clientId, campaignId) {
+export async function enrollClientInFunnelAction(clientId, campaignId, startWeek = 1) {
   try {
-    await enrollClientInFunnel(clientId, campaignId);
+    await enrollClientInFunnel(clientId, campaignId, undefined, startWeek);
     revalidatePath('/admin/funnel');
     revalidatePath('/admin/clients');
-    return { success: 'Client enrolled in Funnel' };
+    revalidatePath('/admin/tasks');
+    return { success: `Client enrolled in Funnel Month 1${startWeek > 1 ? `, starting at Week ${startWeek}` : ''}` };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+// Manual escape hatch: advance a Month 1 client's current week by one (see
+// advanceMonth1Week in src/lib/funnel.js) instead of waiting for a manual month-level
+// advance — prior weeks' history stays generated, only the current week moves forward.
+export async function advanceMonth1WeekAction(clientId) {
+  try {
+    const result = await advanceMonth1Week(clientId);
+    if (!result.advanced) {
+      return { error: result.error || 'Could not advance week' };
+    }
+    revalidatePath('/admin/funnel');
+    revalidatePath('/admin/tasks');
+    return { success: `Client advanced to Week ${result.newWeek}` };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+// A held client can skip straight to Funnel Month 2 or 3 instead of starting at
+// Month 1 — used by the "On Hold" section's Month 2/3 buttons.
+export async function enrollHeldClientAtMonthAction(clientId, campaignId, targetMonth) {
+  try {
+    const result = await enrollHeldClientAtMonth(clientId, campaignId, targetMonth);
+    if (!result.moved) {
+      return { error: result.error || 'Could not move client' };
+    }
+    revalidatePath('/admin/funnel');
+    revalidatePath('/admin/clients');
+    revalidatePath('/admin/tasks');
+    return { success: `Client placed directly into Month ${result.newMonth} (${result.tasksCreated} tasks created)` };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+// A held client can also skip the Funnel entirely and go straight into the normal
+// client list — used by the "On Hold" section's "Move to Regular Clients" button.
+export async function moveHeldClientToNormalAction(clientId, campaignId) {
+  try {
+    const result = await moveHeldClientToNormal(clientId, campaignId);
+    if (!result.moved) {
+      return { error: result.error || 'Could not move client' };
+    }
+    revalidatePath('/admin/funnel');
+    revalidatePath('/admin/clients');
+    revalidatePath('/admin/tasks');
+    return { success: 'Client moved to the normal client list' };
   } catch (err) {
     return { error: err.message };
   }

@@ -45,12 +45,18 @@ export async function seedMonth1TemplatesIfMissing(campaignId) {
 /**
  * Enroll a client into the Funnel: sets month-1 window on the client row, seeds the
  * campaign's reference template library if missing, then regenerates seo_tasks so the
- * client immediately gets real Week 1 tasks — day-distributed and Google Sheet-synced,
+ * client immediately gets real tasks — day-distributed and Google Sheet-synced,
  * same pipeline as every other client (see generateSEOTasks's Month 1 handling in
  * taskService.js). No more tunnel_tasks checklist instantiation.
+ *
+ * startWeek (1-4) is where the client begins — weeks before it are never generated
+ * for this client (see advanceMonth1Week for moving forward one week at a time
+ * afterward). Defaults to 1, the normal case.
  */
-export async function enrollClientInFunnel(clientId, campaignId, enrollDate = todayStr()) {
+export async function enrollClientInFunnel(clientId, campaignId, enrollDate = todayStr(), startWeek = 1) {
   const db = await getDb();
+
+  const week = [1, 2, 3, 4].includes(startWeek) ? startWeek : 1;
 
   await seedMonth1TemplatesIfMissing(campaignId);
 
@@ -62,9 +68,10 @@ export async function enrollClientInFunnel(clientId, campaignId, enrollDate = to
   await db.prepare(`
     UPDATE clients
     SET tunnel_status = 'active', tunnel_start_date = ?, funnel_month = 1,
-        funnel_month_end_date = ?, funnel_cycle_index_at_enroll = ?
+        funnel_month_end_date = ?, funnel_cycle_index_at_enroll = ?,
+        funnel_month1_start_week = ?, funnel_month1_current_week = ?
     WHERE id = ?
-  `).run(enrollDate, monthEndDate, cycleIndexAtEnroll, clientId);
+  `).run(enrollDate, monthEndDate, cycleIndexAtEnroll, week, week, clientId);
 
   await generateSEOTasks(campaignId);
 
@@ -73,6 +80,92 @@ export async function enrollClientInFunnel(clientId, campaignId, enrollDate = to
   ).get(campaignId, clientId);
 
   return { monthEndDate, tasksCreated };
+}
+
+/**
+ * Advance a Month 1 client's CURRENT week by one (1→2→3→4) — manual only, mirrors
+ * the month-level "force advance" action. Weeks between the client's start week and
+ * their new current week (inclusive) all stay generated, so earlier weeks' history
+ * is preserved rather than replaced — only weeks before the original start week are
+ * ever excluded. Once already at week 4, use advanceOneFunnelClient instead to move
+ * into Month 2.
+ */
+export async function advanceMonth1Week(clientId) {
+  const db = await getDb();
+  const client = await db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
+  if (!client || client.tunnel_status !== 'active' || client.funnel_month !== 1) {
+    return { advanced: false, error: 'Client is not currently on Month 1 of the funnel' };
+  }
+
+  const currentWeek = client.funnel_month1_current_week || client.funnel_month1_start_week || 1;
+  if (currentWeek >= 4) {
+    return { advanced: false, error: 'Already at week 4 — use "Move to Month 2" instead' };
+  }
+
+  const nextWeek = currentWeek + 1;
+  await db.prepare('UPDATE clients SET funnel_month1_current_week = ? WHERE id = ?').run(nextWeek, clientId);
+  await generateSEOTasks(client.campaign_id);
+
+  return { advanced: true, newWeek: nextWeek };
+}
+
+/**
+ * Place a held client (tunnel_status='hold') directly into Funnel Month 2 or 3,
+ * skipping Month 1 (and, for Month 3, Month 2) entirely — those skipped months'
+ * tasks are never generated for this client. Their window is computed fresh from
+ * today, same as a normal first-time enrollment (see computeFunnelMonth1Window) —
+ * there's no real "prior month" to chain from since they were never actually in
+ * an earlier month.
+ */
+export async function enrollHeldClientAtMonth(clientId, campaignId, targetMonth, enrollDate = todayStr()) {
+  if (![2, 3].includes(targetMonth)) {
+    return { moved: false, error: 'Target month must be 2 or 3' };
+  }
+
+  const db = await getDb();
+  const client = await db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
+  if (!client || client.tunnel_status !== 'hold') {
+    return { moved: false, error: 'Client is not currently on hold' };
+  }
+
+  const campaign = await db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
+  if (!campaign) return { moved: false, error: 'Campaign not found' };
+
+  const { monthEndDate, cycleIndexAtEnroll } = computeFunnelMonth1Window(campaign.start_date, enrollDate);
+
+  await db.prepare(`
+    UPDATE clients
+    SET tunnel_status = 'active', tunnel_start_date = ?, funnel_month = ?,
+        funnel_month_end_date = ?, funnel_cycle_index_at_enroll = ?,
+        funnel_month1_start_week = NULL, funnel_month1_current_week = NULL
+    WHERE id = ?
+  `).run(enrollDate, targetMonth, monthEndDate, cycleIndexAtEnroll, clientId);
+
+  await generateSEOTasks(campaignId);
+
+  const { count: tasksCreated } = await db.prepare(
+    'SELECT COUNT(*) as count FROM seo_tasks WHERE campaign_id = ? AND client_id = ?'
+  ).get(campaignId, clientId);
+
+  return { moved: true, newMonth: targetMonth, tasksCreated };
+}
+
+/**
+ * Move a held client (tunnel_status='hold') straight into the normal client list,
+ * skipping the Funnel entirely — they'll get the campaign's normal monthly link
+ * targets on the regular rotation, same as any other non-funnel client.
+ */
+export async function moveHeldClientToNormal(clientId, campaignId) {
+  const db = await getDb();
+  const client = await db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
+  if (!client || client.tunnel_status !== 'hold') {
+    return { moved: false, error: 'Client is not currently on hold' };
+  }
+
+  await db.prepare("UPDATE clients SET tunnel_status = 'none' WHERE id = ?").run(clientId);
+  await generateSEOTasks(campaignId);
+
+  return { moved: true };
 }
 
 /**
@@ -88,8 +181,11 @@ async function moveClientIntoBonusMonth(client, campaign, targetMonth, { skipReg
   const db = await getDb();
   const { monthEndDate } = computeFunnelNextMonthWindow(campaign.start_date, client.funnel_month_end_date, targetMonth);
 
-  await db.prepare('UPDATE clients SET funnel_month = ?, funnel_month_end_date = ? WHERE id = ?')
-    .run(targetMonth, monthEndDate, client.id);
+  await db.prepare(`
+    UPDATE clients SET funnel_month = ?, funnel_month_end_date = ?,
+      funnel_month1_start_week = NULL, funnel_month1_current_week = NULL
+    WHERE id = ?
+  `).run(targetMonth, monthEndDate, client.id);
 
   if (skipRegeneration) return { newMonth: targetMonth, tasksCreated: null };
 
@@ -122,7 +218,8 @@ export async function advanceOneFunnelClient(clientId, { skipRegeneration = fals
 
   if (client.funnel_month === 3) {
     await db.prepare(`
-      UPDATE clients SET tunnel_status = 'completed', funnel_month = NULL, funnel_month_end_date = NULL WHERE id = ?
+      UPDATE clients SET tunnel_status = 'completed', funnel_month = NULL, funnel_month_end_date = NULL,
+        funnel_month1_start_week = NULL, funnel_month1_current_week = NULL WHERE id = ?
     `).run(clientId);
     return { advanced: true, graduated: true };
   }
