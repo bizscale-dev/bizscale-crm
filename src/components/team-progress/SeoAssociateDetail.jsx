@@ -227,6 +227,11 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   // pending row — not just the number of distinct client/link-type rows, which
   // undercounts whenever a row is short by more than one link.
   const pendingLinksMissing = pendingTasks.reduce((s, t) => s + Math.max(0, t.target_count - t.completed_count), 0);
+  // On-time completions: work done on the same day it was assigned, summed across
+  // the whole campaign so far (dayCompleted per day — see src/lib/dailyStats.js).
+  // Catch-up work done later against an overdue row is never counted here, only
+  // against whichever day it actually happened on.
+  const onTimeCompletion = dailySummary.reduce((s, d) => s + d.dayCompleted, 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -258,10 +263,11 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
         <>
           {/* Stats Row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+            <StatCard title="On Time Completion" value={onTimeCompletion} sub="done on the day it was assigned" color="#16b293" />
             <StatCard title="Today's Target" value={todayTarget} sub={`${todayCompleted} completed (${todayPercent}%)`} color="var(--primary)" />
             <StatCard title="Overall Target" value={totalExpectedLinks} sub={`${overallStats?.completed || 0} completed (${overallPercent}%)`} color="var(--success)" />
+            <StatCard title="Percentage Completion" value={`${overallPercent}%`} sub={`${overallStats?.completed || 0} / ${totalExpectedLinks} tasks`} color="var(--success)" />
             <StatCard title="Upcoming Days" value={upcomingDays.length} sub="remaining days with tasks" color="#f59e0b" />
-            <StatCard title="All-Time Completed (Sheet)" value={associate.lifetime_completed_links || 0} sub="across all assigned clients, live from sheet" color="#16b293" />
             <StatCard title="Pending Tasks" value={pendingLinksMissing} sub="overdue, not yet completed" color="#f59e0b" />
           </div>
 
