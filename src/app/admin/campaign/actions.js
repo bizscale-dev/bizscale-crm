@@ -129,6 +129,22 @@ export async function activateCampaign(id) {
   }
 }
 
+// Manual only — no automatic date-based completion. Just flips status; doesn't
+// touch clients, tasks, or any other data, so a completed campaign's real
+// numbers stay intact and viewable on its detail page (/admin/campaign/[id]).
+export async function markCampaignCompleted(id) {
+  const db = await getDb();
+  try {
+    await db.prepare("UPDATE campaigns SET status = 'completed' WHERE id = ?").run(id);
+
+    revalidatePath('/admin/campaign');
+    revalidatePath('/admin');
+    return { success: 'Campaign marked as completed' };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
 export async function deleteCampaign(id) {
   const db = await getDb();
   try {

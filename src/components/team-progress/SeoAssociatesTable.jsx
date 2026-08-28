@@ -7,16 +7,20 @@ import { FUNNEL_BONUS_FIELDS, FUNNEL_MONTH1_WEEK_TARGETS } from '@/lib/funnelCon
 /**
  * The full SEO Associates listing table — Funnel Clients/Tasks breakdown, Total
  * Expected Links (including funnel bonus), Completed, progress. Shared by
- * the admin's own page (src/app/admin/seo-associates/page.js) and the SEO
- * Manager's equivalent (src/app/seo-manager/page.js) so both roles see the exact
- * same view — basePath controls where "View Dashboard" links to.
+ * the admin's own page (src/app/admin/seo-associates/page.js), the SEO
+ * Manager's equivalent (src/app/seo-manager/page.js), and a specific past
+ * campaign's read-only report (src/app/admin/campaign/[id]/page.js) — basePath
+ * controls where "View Dashboard" links to (omit to hide that action entirely,
+ * since a past campaign's associate dashboards would otherwise misleadingly show
+ * the currently-active campaign's live data instead). Pass campaign to scope to
+ * a specific one instead of always the active campaign.
  */
-export default async function SeoAssociatesTable({ basePath }) {
+export default async function SeoAssociatesTable({ basePath, campaign: campaignProp }) {
   const db = await getDb();
 
-  // Monthly target per client comes from the active campaign's configured link
+  // Monthly target per client comes from the given campaign's configured link
   // targets (web2 + guestpost + pdf + profile + citation + image), not a fixed number.
-  const campaign = await getActiveCampaign();
+  const campaign = campaignProp || await getActiveCampaign();
   const monthlyTargetPerClient = campaign ? getTotalLinksPerClient(campaign) : 0;
 
   // A funnel Month 2/3 client's target is the campaign's Month 2 & 3 Bonus Link
@@ -80,7 +84,7 @@ export default async function SeoAssociatesTable({ basePath }) {
         </div>
 
         {!campaign ? (
-          <p style={{ color: 'var(--danger)', margin: 0 }}>No active campaign.</p>
+          <p style={{ color: 'var(--danger)', margin: 0 }}>{campaignProp ? 'Campaign not found.' : 'No active campaign.'}</p>
         ) : associates.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', margin: 0 }}>No SEO associates found.</p>
         ) : (
@@ -100,7 +104,9 @@ export default async function SeoAssociatesTable({ basePath }) {
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Completed</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Pending</th>
                   <th rowSpan={2} style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Progress</th>
-                  <th rowSpan={2} style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Action</th>
+                  {basePath && (
+                    <th rowSpan={2} style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>Action</th>
+                  )}
                 </tr>
                 <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                   <th style={{ padding: '0.4rem 0.5rem 0.75rem 0', textAlign: 'center', fontSize: '0.7rem', fontWeight: '600' }}>M1</th>
@@ -162,23 +168,25 @@ export default async function SeoAssociatesTable({ basePath }) {
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{progressPercent}%</span>
                         </div>
                       </td>
-                      <td style={{ padding: '0.75rem 0' }}>
-                        <Link href={`${basePath}/${associate.id}`} style={{
-                          padding: '0.4rem 0.75rem',
-                          backgroundColor: 'var(--primary)',
-                          color: 'white',
-                          textDecoration: 'none',
-                          borderRadius: '0.25rem',
-                          fontSize: '0.75rem',
-                          fontWeight: '500',
-                          transition: 'opacity 0.2s',
-                          display: 'inline-block',
-                          cursor: 'pointer',
-                          border: 'none'
-                        }}>
-                          View Dashboard
-                        </Link>
-                      </td>
+                      {basePath && (
+                        <td style={{ padding: '0.75rem 0' }}>
+                          <Link href={`${basePath}/${associate.id}`} style={{
+                            padding: '0.4rem 0.75rem',
+                            backgroundColor: 'var(--primary)',
+                            color: 'white',
+                            textDecoration: 'none',
+                            borderRadius: '0.25rem',
+                            fontSize: '0.75rem',
+                            fontWeight: '500',
+                            transition: 'opacity 0.2s',
+                            display: 'inline-block',
+                            cursor: 'pointer',
+                            border: 'none'
+                          }}>
+                            View Dashboard
+                          </Link>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

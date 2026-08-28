@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import CampaignForm from './CampaignForm';
-import { activateCampaign, deleteCampaign } from './actions';
+import { activateCampaign, deleteCampaign, markCampaignCompleted } from './actions';
 import { useRouter } from 'next/navigation';
 import Badge from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
@@ -16,6 +17,24 @@ const STATUS_TONES = {
 export default function CampaignList({ campaigns, activeCampaignId }) {
   const [editingId, setEditingId] = useState(null);
   const router = useRouter();
+
+  const handleMarkCompleted = async (id, name, isActive) => {
+    const warning = isActive
+      ? `Mark "${name}" as completed? It's currently the active campaign — until you activate another one, nothing will be active (syncs and task generation stop). Its data stays fully viewable, just click through to view it.`
+      : `Mark "${name}" as completed? This is manual only — no data is touched, it stays fully viewable.`;
+    if (!confirm(warning)) return;
+
+    try {
+      const result = await markCampaignCompleted(id);
+      if (result.success) {
+        router.refresh();
+      } else if (result.error) {
+        alert('Error: ' + result.error);
+      }
+    } catch (err) {
+      alert('Error marking campaign completed: ' + err.message);
+    }
+  };
 
   const handleDelete = async (id, name) => {
     if (!confirm(`Are you sure you want to delete the campaign "${name}"? This will delete all associated clients, tasks, and assignments. This action cannot be undone.`)) {
@@ -82,12 +101,26 @@ export default function CampaignList({ campaigns, activeCampaignId }) {
                 <td style={tdStyle}>{c.total_days}</td>
                 <td style={tdStyle}>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <Link
+                      href={`/admin/campaign/${c.id}`}
+                      className="btn"
+                      style={{ ...actionBtnStyle('transparent', 'var(--primary)', true), textDecoration: 'none', display: 'inline-block' }}>
+                      View
+                    </Link>
                     {c.status !== 'active' && (
                       <button
                         onClick={() => activateCampaign(c.id)}
                         className="btn"
                         style={actionBtnStyle('var(--success)', 'white')}>
                         Activate
+                      </button>
+                    )}
+                    {c.status !== 'completed' && (
+                      <button
+                        onClick={() => handleMarkCompleted(c.id, c.name, isActive)}
+                        className="btn"
+                        style={actionBtnStyle('transparent', 'var(--text-muted)', true)}>
+                        Mark Completed
                       </button>
                     )}
                     <button
