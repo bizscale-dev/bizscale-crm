@@ -54,70 +54,78 @@ export async function submitEodReport(entries) {
     return { error: 'Add at least one entry before submitting' };
   }
 
-  const db = await getDb();
+  try {
+    const db = await getDb();
 
-  const cleaned = [];
-  for (const entry of entries) {
-    const webClientId = parseInt(entry?.webClientId, 10) || 0;
-    const pageUrl = (entry?.pageUrl || '').trim();
-    const workDone = (entry?.workDone || '').trim();
-    const description = (entry?.description || '').trim();
+    const cleaned = [];
+    for (const entry of entries) {
+      const webClientId = parseInt(entry?.webClientId, 10) || 0;
+      const pageUrl = (entry?.pageUrl || '').trim();
+      const workDone = (entry?.workDone || '').trim();
+      const description = (entry?.description || '').trim();
 
-    if (!workDone) {
-      return { error: 'Every entry needs the work done filled in' };
+      if (!workDone) {
+        return { error: 'Every entry needs the work done filled in' };
+      }
+
+      let webClientName;
+      if (webClientId === 0) {
+        // No real web_clients row — a manually typed heading instead. There's nothing
+        // to resolve server-side, so trust what the manager typed (still required).
+        webClientName = (entry?.webClientName || '').trim();
+        if (!webClientName) {
+          return { error: 'Every entry needs a web client or a heading' };
+        }
+      } else {
+        // Resolve the name server-side rather than trusting what the browser sent, since
+        // it's stored permanently on the entry row.
+        const client = await db.prepare('SELECT id, business_name, name FROM web_clients WHERE id = ?').get(webClientId);
+        if (!client) {
+          return { error: 'One of the selected web clients no longer exists' };
+        }
+        webClientName = client.business_name || client.name;
+      }
+
+      cleaned.push({
+        webClientId,
+        webClientName,
+        pageUrl: pageUrl || null,
+        workDone,
+        description: description || null,
+      });
     }
 
-    let webClientName;
-    if (webClientId === 0) {
-      // No real web_clients row — a manually typed heading instead. There's nothing
-      // to resolve server-side, so trust what the manager typed (still required).
-      webClientName = (entry?.webClientName || '').trim();
-      if (!webClientName) {
-        return { error: 'Every entry needs a web client or a heading' };
-      }
-    } else {
-      // Resolve the name server-side rather than trusting what the browser sent, since
-      // it's stored permanently on the entry row.
-      const client = await db.prepare('SELECT id, business_name, name FROM web_clients WHERE id = ?').get(webClientId);
-      if (!client) {
-        return { error: 'One of the selected web clients no longer exists' };
-      }
-      webClientName = client.business_name || client.name;
-    }
+    const reportDate = new Date().toISOString().split('T')[0];
 
-    cleaned.push({
-      webClientId,
-      webClientName,
-      pageUrl: pageUrl || null,
-      workDone,
-      description: description || null,
-    });
-  }
-
-  const reportDate = new Date().toISOString().split('T')[0];
-
-  let report = await db.prepare(
-    'SELECT id FROM eod_reports WHERE user_id = ? AND report_date = ?'
-  ).get(session.userId, reportDate);
-
-  if (!report) {
-    await db.prepare('INSERT INTO eod_reports (user_id, report_date) VALUES (?, ?)')
-      .run(session.userId, reportDate);
-    report = await db.prepare(
+    // Atomic upsert instead of select-then-insert — the previous check-then-insert
+    // pattern had a real race condition: two near-simultaneous submits (e.g. a
+    // double-click, or a client retry after a slow response) could both see "no
+    // report yet" and both try to INSERT, and the second would hit the UNIQUE
+    // (user_id, report_date) constraint and throw — which, unhandled, is exactly
+    // what produced the generic "unexpected response" error instead of a real
+    // message.
+    await db.prepare(`
+      INSERT INTO eod_reports (user_id, report_date) VALUES (?, ?)
+      ON CONFLICT(user_id, report_date) DO NOTHING
+    `).run(session.userId, reportDate);
+    const report = await db.prepare(
       'SELECT id FROM eod_reports WHERE user_id = ? AND report_date = ?'
     ).get(session.userId, reportDate);
+
+    const insertSql = `
+      INSERT INTO eod_report_entries (report_id, web_client_id, web_client_name, page_url, work_done, description)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `;
+    await db.batch(cleaned.map(e => ({
+      sql: insertSql,
+      args: [report.id, e.webClientId, e.webClientName, e.pageUrl, e.workDone, e.description],
+    })));
+
+    revalidatePath('/web-seo-manager/eod');
+
+    return { success: true, reportDate, entriesAdded: cleaned.length };
+  } catch (err) {
+    console.error('[EOD] submitEodReport failed:', err);
+    return { error: err.message || 'Failed to submit report — please try again.' };
   }
-
-  const insertSql = `
-    INSERT INTO eod_report_entries (report_id, web_client_id, web_client_name, page_url, work_done, description)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `;
-  await db.batch(cleaned.map(e => ({
-    sql: insertSql,
-    args: [report.id, e.webClientId, e.webClientName, e.pageUrl, e.workDone, e.description],
-  })));
-
-  revalidatePath('/web-seo-manager/eod');
-
-  return { success: true, reportDate, entriesAdded: cleaned.length };
 }
