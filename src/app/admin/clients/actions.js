@@ -285,8 +285,10 @@ export async function deactivateClient(clientId) {
   }
 
   try {
-    // Mark client as inactive
-    await db.prepare('UPDATE clients SET is_active = 0 WHERE id = ? AND campaign_id = ?')
+    // Mark client as inactive. manually_deactivated=1 so the nightly Google Sheets sync
+    // doesn't silently reactivate this client just because its row is still present in
+    // the sheet — a manual deactivation here should stick until manually undone.
+    await db.prepare('UPDATE clients SET is_active = 0, manually_deactivated = 1 WHERE id = ? AND campaign_id = ?')
       .run(clientId, campaign.id);
 
     // Delete all future tasks for this client (keep today and past)
@@ -314,8 +316,9 @@ export async function activateClient(clientId) {
   }
 
   try {
-    // Mark client as active
-    await db.prepare('UPDATE clients SET is_active = 1 WHERE id = ? AND campaign_id = ?')
+    // Mark client as active and clear manually_deactivated so the nightly sync can once
+    // again auto-manage this client's status based on the sheet.
+    await db.prepare('UPDATE clients SET is_active = 1, manually_deactivated = 0 WHERE id = ? AND campaign_id = ?')
       .run(clientId, campaign.id);
 
     revalidatePath('/admin/clients');
@@ -367,9 +370,10 @@ export async function toggleClientActive(clientId, currentStatus) {
   try {
     const newStatus = currentStatus ? 0 : 1;
 
-    // Update client status
-    await db.prepare('UPDATE clients SET is_active = ? WHERE id = ? AND campaign_id = ?')
-      .run(newStatus, clientId, campaign.id);
+    // Update client status. See deactivateClient/activateClient above for why
+    // manually_deactivated is set/cleared here too.
+    await db.prepare('UPDATE clients SET is_active = ?, manually_deactivated = ? WHERE id = ? AND campaign_id = ?')
+      .run(newStatus, newStatus ? 0 : 1, clientId, campaign.id);
 
     // If deactivating: delete all future tasks for this client
     if (newStatus === 0) {

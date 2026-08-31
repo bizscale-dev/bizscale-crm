@@ -266,7 +266,7 @@ export async function POST(request) {
 
     // Get current database clients
     const dbClients = await db.prepare(
-      "SELECT id, name, website, is_active FROM clients WHERE campaign_id = ? ORDER BY name"
+      "SELECT id, name, website, is_active, manually_deactivated FROM clients WHERE campaign_id = ? ORDER BY name"
     ).all(campaign.id);
 
     const dbClientMap = new Map(
@@ -287,7 +287,13 @@ export async function POST(request) {
 
       if (!dbClient) {
         changes.added.push(sheetClient);
-      } else if (!dbClient.is_active) {
+      } else if (!dbClient.is_active && !dbClient.manually_deactivated) {
+        // A client that's still present in the sheet but is_active=0 normally means it
+        // was previously sheet-deactivated (removed, then re-added) — safe to auto
+        // reactivate. But manually_deactivated=1 means an admin deliberately turned this
+        // off from /admin/clients without touching the sheet; leaving its row in the
+        // sheet unchanged shouldn't undo that. Skip it — only a manual reactivation
+        // (or removing + re-adding the row) brings it back.
         changes.reactivated.push({ ...sheetClient, db_id: dbClient.id });
       }
     }

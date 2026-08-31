@@ -134,7 +134,15 @@ async function runMigrations(raw) {
     // report can break out funnel work without re-deriving it from current (possibly
     // since-changed) client state.
     "ALTER TABLE daily_activity_log ADD COLUMN is_funnel INTEGER NOT NULL DEFAULT 0",
-    // Manual week-by-week control within Funnel Month 1 (tunnel_status='active',
+    // Set when an admin manually deactivates a client from /admin/clients (as opposed to
+  // the nightly Google Sheets sync auto-deactivating one that was removed from the
+  // sheet). The sync's "still in the sheet but is_active=0 → reactivate" step must skip
+  // these — otherwise a manual deactivation gets silently undone the next time the
+  // client's row is still present in the sheet (the sheet was never edited to remove it).
+  // Cleared by a manual reactivation, from either the admin panel or the sync itself
+  // reactivating a client that was sheet-deactivated (not this flag).
+  "ALTER TABLE clients ADD COLUMN manually_deactivated INTEGER DEFAULT 0",
+  // Manual week-by-week control within Funnel Month 1 (tunnel_status='active',
     // funnel_month=1) — see src/lib/funnel.js. start_week is fixed at enrollment
     // (weeks before it never get seo_tasks rows); current_week advances one at a
     // time via the admin's manual action and gates how far generateSEOTasks goes —
