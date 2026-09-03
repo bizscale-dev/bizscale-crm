@@ -21,6 +21,7 @@ export default function WritersClient({ writerOffpageSheetUrl = '', writerCampai
   const [sheetUrl, setSheetUrl] = useState(writerOffpageSheetUrl);
   const [isSavingUrl, setIsSavingUrl] = useState(false);
   const [creatingWriterCampaign, setCreatingWriterCampaign] = useState(false);
+  const [newName, setNewName] = useState('');
   const [newStartDate, setNewStartDate] = useState('');
   const [newTotalDays, setNewTotalDays] = useState(16);
   const [newOffDate, setNewOffDate] = useState('');
@@ -36,6 +37,7 @@ export default function WritersClient({ writerOffpageSheetUrl = '', writerCampai
     setMessage(null);
     try {
       const formData = new FormData();
+      formData.set('name', newName);
       formData.set('start_date', newStartDate);
       formData.set('total_days', newTotalDays);
       const result = await createWriterCampaign(null, formData);
@@ -173,6 +175,7 @@ export default function WritersClient({ writerOffpageSheetUrl = '', writerCampai
         {writerCampaign ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
+              <div><strong>Name:</strong> {writerCampaign.name || `Writer Campaign #${writerCampaign.id}`}</div>
               <div><strong>Status:</strong> {writerCampaign.status}</div>
               <div><strong>Start Date:</strong> {writerCampaign.start_date}</div>
               <div><strong>Total Days:</strong> {writerCampaign.total_days}</div>
@@ -209,6 +212,10 @@ export default function WritersClient({ writerOffpageSheetUrl = '', writerCampai
         )}
 
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '500' }}>Name</label>
+            <input type="text" placeholder="e.g. September Writers" value={newName} onChange={(e) => setNewName(e.target.value)} style={inputStyle} />
+          </div>
           <div>
             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '500' }}>Start Date</label>
             <input type="date" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} style={inputStyle} />

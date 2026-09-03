@@ -15,6 +15,7 @@ import { revalidatePath } from 'next/cache';
 export async function createWriterCampaign(prevState, formData) {
   const db = await getDb();
 
+  const name = (formData.get('name') || '').trim() || null;
   const start_date = formData.get('start_date');
   const total_days = parseInt(formData.get('total_days')) || 16;
 
@@ -26,9 +27,9 @@ export async function createWriterCampaign(prevState, formData) {
     await db.prepare("UPDATE writer_campaigns SET status = 'completed' WHERE status = 'active'").run();
 
     const result = await db.prepare(`
-      INSERT INTO writer_campaigns (start_date, total_days, status)
-      VALUES (?, ?, 'active')
-    `).run(start_date, total_days);
+      INSERT INTO writer_campaigns (name, start_date, total_days, status)
+      VALUES (?, ?, ?, 'active')
+    `).run(name, start_date, total_days);
 
     const writerCampaignId = result.lastInsertRowid;
 
@@ -46,6 +47,22 @@ export async function createWriterCampaign(prevState, formData) {
     revalidatePath('/writer');
     revalidatePath('/writer/tasks');
     return { success: `Writer campaign started. ${syncSummary}` };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+// Manual only — no automatic date-based completion. Just flips status; doesn't
+// touch writer_clients/writer_offpage_* history, so a completed writer campaign's
+// real numbers stay intact and viewable on its detail page
+// (/admin/writers/campaigns/[id]).
+export async function markWriterCampaignCompleted(id) {
+  const db = await getDb();
+  try {
+    await db.prepare("UPDATE writer_campaigns SET status = 'completed' WHERE id = ?").run(id);
+
+    revalidatePath('/admin/writers');
+    return { success: 'Writer campaign marked as completed' };
   } catch (err) {
     return { error: err.message };
   }

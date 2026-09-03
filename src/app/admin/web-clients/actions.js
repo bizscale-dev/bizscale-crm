@@ -54,6 +54,23 @@ export async function createWebSeoCampaign(prevState, formData) {
   }
 }
 
+// Manual only — no automatic date-based completion. Just flips status; doesn't
+// touch web_clients/webseo_tasks history, so a completed Web SEO campaign's real
+// numbers stay intact and viewable on its detail page
+// (/admin/web-clients/campaigns/[id]).
+export async function markWebSeoCampaignCompleted(id) {
+  const db = await getDb();
+  try {
+    await db.prepare("UPDATE webseo_campaigns SET status = 'completed' WHERE id = ?").run(id);
+
+    revalidatePath('/admin/web-clients');
+    revalidatePath('/admin/web-seo-associates');
+    return { success: 'Web SEO campaign marked as completed' };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
 export async function deleteWebSeoCampaign(id) {
   const db = await getDb();
   try {

@@ -4,12 +4,14 @@ import { listOffDays } from '@/lib/webSeoCampaignOffDays';
 import WebClientList from './WebClientList';
 import WebClientImport from './WebClientImport';
 import WebSeoCampaignPanel from './WebSeoCampaignPanel';
+import WebSeoCampaignHistoryList from './WebSeoCampaignHistoryList';
 
 export const revalidate = 0;
 
 export default async function WebClientsPage() {
   const db = await getDb();
   const campaign = await getActiveWebSeoCampaign();
+  const allCampaigns = await db.prepare('SELECT * FROM webseo_campaigns ORDER BY id DESC').all();
 
   let webClients = [];
   let webAssociates = [];
@@ -50,6 +52,8 @@ export default async function WebClientsPage() {
 
       {/* Web SEO Campaign — independent of the SEO campaign, its own dates/duration */}
       <WebSeoCampaignPanel campaign={campaign} offDays={offDays} />
+
+      <WebSeoCampaignHistoryList campaigns={allCampaigns} activeCampaignId={campaign?.id} />
 
       {!campaign ? null : (
         <>

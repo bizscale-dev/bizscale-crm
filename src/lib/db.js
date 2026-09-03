@@ -157,6 +157,10 @@ async function runMigrations(raw) {
     // unused going forward, matching the writer_offpage_* precedent.
     "ALTER TABLE web_clients ADD COLUMN webseo_campaign_id INTEGER",
     "ALTER TABLE webseo_tasks ADD COLUMN webseo_campaign_id INTEGER",
+    // Writer campaigns can now be named too (matching campaigns.name and
+    // webseo_campaigns.name), so a past one is identifiable on its history list
+    // instead of just a bare id/date.
+    "ALTER TABLE writer_campaigns ADD COLUMN name TEXT",
   ];
 
   for (const sql of alterStatements) {
@@ -325,6 +329,7 @@ async function runMigrations(raw) {
     `CREATE TABLE IF NOT EXISTS writer_campaigns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       source_campaign_id INTEGER,
+      name TEXT,
       start_date DATE NOT NULL,
       total_days INTEGER NOT NULL DEFAULT 16,
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed')),
@@ -551,6 +556,7 @@ async function runMigrations(raw) {
         CREATE TABLE writer_campaigns (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           source_campaign_id INTEGER,
+          name TEXT,
           start_date DATE NOT NULL,
           total_days INTEGER NOT NULL DEFAULT 16,
           status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed')),

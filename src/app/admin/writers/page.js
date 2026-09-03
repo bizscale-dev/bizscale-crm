@@ -3,12 +3,14 @@ import { getActiveWriterCampaign } from '@/lib/services';
 import { listOffDays } from '@/lib/writerCampaignOffDays';
 import Link from 'next/link';
 import WritersClient from './WritersClient';
+import WriterCampaignHistoryList from './WriterCampaignHistoryList';
 
 export const revalidate = 0;
 
 export default async function WritersPage() {
   const db = await getDb();
   const writerCampaign = await getActiveWriterCampaign();
+  const allWriterCampaigns = await db.prepare('SELECT * FROM writer_campaigns ORDER BY id DESC').all();
 
   let writerStats = [];
   let writersDashboard = [];
@@ -215,6 +217,8 @@ export default async function WritersPage() {
         writerCampaign={writerCampaign}
         writerCampaignOffDays={writerCampaignOffDays}
       />
+
+      <WriterCampaignHistoryList campaigns={allWriterCampaigns} activeCampaignId={writerCampaign?.id} />
     </div>
   );
 }
