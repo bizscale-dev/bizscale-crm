@@ -1,10 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitEodReport, getWebClientPages } from './actions';
 
 const BRAND_COLOR = 'var(--primary)';
+
+// Not-yet-submitted entries are kept in localStorage too — a manager can lose
+// nothing but React state, and a redeploy invalidating the page's server action
+// references (the "unexpected response" error, unrelated to this app's own code)
+// means the fix is a reload, which would otherwise wipe out everything they'd
+// staged. Scoped per browser/device, not shared with the server — purely a local
+// safety net until a real submit succeeds.
+const STAGED_STORAGE_KEY = 'bizscale-eod-staged-writers-manager-v1';
 
 // Groups a flat list of entries first by client/heading name, then within each
 // client by the exact (work done, description) pair — so pages saved together in
@@ -80,12 +88,30 @@ const secondaryButtonStyle = {
   fontSize: '0.875rem',
 };
 
+// Reads any staged entries left over from before a reload (or a redeploy that
+// invalidated the page's server action references — see the catch block in
+// handleSubmit below). Read once via lazy useState initializers rather than an
+// effect, so there's no extra render and no risk of briefly showing an empty
+// form before the restore lands. Returns [] outside the browser (SSR) or if
+// localStorage is unavailable/corrupted.
+function readStagedFromStorage() {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(STAGED_STORAGE_KEY);
+    if (!raw) return [];
+    const saved = JSON.parse(raw);
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function EodReportClient({ webClients, history, today }) {
   const router = useRouter();
 
   // 'select' -> pick a web client, 'page' -> pick which page(s) on that site,
   // 'details' -> fill in work done + description, 'saved' -> add more or submit
-  const [step, setStep] = useState('select');
+  const [step, setStep] = useState(() => (readStagedFromStorage().length > 0 ? 'saved' : 'select'));
   const [selectedClientId, setSelectedClientId] = useState('');
   const [manualHeading, setManualHeading] = useState('');
   const [pageLoading, setPageLoading] = useState(false);
@@ -96,12 +122,24 @@ export default function EodReportClient({ webClients, history, today }) {
   const [manualPageUrls, setManualPageUrls] = useState('');
   const [workDone, setWorkDone] = useState('');
   const [description, setDescription] = useState('');
-  const [staged, setStaged] = useState([]);
-  const [lastSavedCount, setLastSavedCount] = useState(1);
+  const [staged, setStaged] = useState(readStagedFromStorage);
+  const [lastSavedCount, setLastSavedCount] = useState(() => readStagedFromStorage().length || 1);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [expandedReportId, setExpandedReportId] = useState(null);
+
+  useEffect(() => {
+    try {
+      if (staged.length > 0) {
+        window.localStorage.setItem(STAGED_STORAGE_KEY, JSON.stringify(staged));
+      } else {
+        window.localStorage.removeItem(STAGED_STORAGE_KEY);
+      }
+    } catch {
+      // localStorage unavailable — staged entries just won't survive a reload.
+    }
+  }, [staged]);
 
   const selectedClient = webClients.find(c => String(c.id) === String(selectedClientId));
   const entryLabel = selectedClient?.label || manualHeading.trim();
@@ -260,7 +298,17 @@ export default function EodReportClient({ webClients, history, today }) {
         router.refresh();
       }
     } catch (err) {
-      setMessage({ type: 'error', text: err.message });
+      // Next.js itself throws this exact generic message when a page's server
+      // action reference goes stale after a new deploy — not an error from this
+      // app's own code. Reloading picks up the current build; nothing staged is
+      // lost since it's also saved to localStorage above.
+      const isStaleDeploy = /unexpected response/i.test(err.message || '');
+      setMessage({
+        type: 'error',
+        text: isStaleDeploy
+          ? 'The app was updated since this page loaded. Your entries are saved — please reload the page, then submit again.'
+          : err.message,
+      });
     } finally {
       setSubmitting(false);
     }
