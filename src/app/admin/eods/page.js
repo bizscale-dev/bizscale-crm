@@ -4,19 +4,28 @@ import Link from 'next/link';
 export const revalidate = 0;
 
 const BRAND_COLOR = 'var(--primary)';
+const ROLE_LABELS = {
+  web_seo_manager: 'Web SEO Manager',
+  seo_manager: 'SEO Manager',
+  writers_manager: 'Writers Manager',
+};
 
 export default async function AdminEodsPage() {
   const db = await getDb();
 
+  // Every manager role that files EOD reports — Web SEO, SEO, and Writers Managers
+  // all share the same eod_reports/eod_report_entries tables (see
+  // src/app/web-seo-manager/eod/, src/app/seo-manager/eod/,
+  // src/app/writers-manager/eod/), so they're all listed here together.
   const managers = await db.prepare(`
-    SELECT u.id, u.name, u.email, u.is_active,
+    SELECT u.id, u.name, u.email, u.is_active, u.role,
       (SELECT COUNT(*) FROM eod_reports r WHERE r.user_id = u.id) as report_count,
       (SELECT COUNT(*) FROM eod_report_entries e
         JOIN eod_reports r ON r.id = e.report_id WHERE r.user_id = u.id) as entry_count,
       (SELECT MAX(r.report_date) FROM eod_reports r WHERE r.user_id = u.id) as last_report_date
     FROM users u
-    WHERE u.role = 'web_seo_manager'
-    ORDER BY u.name
+    WHERE u.role IN ('web_seo_manager', 'seo_manager', 'writers_manager')
+    ORDER BY u.role, u.name
   `).all();
 
   return (
@@ -24,14 +33,14 @@ export default async function AdminEodsPage() {
       <div>
         <h1 style={{ fontSize: '1.75rem', margin: 0, marginBottom: '0.5rem' }}>EOD Reports</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-          End-of-day reports filed by Web SEO Managers. Pick a manager to see everything they&apos;ve
-          submitted, filterable by website and date.
+          End-of-day reports filed by Web SEO, SEO, and Writers Managers. Pick a manager to see
+          everything they&apos;ve submitted, filterable by client and date.
         </p>
       </div>
 
       {managers.length === 0 ? (
         <div className="card">
-          <p style={{ color: 'var(--text-muted)', margin: 0 }}>No Web SEO Managers exist yet.</p>
+          <p style={{ color: 'var(--text-muted)', margin: 0 }}>No managers exist yet.</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
@@ -46,6 +55,11 @@ export default async function AdminEodsPage() {
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>{m.name}</h3>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{m.email}</span>
+                  <div style={{ marginTop: '0.35rem' }}>
+                    <span style={{ fontSize: '0.65rem', padding: '0.2rem 0.45rem', borderRadius: '0.25rem', backgroundColor: 'rgba(22, 178, 147, 0.1)', color: BRAND_COLOR, fontWeight: '600', whiteSpace: 'nowrap' }}>
+                      {ROLE_LABELS[m.role] || m.role}
+                    </span>
+                  </div>
                 </div>
                 {!m.is_active && (
                   <span style={{ fontSize: '0.65rem', padding: '0.2rem 0.45rem', borderRadius: '0.25rem', backgroundColor: 'var(--border)', color: 'var(--text-muted)', fontWeight: '600', whiteSpace: 'nowrap' }}>

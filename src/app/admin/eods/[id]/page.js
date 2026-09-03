@@ -10,13 +10,13 @@ export default async function AdminEodManagerPage({ params }) {
   const managerId = parseInt(id, 10);
 
   const manager = await db.prepare(
-    "SELECT id, name, email FROM users WHERE id = ? AND role = 'web_seo_manager'"
+    "SELECT id, name, email FROM users WHERE id = ? AND role IN ('web_seo_manager', 'seo_manager', 'writers_manager')"
   ).get(managerId);
 
   if (!manager) {
     return (
       <div className="card">
-        <p style={{ color: 'var(--danger)', margin: 0 }}>Web SEO Manager not found.</p>
+        <p style={{ color: 'var(--danger)', margin: 0 }}>Manager not found.</p>
       </div>
     );
   }
