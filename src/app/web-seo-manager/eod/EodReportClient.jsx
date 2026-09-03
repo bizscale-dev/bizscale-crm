@@ -80,7 +80,7 @@ const secondaryButtonStyle = {
   fontSize: '0.875rem',
 };
 
-export default function EodReportClient({ webClients, history, today, hasCampaign }) {
+export default function EodReportClient({ webClients, history, today }) {
   const router = useRouter();
 
   // 'select' -> pick a web client, 'page' -> pick which page(s) on that site,
@@ -290,13 +290,9 @@ export default function EodReportClient({ webClients, history, today, hasCampaig
         </div>
       )}
 
-      {!hasCampaign ? (
+      {webClients.length === 0 ? (
         <div className="card">
-          <p style={{ color: 'var(--danger)', margin: 0 }}>No active campaign. Please contact your admin.</p>
-        </div>
-      ) : webClients.length === 0 ? (
-        <div className="card">
-          <p style={{ color: 'var(--text-muted)', margin: 0 }}>No active web clients on the current campaign yet.</p>
+          <p style={{ color: 'var(--text-muted)', margin: 0 }}>No active web clients yet.</p>
         </div>
       ) : (
         <div className="card">

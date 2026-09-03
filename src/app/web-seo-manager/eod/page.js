@@ -1,5 +1,4 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
 import { verifySession } from '@/lib/session';
 import EodReportClient from './EodReportClient';
 
@@ -8,19 +7,17 @@ export const revalidate = 0;
 export default async function WebSeoManagerEodPage() {
   const db = await getDb();
   const session = await verifySession();
-  const campaign = await getActiveCampaign();
 
-  // Every active web client on the active campaign — the same scope the admin's Web
-  // Clients page lists, so the dropdown matches what the manager sees elsewhere.
-  let webClients = [];
-  if (campaign) {
-    webClients = await db.prepare(`
-      SELECT id, business_name, name
-      FROM web_clients
-      WHERE campaign_id = ? AND is_active = 1
-      ORDER BY business_name, name
-    `).all(campaign.id);
-  }
+  // EOD reporting is deliberately independent of any campaign — managers file a report
+  // every day regardless of whether a campaign is active, paused, or completed. Every
+  // active web client across all campaigns, not scoped to whichever one happens to be
+  // active right now.
+  const webClients = await db.prepare(`
+    SELECT id, business_name, name
+    FROM web_clients
+    WHERE is_active = 1
+    ORDER BY business_name, name
+  `).all();
 
   // This manager's own previously submitted reports, newest first.
   const reports = await db.prepare(`
@@ -48,7 +45,6 @@ export default async function WebSeoManagerEodPage() {
       webClients={webClients.map(c => ({ id: c.id, label: c.business_name || c.name }))}
       history={history}
       today={today}
-      hasCampaign={!!campaign}
     />
   );
 }
