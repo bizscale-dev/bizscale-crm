@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+import { getActiveWebSeoCampaign } from '@/lib/services';
 import { parseGoogleSheetUrl, fetchGoogleSheetRows } from '@/lib/googleSheets';
 import { logSyncRun } from '@/lib/syncLog';
 
@@ -38,10 +38,10 @@ export async function POST(request) {
 
   try {
     const db = await getDb();
-    const campaign = await getActiveCampaign();
+    const campaign = await getActiveWebSeoCampaign();
 
     if (!campaign) {
-      return await fail('No active campaign');
+      return await fail('No active Web SEO campaign');
     }
 
     const body = await request.json().catch(() => ({}));
@@ -96,7 +96,7 @@ export async function POST(request) {
     const errors = [];
 
     const dbClients = await db.prepare(`
-      SELECT id, name, business_name, assigned_associate_id FROM web_clients WHERE campaign_id = ? AND is_active = 1
+      SELECT id, name, business_name, assigned_associate_id FROM web_clients WHERE webseo_campaign_id = ? AND is_active = 1
     `).all(campaign.id);
 
     console.log(`[WEBSEO SYNC] Found ${dbClients.length} web clients in database`);
@@ -155,7 +155,7 @@ export async function POST(request) {
         const dueTasks = await db.prepare(`
           SELECT id, task_date, target_count, completed_count
           FROM webseo_tasks
-          WHERE campaign_id = ? AND client_id = ? AND post_type = ? AND task_date <= ?
+          WHERE webseo_campaign_id = ? AND client_id = ? AND post_type = ? AND task_date <= ?
           ORDER BY task_date ASC
         `).all(campaign.id, client.id, postType, today);
 

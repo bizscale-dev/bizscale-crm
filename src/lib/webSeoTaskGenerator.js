@@ -1,26 +1,28 @@
 import { getDb } from './db';
-import { getOffDaysSet, getWorkingDays } from './offDays';
+import { getWorkingDays } from './offDays';
+import { getOffDaysSet } from './webSeoCampaignOffDays';
 
 const LINK_TYPES = { web2: 'webseo_web2_target', guestpost: 'webseo_guestpost_target' };
 
 /**
  * Web SEO Associate task schedule: each associate's clients are split into 3 batches
- * (A/B/C) of roughly equal size. Batches rotate A→B→C→A... across the campaign's
- * working days (weekends and admin-marked off-days skipped, same as the SEO/writer
- * generators), so each visit only a third of an associate's clients are worked.
+ * (A/B/C) of roughly equal size. Batches rotate A→B→C→A... across the Web SEO
+ * campaign's working days (weekends and admin-marked off-days skipped, same as the
+ * SEO/writer generators), so each visit only a third of an associate's clients are
+ * worked.
  *
  * Because 16 working days doesn't divide evenly by 3, batches don't all get the same
  * number of visits (e.g. batch A gets 6, batches B/C get 5 over 16 days) — the per-visit
  * target count is computed per client so the monthly total still lands exactly on the
  * campaign's configured target regardless of which batch a client is in.
  */
-export async function generateWebSeoTasks(campaignId) {
+export async function generateWebSeoTasks(webSeoCampaignId) {
   const db = await getDb();
-  const campaign = await db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
-  if (!campaign) throw new Error('Campaign not found');
+  const campaign = await db.prepare('SELECT * FROM webseo_campaigns WHERE id = ?').get(webSeoCampaignId);
+  if (!campaign) throw new Error('Web SEO campaign not found');
 
   const totalDays = campaign.total_days || 16;
-  const offDays = await getOffDaysSet(campaignId);
+  const offDays = await getOffDaysSet(webSeoCampaignId);
 
   const monthlyTargets = {};
   for (const [type, field] of Object.entries(LINK_TYPES)) {
@@ -34,10 +36,10 @@ export async function generateWebSeoTasks(campaignId) {
   const associates = await db.prepare(`
     SELECT DISTINCT u.id, u.name
     FROM users u
-    JOIN web_clients wc ON wc.assigned_associate_id = u.id AND wc.campaign_id = ? AND wc.is_active = 1
+    JOIN web_clients wc ON wc.assigned_associate_id = u.id AND wc.webseo_campaign_id = ? AND wc.is_active = 1
     WHERE u.role = 'web_seo_associate' AND u.is_active = 1
     ORDER BY u.name
-  `).all(campaignId);
+  `).all(webSeoCampaignId);
 
   // Regeneration wipes and rebuilds every task row (needed since adding/removing a
   // client shifts batch assignments), which would otherwise reset completed_count to 0
@@ -50,20 +52,20 @@ export async function generateWebSeoTasks(campaignId) {
   const priorRows = await db.prepare(`
     SELECT client_id, day_number, post_type, completed_count
     FROM webseo_tasks
-    WHERE campaign_id = ? AND completed_count > 0
-  `).all(campaignId);
+    WHERE webseo_campaign_id = ? AND completed_count > 0
+  `).all(webSeoCampaignId);
   for (const row of priorRows) {
     priorCompleted.set(`${row.client_id}|${row.day_number}|${row.post_type}`, row.completed_count);
   }
 
-  await db.prepare('DELETE FROM webseo_tasks WHERE campaign_id = ?').run(campaignId);
+  await db.prepare('DELETE FROM webseo_tasks WHERE webseo_campaign_id = ?').run(webSeoCampaignId);
 
   const rows = [];
 
   for (const associate of associates) {
     const clients = await db.prepare(`
-      SELECT id FROM web_clients WHERE campaign_id = ? AND assigned_associate_id = ? AND is_active = 1 ORDER BY id
-    `).all(campaignId, associate.id);
+      SELECT id FROM web_clients WHERE webseo_campaign_id = ? AND assigned_associate_id = ? AND is_active = 1 ORDER BY id
+    `).all(webSeoCampaignId, associate.id);
 
     if (clients.length === 0) continue;
 
@@ -101,7 +103,7 @@ export async function generateWebSeoTasks(campaignId) {
             if (count > 0) {
               const priorKey = `${client.id}|${visit.dayNumber}|${postType}`;
               rows.push({
-                campaign_id: campaignId,
+                webseo_campaign_id: webSeoCampaignId,
                 client_id: client.id,
                 associate_id: associate.id,
                 day_number: visit.dayNumber,
@@ -119,12 +121,12 @@ export async function generateWebSeoTasks(campaignId) {
 
   if (rows.length > 0) {
     const insertSql = `
-      INSERT INTO webseo_tasks (campaign_id, client_id, associate_id, day_number, task_date, post_type, target_count, completed_count)
+      INSERT INTO webseo_tasks (webseo_campaign_id, client_id, associate_id, day_number, task_date, post_type, target_count, completed_count)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
     await db.batch(rows.map(r => ({
       sql: insertSql,
-      args: [r.campaign_id, r.client_id, r.associate_id, r.day_number, r.task_date, r.post_type, r.target_count, r.completed_count],
+      args: [r.webseo_campaign_id, r.client_id, r.associate_id, r.day_number, r.task_date, r.post_type, r.target_count, r.completed_count],
     })));
   }
 

@@ -108,92 +108,42 @@ export async function POST(request) {
       console.log(`Assigned ${results.associatesAssigned} clients to associates`);
     }
 
-    // Handle writer assignments from column I
+    // Column I's writer names still auto-create writer user accounts (so they exist
+    // and can be picked from e.g. the Writer Campaign's writer list), but no longer
+    // populate the retired writer_assignments/clients.assigned_writer_id pipeline —
+    // writers now get their tasks and their own client roster entirely from the
+    // GBP-Off Page / Web-Off Page sheets (see src/lib/writerOffpageSync.js, on its
+    // own cron trigger), independent of this SEO sheet sync.
     if (writerAssignments && Object.keys(writerAssignments).length > 0) {
-      console.log('[sync-apply] Writer assignments received:', Object.keys(writerAssignments));
-      
-      for (const [writerName, clientNames] of Object.entries(writerAssignments)) {
-        console.log(`[sync-apply] Processing writer: ${writerName} with ${clientNames.length} clients`);
-        
-        // Find the writer user - if not found, create it. Matches regardless of
-        // is_active so a deactivated/removed writer isn't silently re-created as a
-        // duplicate account the next time this name appears in the sheet.
-        let writer = await db.prepare(
+      for (const writerName of Object.keys(writerAssignments)) {
+        // Matches regardless of is_active so a deactivated/removed writer isn't
+        // silently re-created as a duplicate account the next time this name
+        // appears in the sheet.
+        const existing = await db.prepare(
           "SELECT id FROM users WHERE role = 'writer' AND name = ?"
         ).get(writerName);
 
-        if (!writer) {
+        if (!existing) {
           try {
-            // Create writer if doesn't exist
             const bcrypt = require('bcryptjs');
             const tempPassword = bcrypt.hashSync(Math.random().toString(36).substring(7), 10);
             const email = `${writerName.toLowerCase().replace(/\s+/g, '.')}@bizscale-writers.local`;
-            
+
             await db.prepare(
               "INSERT INTO users (name, email, password, role, is_active) VALUES (?, ?, ?, 'writer', 1)"
             ).run(writerName, email, tempPassword);
-            
-            writer = await db.prepare(
-              "SELECT id FROM users WHERE role = 'writer' AND name = ?"
-            ).get(writerName);
-            
-            console.log(`[sync-apply] Created new writer: ${writerName} (ID: ${writer.id})`);
+            console.log(`[sync-apply] Created new writer: ${writerName}`);
           } catch (err) {
             console.error(`[sync-apply] Failed to create writer ${writerName}:`, err.message);
-            continue;
           }
-        }
-
-        if (writer) {
-          console.log(`[sync-apply] Found writer: ${writerName} (ID: ${writer.id})`);
-          
-          // CRITICAL: Ensure writer is assigned to campaign FIRST (before assigning clients)
-          const assignment = await db.prepare(
-            "SELECT id FROM writer_assignments WHERE campaign_id = ? AND user_id = ?"
-          ).get(campaign.id, writer.id);
-
-          if (!assignment) {
-            await db.prepare(
-              "INSERT INTO writer_assignments (campaign_id, user_id, daily_post_target) VALUES (?, ?, 52)"
-            ).run(campaign.id, writer.id);
-            console.log(`[sync-apply] Created writer_assignment for ${writerName}`);
-          } else {
-            console.log(`[sync-apply] Writer already in campaign: ${writerName}`);
-          }
-
-          // Assign these clients to this writer
-          for (const clientName of clientNames) {
-            const client = await db.prepare(
-              "SELECT id FROM clients WHERE campaign_id = ? AND name = ?"
-            ).get(campaign.id, clientName);
-
-            if (client) {
-              await db.prepare(
-                "UPDATE clients SET assigned_writer_id = ? WHERE id = ?"
-              ).run(writer.id, client.id);
-              results.writersAssigned++;
-              console.log(`[sync-apply] Assigned ${clientName} to ${writerName}`);
-            } else {
-              console.warn(`[sync-apply] Client not found: ${clientName}`);
-            }
-          }
-        } else {
-          console.warn(`[sync-apply] Writer not found and could not be created: ${writerName}`);
         }
       }
-      console.log(`[sync-apply] Total writers assigned: ${results.writersAssigned} clients`);
-    } else {
-      console.log('[sync-apply] No writer assignments provided');
     }
-
-    // Writer task generation is no longer driven by this sync — writers now get
-    // their tasks from the GBP-Off Page / Web-Off Page sheets directly (see
-    // src/lib/writerOffpageSync.js, on its own cron trigger).
 
     return Response.json({
       success: true,
       results,
-      message: `Applied changes: ${results.deactivated} deactivated, ${results.reactivated} reactivated, ${results.associatesAssigned} clients to associates, ${results.writersAssigned} clients to writers`,
+      message: `Applied changes: ${results.deactivated} deactivated, ${results.reactivated} reactivated, ${results.associatesAssigned} clients to associates`,
     });
   } catch (error) {
     console.error('Apply changes error:', error);

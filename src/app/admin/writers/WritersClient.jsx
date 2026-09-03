@@ -15,7 +15,7 @@ const inputStyle = {
   color: 'var(--foreground)'
 };
 
-export default function WritersClient({ writers, writerStats, writerOffpageSheetUrl = '', writerCampaign = null, writerCampaignOffDays = [] }) {
+export default function WritersClient({ writerOffpageSheetUrl = '', writerCampaign = null, writerCampaignOffDays = [] }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [sheetUrl, setSheetUrl] = useState(writerOffpageSheetUrl);
@@ -143,10 +143,6 @@ export default function WritersClient({ writers, writerStats, writerOffpageSheet
     } finally {
       setLoading(false);
     }
-  };
-
-  const getStatForWriter = (writerId) => {
-    return writerStats.find(s => s.id === writerId) || {};
   };
 
   return (
@@ -280,97 +276,6 @@ export default function WritersClient({ writers, writerStats, writerOffpageSheet
         >
           🗑️ Clear All Tasks
         </button>
-      </div>
-
-      {/* Writers List */}
-      <div className="card">
-        <h3 style={{ marginTop: 0, marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-          Writers List
-        </h3>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                <th style={{ padding: '0.75rem 0', fontWeight: '600' }}>Writer Name</th>
-                <th style={{ padding: '0.75rem 0', fontWeight: '600' }}>Email</th>
-                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Status</th>
-                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>GBP Clients</th>
-                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>GBP Progress</th>
-                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Web-Off Clients</th>
-                <th style={{ padding: '0.75rem 0', fontWeight: '600', textAlign: 'center' }}>Web-Off Progress</th>
-              </tr>
-            </thead>
-            <tbody>
-              {writers.map(writer => {
-                const stats = getStatForWriter(writer.id);
-                const gbpProgress = stats.gbp_target > 0
-                  ? Math.round((stats.gbp_completed / stats.gbp_target) * 100)
-                  : 0;
-                const weboffProgress = stats.weboff_target > 0
-                  ? Math.round((stats.weboff_completed / stats.weboff_target) * 100)
-                  : 0;
-
-                return (
-                  <tr key={writer.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '0.75rem 0', fontWeight: '500' }}>
-                      {writer.name}
-                    </td>
-                    <td style={{ padding: '0.75rem 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                      {writer.email}
-                    </td>
-                    <td style={{ padding: '0.75rem 0', textAlign: 'center' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '0.25rem 0.75rem',
-                        borderRadius: '0.25rem',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        backgroundColor: writer.is_active ? 'rgba(34, 197, 94, 0.1)' : 'rgba(109, 114, 120, 0.1)',
-                        color: writer.is_active ? 'var(--success)' : 'var(--text-muted)'
-                      }}>
-                        {writer.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.75rem 0', textAlign: 'center', fontWeight: '500' }}>
-                      {stats.gbp_assigned_clients || 0}
-                    </td>
-                    <td style={{ padding: '0.75rem 0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-                        <div style={{ width: '80px', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-                          <div style={{
-                            width: `${gbpProgress}%`,
-                            height: '100%',
-                            backgroundColor: gbpProgress === 100 ? BRAND_COLOR : 'var(--primary)'
-                          }}></div>
-                        </div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                          {stats.gbp_completed || 0} / {stats.gbp_target || 0}
-                        </span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '0.75rem 0', textAlign: 'center', fontWeight: '500' }}>
-                      {stats.weboff_assigned_clients || 0}
-                    </td>
-                    <td style={{ padding: '0.75rem 0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-                        <div style={{ width: '80px', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-                          <div style={{
-                            width: `${weboffProgress}%`,
-                            height: '100%',
-                            backgroundColor: weboffProgress === 100 ? BRAND_COLOR : 'var(--success)'
-                          }}></div>
-                        </div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                          {stats.weboff_completed || 0} / {stats.weboff_target || 0}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
   );

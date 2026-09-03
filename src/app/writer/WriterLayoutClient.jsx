@@ -5,7 +5,6 @@ import RoleLayoutShell from '@/components/RoleLayoutShell';
 const navItems = [
   { href: '/writer', label: 'My Dashboard' },
   { href: '/writer/tasks', label: 'My Tasks' },
-  { href: '/writer/clients', label: 'Clients' },
 ];
 
 export default function WriterLayoutClient({ children }) {

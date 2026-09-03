@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign, getActiveWriterCampaign } from '@/lib/services';
+import { getActiveWriterCampaign } from '@/lib/services';
 import { listOffDays } from '@/lib/writerCampaignOffDays';
 import Link from 'next/link';
 import WritersClient from './WritersClient';
@@ -8,25 +8,12 @@ export const revalidate = 0;
 
 export default async function WritersPage() {
   const db = await getDb();
-  const campaign = await getActiveCampaign();
   const writerCampaign = await getActiveWriterCampaign();
 
-  let writers = [];
   let writerStats = [];
   let writersDashboard = [];
   let writerOffpageSheetUrl = '';
   let writerCampaignOffDays = [];
-
-  if (campaign) {
-    writers = await db.prepare(`
-      SELECT u.id, u.name, u.email, u.is_active,
-        COALESCE(wa.daily_post_target, 70) as daily_post_target
-      FROM users u
-      LEFT JOIN writer_assignments wa ON wa.user_id = u.id AND wa.campaign_id = ?
-      WHERE u.role = 'writer'
-      ORDER BY u.name
-    `).all(campaign.id);
-  }
 
   const sheetSetting = await db.prepare("SELECT value FROM settings WHERE key = ?").get('writer_offpage_sheet_url');
   writerOffpageSheetUrl = sheetSetting?.value || '';
@@ -77,7 +64,7 @@ export default async function WritersPage() {
   `).get(writerCampaign.id) : { total_target_posts: 0, total_completed_posts: 0 };
 
   const stats = {
-    totalWriters: writers.filter(w => w.is_active).length,
+    totalWriters: writersDashboard.filter(w => w.is_active).length,
     gbpTargetPosts: gbpCampaignStats.total_target_posts || 0,
     gbpCompletedPosts: gbpCampaignStats.total_completed_posts || 0,
     weboffTargetPosts: weboffCampaignStats.total_target_posts || 0,
@@ -86,12 +73,13 @@ export default async function WritersPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      {!campaign ? (
+      {!writerCampaign && (
         <div className="card">
-          <h3>No Active Campaign</h3>
-          <p style={{ color: 'var(--text-muted)' }}>Please activate a campaign to manage writers.</p>
+          <h3>No Active Writer Campaign</h3>
+          <p style={{ color: 'var(--text-muted)' }}>Start one below to manage writers.</p>
         </div>
-      ) : (
+      )}
+      {writerCampaign && (
         <>
           {/* Stats Overview */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
@@ -216,17 +204,17 @@ export default async function WritersPage() {
               </div>
             )}
           </div>
-
-          {/* Detailed Writer Management */}
-          <WritersClient
-            writers={writers}
-            writerStats={writerStats}
-            writerOffpageSheetUrl={writerOffpageSheetUrl}
-            writerCampaign={writerCampaign}
-            writerCampaignOffDays={writerCampaignOffDays}
-          />
         </>
       )}
+
+      {/* Detailed Writer Management — always rendered, even with no active writer
+          campaign yet, since this is where a new one gets started. */}
+      <WritersClient
+        writerStats={writerStats}
+        writerOffpageSheetUrl={writerOffpageSheetUrl}
+        writerCampaign={writerCampaign}
+        writerCampaignOffDays={writerCampaignOffDays}
+      />
     </div>
   );
 }

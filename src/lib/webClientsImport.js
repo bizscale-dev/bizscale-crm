@@ -1,5 +1,5 @@
 import { getDb } from './db';
-import { getActiveCampaign } from './services';
+import { getActiveWebSeoCampaign } from './services';
 import { generateWebSeoTasks } from './webSeoTaskGenerator';
 
 // Exported for reuse by other Google Sheets integrations that need named-tab access
@@ -94,9 +94,9 @@ export async function runWebClientsImport(sheetUrl) {
   const sheetId = sheetIdMatch[1];
   console.log('[runWebClientsImport] Sheet ID:', sheetId);
 
-  const campaign = await getActiveCampaign();
+  const campaign = await getActiveWebSeoCampaign();
   if (!campaign) {
-    throw new Error('No active campaign');
+    throw new Error('No active Web SEO campaign. Start one from Admin → Web Clients first.');
   }
 
   const tokenResult = await getValidAccessToken();
@@ -172,19 +172,19 @@ export async function runWebClientsImport(sheetUrl) {
     try {
       const existing = await db.prepare(`
         SELECT id, is_active FROM web_clients
-        WHERE campaign_id = ? AND name = ?
+        WHERE webseo_campaign_id = ? AND name = ?
       `).get(campaign.id, clientName);
 
       let clientId;
       if (!existing) {
         await db.prepare(`
-          INSERT INTO web_clients (campaign_id, business_name, name, is_active)
+          INSERT INTO web_clients (webseo_campaign_id, business_name, name, is_active)
           VALUES (?, ?, ?, 1)
         `).run(campaign.id, clientName, clientName);
 
         const newClient = await db.prepare(`
           SELECT id FROM web_clients
-          WHERE campaign_id = ? AND name = ?
+          WHERE webseo_campaign_id = ? AND name = ?
         `).get(campaign.id, clientName);
         clientId = newClient.id;
         importedCount++;
@@ -254,7 +254,7 @@ export async function runWebClientsImport(sheetUrl) {
   // future task generation and active-client counts.
   let deactivatedCount = 0;
   const currentlyActive = await db.prepare(`
-    SELECT id, name FROM web_clients WHERE campaign_id = ? AND is_active = 1
+    SELECT id, name FROM web_clients WHERE webseo_campaign_id = ? AND is_active = 1
   `).all(campaign.id);
   for (const wc of currentlyActive) {
     if (!seenClientNames.has(wc.name)) {

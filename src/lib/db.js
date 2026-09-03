@@ -150,6 +150,13 @@ async function runMigrations(raw) {
     // preserves prior weeks' history instead of replacing it.
     "ALTER TABLE clients ADD COLUMN funnel_month1_start_week INTEGER",
     "ALTER TABLE clients ADD COLUMN funnel_month1_current_week INTEGER",
+    // Web SEO now runs on its own independent webseo_campaigns entity (own
+    // start_date/total_days/status — see webseo_campaigns below) instead of the
+    // shared campaigns table, so it can run on completely different dates than the
+    // SEO-associate campaign. The old campaign_id column is left in place but
+    // unused going forward, matching the writer_offpage_* precedent.
+    "ALTER TABLE web_clients ADD COLUMN webseo_campaign_id INTEGER",
+    "ALTER TABLE webseo_tasks ADD COLUMN webseo_campaign_id INTEGER",
   ];
 
   for (const sql of alterStatements) {
@@ -163,7 +170,8 @@ async function runMigrations(raw) {
   const createTableStatements = [
     `CREATE TABLE IF NOT EXISTS webseo_tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      campaign_id INTEGER NOT NULL,
+      campaign_id INTEGER,
+      webseo_campaign_id INTEGER,
       client_id INTEGER NOT NULL,
       associate_id INTEGER NOT NULL,
       day_number INTEGER NOT NULL,
@@ -216,13 +224,13 @@ async function runMigrations(raw) {
     )`,
     `CREATE TABLE IF NOT EXISTS web_clients (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      campaign_id INTEGER NOT NULL,
+      campaign_id INTEGER,
+      webseo_campaign_id INTEGER,
       name TEXT NOT NULL,
       business_name TEXT NOT NULL,
       assigned_associate_id INTEGER,
       is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
       FOREIGN KEY (assigned_associate_id) REFERENCES users(id) ON DELETE SET NULL
     )`,
     `CREATE TABLE IF NOT EXISTS campaign_off_days (
@@ -308,15 +316,15 @@ async function runMigrations(raw) {
       completed_count INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
-    // Independent writer scheduling entity — its own start_date/total_days, decoupled
-    // from the main campaigns table, so an admin can kick off a writer's rotation
-    // (e.g. Week 1) up to a week before the associate-facing campaign is created.
-    // source_campaign_id is captured at creation time purely to resolve which
-    // `clients` rows to match Google Sheet names against (clients have no roster of
-    // their own outside the main campaigns table).
+    // Independent writer scheduling entity — its own start_date/total_days, fully
+    // decoupled from the main (SEO) campaigns table, so an admin can kick off a
+    // writer's rotation (e.g. Week 1) whenever, even with no SEO campaign at all.
+    // source_campaign_id is vestigial (kept only for historical rows created
+    // before writers got their own writer_clients roster) — no longer written or
+    // required on new writer campaigns.
     `CREATE TABLE IF NOT EXISTS writer_campaigns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      source_campaign_id INTEGER NOT NULL,
+      source_campaign_id INTEGER,
       start_date DATE NOT NULL,
       total_days INTEGER NOT NULL DEFAULT 16,
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed')),
@@ -330,6 +338,45 @@ async function runMigrations(raw) {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(writer_campaign_id, off_date),
       FOREIGN KEY (writer_campaign_id) REFERENCES writer_campaigns(id) ON DELETE CASCADE
+    )`,
+    // Writers' own independent client roster — no longer name-matched against the
+    // SEO campaign's `clients` table. Populated automatically as new client names
+    // are seen in the GBP-Off Page / Web-Off Page sheet tabs (see
+    // writerOffpageSync.js) — there's no separate "import" step, the sheet is
+    // already the sole source of these names.
+    `CREATE TABLE IF NOT EXISTS writer_clients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      writer_campaign_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(writer_campaign_id, name),
+      FOREIGN KEY (writer_campaign_id) REFERENCES writer_campaigns(id) ON DELETE CASCADE
+    )`,
+    // Independent Web SEO scheduling entity — its own start_date/total_days/status,
+    // fully decoupled from the main (SEO) campaigns table, so Web SEO can run on
+    // completely different dates/duration and doesn't care whether the SEO
+    // campaign is active, paused, or completed. Unlike writer_campaigns, no
+    // source-campaign link is needed at all — web_clients are imported straight
+    // from their own Google Sheet tab, never name-matched against SEO's clients.
+    `CREATE TABLE IF NOT EXISTS webseo_campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      start_date DATE NOT NULL,
+      total_days INTEGER NOT NULL DEFAULT 16,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed')),
+      webseo_web2_target INTEGER DEFAULT 7,
+      webseo_guestpost_target INTEGER DEFAULT 7,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS webseo_campaign_off_days (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      webseo_campaign_id INTEGER NOT NULL,
+      off_date DATE NOT NULL,
+      reason TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(webseo_campaign_id, off_date),
+      FOREIGN KEY (webseo_campaign_id) REFERENCES webseo_campaigns(id) ON DELETE CASCADE
     )`,
     // Permanent, immutable daily record of completed work — captured once per day
     // (see src/lib/dailyActivityCapture.js, run by a 12:25 AM cron) from whatever the
@@ -485,6 +532,209 @@ async function runMigrations(raw) {
     }
   } catch (e) {
     // Migration already done or table doesn't exist yet
+  }
+
+  // Widen writer_campaigns.source_campaign_id to nullable — creating a writer
+  // campaign no longer requires an SEO campaign to exist (writers get their own
+  // independent client roster, see writer_clients above), so this column is now
+  // vestigial rather than load-bearing. Guarded the same way as the
+  // writer_offpage_assignments rebuild above.
+  try {
+    const existingResult = await raw.execute(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='writer_campaigns'"
+    );
+    const existing = existingResult.rows[0];
+
+    if (existing && existing.sql.includes('source_campaign_id INTEGER NOT NULL')) {
+      await raw.execute('ALTER TABLE writer_campaigns RENAME TO writer_campaigns_old');
+      await raw.execute(`
+        CREATE TABLE writer_campaigns (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source_campaign_id INTEGER,
+          start_date DATE NOT NULL,
+          total_days INTEGER NOT NULL DEFAULT 16,
+          status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed')),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await raw.execute(`
+        INSERT INTO writer_campaigns (id, source_campaign_id, start_date, total_days, status, created_at)
+        SELECT id, source_campaign_id, start_date, total_days, status, created_at FROM writer_campaigns_old
+      `);
+      await raw.execute('DROP TABLE writer_campaigns_old');
+    }
+  } catch (e) {
+    // Migration already done or table doesn't exist yet
+  }
+
+  // Widen web_clients.campaign_id and webseo_tasks.campaign_id to nullable, and
+  // drop web_clients' cascading FK to campaigns — Web SEO no longer depends on the
+  // SEO campaigns table at all (see webseo_campaign_id / webseo_campaigns above),
+  // so a future SEO campaign deletion must not silently cascade-delete Web SEO's
+  // historical data through the old column. Guarded the same way as the other
+  // rebuilds above.
+  try {
+    const existingResult = await raw.execute(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='web_clients'"
+    );
+    const existing = existingResult.rows[0];
+
+    if (existing && existing.sql.includes('campaign_id INTEGER NOT NULL')) {
+      await raw.execute('ALTER TABLE web_clients RENAME TO web_clients_old');
+      await raw.execute(`
+        CREATE TABLE web_clients (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          campaign_id INTEGER,
+          webseo_campaign_id INTEGER,
+          name TEXT NOT NULL,
+          business_name TEXT NOT NULL,
+          assigned_associate_id INTEGER,
+          is_active INTEGER DEFAULT 1,
+          website TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (assigned_associate_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+      `);
+      await raw.execute(`
+        INSERT INTO web_clients (id, campaign_id, webseo_campaign_id, name, business_name, assigned_associate_id, is_active, website, created_at)
+        SELECT id, campaign_id, webseo_campaign_id, name, business_name, assigned_associate_id, is_active, website, created_at FROM web_clients_old
+      `);
+      await raw.execute('DROP TABLE web_clients_old');
+    }
+  } catch (e) {
+    console.warn('web_clients nullable-campaign_id migration skipped:', e.message);
+  }
+
+  try {
+    const existingResult = await raw.execute(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='webseo_tasks'"
+    );
+    const existing = existingResult.rows[0];
+
+    if (existing && existing.sql.includes('campaign_id INTEGER NOT NULL')) {
+      await raw.execute('ALTER TABLE webseo_tasks RENAME TO webseo_tasks_old');
+      await raw.execute(`
+        CREATE TABLE webseo_tasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          campaign_id INTEGER,
+          webseo_campaign_id INTEGER,
+          client_id INTEGER NOT NULL,
+          associate_id INTEGER NOT NULL,
+          day_number INTEGER NOT NULL,
+          task_date DATE NOT NULL,
+          post_type TEXT NOT NULL,
+          target_count INTEGER DEFAULT 1,
+          completed_count INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await raw.execute(`
+        INSERT INTO webseo_tasks (id, campaign_id, webseo_campaign_id, client_id, associate_id, day_number, task_date, post_type, target_count, completed_count, created_at)
+        SELECT id, campaign_id, webseo_campaign_id, client_id, associate_id, day_number, task_date, post_type, target_count, completed_count, created_at FROM webseo_tasks_old
+      `);
+      await raw.execute('DROP TABLE webseo_tasks_old');
+    }
+  } catch (e) {
+    console.warn('webseo_tasks nullable-campaign_id migration skipped:', e.message);
+  }
+
+  // One-time backfill: give Web SEO its own webseo_campaigns row(s) instead of
+  // sharing the main campaigns table. For each distinct campaign_id already
+  // referenced by web_clients/webseo_tasks, create a matching webseo_campaigns row
+  // (copying that campaign's name/dates/webseo targets) and repoint every
+  // web_clients/webseo_tasks row at it — the most recently-created one is marked
+  // active so Web SEO keeps working immediately regardless of the SEO campaign's
+  // own status. Guarded to run only once (skipped once webseo_campaigns has rows).
+  try {
+    const already = await raw.execute('SELECT id FROM webseo_campaigns LIMIT 1');
+    if (already.rows.length === 0) {
+      const sourceIdsResult = await raw.execute(`
+        SELECT DISTINCT campaign_id FROM (
+          SELECT campaign_id FROM web_clients WHERE campaign_id IS NOT NULL
+          UNION
+          SELECT campaign_id FROM webseo_tasks WHERE campaign_id IS NOT NULL
+        )
+      `);
+      const sourceIds = sourceIdsResult.rows.map(r => r.campaign_id);
+
+      if (sourceIds.length > 0) {
+        const campaignsResult = await raw.execute(
+          `SELECT id, name, start_date, total_days, webseo_web2_target, webseo_guestpost_target FROM campaigns WHERE id IN (${sourceIds.map(() => '?').join(',')})`,
+          sourceIds
+        );
+        const byId = new Map(campaignsResult.rows.map(c => [c.id, c]));
+        // Most recently created source campaign's webseo_campaigns row starts active.
+        const mostRecentId = Math.max(...sourceIds);
+
+        for (const oldId of sourceIds) {
+          const c = byId.get(oldId);
+          if (!c) continue;
+          const status = oldId === mostRecentId ? 'active' : 'completed';
+          const inserted = await raw.execute(
+            `INSERT INTO webseo_campaigns (name, start_date, total_days, status, webseo_web2_target, webseo_guestpost_target)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [c.name, c.start_date, c.total_days, status, c.webseo_web2_target, c.webseo_guestpost_target]
+          );
+          const newId = Number(inserted.lastInsertRowid);
+          await raw.execute('UPDATE web_clients SET webseo_campaign_id = ? WHERE campaign_id = ?', [newId, oldId]);
+          await raw.execute('UPDATE webseo_tasks SET webseo_campaign_id = ? WHERE campaign_id = ?', [newId, oldId]);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('webseo_campaigns backfill skipped:', e.message);
+  }
+
+  // One-time backfill: give Writers their own writer_clients roster instead of
+  // pointing writer_offpage_assignments/tasks at the SEO clients table. For every
+  // distinct (writer_campaign_id, client_id) pair already referenced, create a
+  // matching writer_clients row (copying the name from the clients row it used to
+  // point at) and repoint client_id at the new row. Guarded to run only once
+  // (skipped once writer_clients has rows, or once no writer_offpage rows still
+  // point at the old clients table).
+  try {
+    const already = await raw.execute('SELECT id FROM writer_clients LIMIT 1');
+    if (already.rows.length === 0) {
+      const pairsResult = await raw.execute(`
+        SELECT DISTINCT writer_campaign_id, client_id FROM (
+          SELECT writer_campaign_id, client_id FROM writer_offpage_assignments WHERE writer_campaign_id IS NOT NULL
+          UNION
+          SELECT writer_campaign_id, client_id FROM writer_offpage_tasks WHERE writer_campaign_id IS NOT NULL
+        )
+      `);
+
+      for (const { writer_campaign_id, client_id } of pairsResult.rows) {
+        const clientResult = await raw.execute('SELECT name FROM clients WHERE id = ?', [client_id]);
+        const clientName = clientResult.rows[0]?.name;
+        if (!clientName) continue;
+
+        let newId;
+        const existingWc = await raw.execute(
+          'SELECT id FROM writer_clients WHERE writer_campaign_id = ? AND name = ?',
+          [writer_campaign_id, clientName]
+        );
+        if (existingWc.rows.length > 0) {
+          newId = existingWc.rows[0].id;
+        } else {
+          const inserted = await raw.execute(
+            'INSERT INTO writer_clients (writer_campaign_id, name) VALUES (?, ?)',
+            [writer_campaign_id, clientName]
+          );
+          newId = Number(inserted.lastInsertRowid);
+        }
+
+        await raw.execute(
+          'UPDATE writer_offpage_assignments SET client_id = ? WHERE writer_campaign_id = ? AND client_id = ?',
+          [newId, writer_campaign_id, client_id]
+        );
+        await raw.execute(
+          'UPDATE writer_offpage_tasks SET client_id = ? WHERE writer_campaign_id = ? AND client_id = ?',
+          [newId, writer_campaign_id, client_id]
+        );
+      }
+    }
+  } catch (e) {
+    console.warn('writer_clients backfill skipped:', e.message);
   }
 
   // Widen the users.role CHECK constraint as new roles are added. Guarded by

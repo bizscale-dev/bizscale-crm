@@ -82,19 +82,38 @@ async function fetchTabBlocks(sheetId, accessToken, tabName) {
 }
 
 /**
- * Matches a sheet client name against the clients table — exact match first, then
- * the same case-insensitive bidirectional-substring fuzzy match used by
- * sync-completed-links, since sheet names occasionally drift slightly from the DB
- * (casing, a "(wix)" suffix, etc.).
+ * Matches a sheet client name against an already-loaded list — exact match first,
+ * then the same case-insensitive bidirectional-substring fuzzy match used by
+ * sync-completed-links, since sheet names occasionally drift slightly (casing, a
+ * "(wix)" suffix, etc.) between one sync and the next.
  */
-function matchClient(name, dbClients) {
-  let client = dbClients.find(c => c.name === name);
+function matchClient(name, candidates) {
+  let client = candidates.find(c => c.name === name);
   if (!client) {
-    client = dbClients.find(c =>
+    client = candidates.find(c =>
       c.name.toLowerCase().includes(name.toLowerCase()) ||
       name.toLowerCase().includes(c.name.toLowerCase())
     );
   }
+  return client;
+}
+
+/**
+ * Resolves a sheet client name to a writer_clients row for this writer campaign —
+ * fuzzy-matching against clients already seen this campaign, creating a new row
+ * only when nothing matches. Writers have their own independent client roster
+ * (populated straight from the GBP-Off/Web-Off sheets, no separate import step),
+ * not the SEO campaign's `clients` table — see writer_clients in src/lib/db.js.
+ */
+async function resolveWriterClient(db, writerCampaignId, name, cache) {
+  const existing = matchClient(name, [...cache.values()]);
+  if (existing) return existing;
+
+  const inserted = await db.prepare(
+    'INSERT INTO writer_clients (writer_campaign_id, name) VALUES (?, ?)'
+  ).run(writerCampaignId, name);
+  const client = { id: inserted.lastInsertRowid, name };
+  cache.set(client.id, client);
   return client;
 }
 
@@ -340,9 +359,12 @@ export async function runWriterOffpageSync(writerCampaignId) {
   if (tokenResult.error) throw new Error(tokenResult.error);
   const accessToken = tokenResult.accessToken;
 
-  const dbClients = await db.prepare(`
-    SELECT id, name FROM clients WHERE campaign_id = ? AND is_active = 1
-  `).all(writerCampaign.source_campaign_id);
+  // This writer campaign's own client roster so far, keyed by id — seeded from
+  // writer_clients and grown in-place as new names are seen on the sheet below.
+  const existingWriterClients = await db.prepare(
+    'SELECT id, name FROM writer_clients WHERE writer_campaign_id = ?'
+  ).all(writerCampaignId);
+  const writerClientCache = new Map(existingWriterClients.map(c => [c.id, c]));
 
   const results = {};
 
@@ -352,14 +374,9 @@ export async function runWriterOffpageSync(writerCampaignId) {
       const blocks = await fetchTabBlocks(sheetId, accessToken, tabName);
 
       const blocksByClientId = new Map();
-      const errors = [];
       for (const [clientName, categories] of blocks) {
-        const match = matchClient(clientName, dbClients);
-        if (!match) {
-          errors.push(`Client "${clientName}" not found in campaign`);
-          continue;
-        }
-        blocksByClientId.set(match.id, categories);
+        const client = await resolveWriterClient(db, writerCampaignId, clientName, writerClientCache);
+        blocksByClientId.set(client.id, categories);
       }
 
       await syncAssignments(db, writerCampaignId, writerCampaign.source_campaign_id, taskType, [...blocksByClientId.keys()]);
@@ -371,7 +388,6 @@ export async function runWriterOffpageSync(writerCampaignId) {
         tabName,
         clientCount: blocksByClientId.size,
         taskCount,
-        errors: errors.length > 0 ? errors : undefined,
       };
     } catch (err) {
       results[taskType] = { success: false, tabName, error: err.message };

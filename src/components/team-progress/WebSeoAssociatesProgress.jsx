@@ -1,12 +1,12 @@
-import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+﻿import { getDb } from '@/lib/db';
+import { getActiveWebSeoCampaign } from '@/lib/services';
 import Link from 'next/link';
 
 const POST_TYPE_LABELS = { guestpost: 'Guest Post', web2: 'Web 2.0' };
 
 export default async function WebSeoAssociatesProgress({ basePath } = {}) {
   const db = await getDb();
-  const campaign = await getActiveCampaign();
+  const campaign = await getActiveWebSeoCampaign();
 
   if (!campaign) {
     return <div className="card"><p style={{ color: 'var(--danger)', margin: 0 }}>No active campaign found.</p></div>;
@@ -16,9 +16,9 @@ export default async function WebSeoAssociatesProgress({ basePath } = {}) {
     SELECT u.id, u.name, u.email,
       SUM(wt.target_count) as total_target,
       SUM(wt.completed_count) as total_completed,
-      (SELECT COUNT(DISTINCT wc.id) FROM web_clients wc WHERE wc.assigned_associate_id = u.id AND wc.campaign_id = ? AND wc.is_active = 1) as assigned_clients
+      (SELECT COUNT(DISTINCT wc.id) FROM web_clients wc WHERE wc.assigned_associate_id = u.id AND wc.webseo_campaign_id = ? AND wc.is_active = 1) as assigned_clients
     FROM users u
-    LEFT JOIN webseo_tasks wt ON wt.associate_id = u.id AND wt.campaign_id = ?
+    LEFT JOIN webseo_tasks wt ON wt.associate_id = u.id AND wt.webseo_campaign_id = ?
     WHERE u.role = 'web_seo_associate'
     GROUP BY u.id ORDER BY u.name
   `).all(campaign.id, campaign.id);
@@ -26,7 +26,7 @@ export default async function WebSeoAssociatesProgress({ basePath } = {}) {
   const associateDetail = await Promise.all(associates.map(async a => {
     const byType = await db.prepare(`
       SELECT post_type, SUM(target_count) as target, SUM(completed_count) as completed
-      FROM webseo_tasks WHERE associate_id = ? AND campaign_id = ?
+      FROM webseo_tasks WHERE associate_id = ? AND webseo_campaign_id = ?
       GROUP BY post_type
     `).all(a.id, campaign.id);
 

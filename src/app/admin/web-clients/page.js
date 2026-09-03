@@ -1,16 +1,19 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+import { getActiveWebSeoCampaign } from '@/lib/services';
+import { listOffDays } from '@/lib/webSeoCampaignOffDays';
 import WebClientList from './WebClientList';
 import WebClientImport from './WebClientImport';
+import WebSeoCampaignPanel from './WebSeoCampaignPanel';
 
 export const revalidate = 0;
 
 export default async function WebClientsPage() {
   const db = await getDb();
-  const campaign = await getActiveCampaign();
+  const campaign = await getActiveWebSeoCampaign();
 
   let webClients = [];
   let webAssociates = [];
+  let offDays = [];
 
   if (campaign) {
     // Fetch web clients with their assigned associates
@@ -19,7 +22,7 @@ export default async function WebClientsPage() {
         u.name as assigned_associate_name
       FROM web_clients wc
       LEFT JOIN users u ON u.id = wc.assigned_associate_id
-      WHERE wc.campaign_id = ?
+      WHERE wc.webseo_campaign_id = ?
       ORDER BY wc.id
     `).all(campaign.id)).map(c => ({ ...c }));
 
@@ -30,26 +33,26 @@ export default async function WebClientsPage() {
       WHERE role = 'web_seo_associate' AND is_active = 1
       ORDER BY name
     `).all();
+
+    offDays = await listOffDays(campaign.id);
   }
 
   const BRAND_COLOR = '#16b293';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      {!campaign ? (
-        <div className="card">
-          <h3>No Active Campaign</h3>
-          <p style={{ color: 'var(--text-muted)' }}>Please activate a campaign to manage Web Clients.</p>
-        </div>
-      ) : (
-        <>
-          <div>
-            <h1 style={{ fontSize: '1.75rem', margin: 0, marginBottom: '0.5rem' }}>Web Clients</h1>
-            <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-              Import and manage web clients with assigned Web SEO Associates
-            </p>
-          </div>
+      <div>
+        <h1 style={{ fontSize: '1.75rem', margin: 0, marginBottom: '0.5rem' }}>Web Clients</h1>
+        <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
+          Import and manage web clients with assigned Web SEO Associates
+        </p>
+      </div>
 
+      {/* Web SEO Campaign — independent of the SEO campaign, its own dates/duration */}
+      <WebSeoCampaignPanel campaign={campaign} offDays={offDays} />
+
+      {!campaign ? null : (
+        <>
           {/* Import Section */}
           <div className="card">
             <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>

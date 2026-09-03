@@ -2,15 +2,16 @@
 
 import { getDb } from '@/lib/db';
 import { runWriterOffpageSync } from '@/lib/writerOffpageSync';
-import { getActiveCampaign, getActiveWriterCampaign } from '@/lib/services';
+import { getActiveWriterCampaign } from '@/lib/services';
 import { listOffDays, toggleOffDay } from '@/lib/writerCampaignOffDays';
 import { revalidatePath } from 'next/cache';
 
 // Creates a new, independent Writer Campaign — its own start_date/total_days,
-// decoupled from the main campaigns table, so writers can be given a head start
-// (e.g. a week early) before the associate-facing campaign is created. Client
-// matching still borrows the currently active main campaign's roster, captured
-// once as source_campaign_id.
+// fully decoupled from the main (SEO) campaigns table, so writers can be given a
+// head start (e.g. a week early) before the associate-facing campaign even
+// exists. Writers get their own client roster (writer_clients), populated
+// automatically from the GBP-Off/Web-Off sheets on sync — no SEO campaign or
+// client list is needed to create or run a writer campaign.
 export async function createWriterCampaign(prevState, formData) {
   const db = await getDb();
 
@@ -21,18 +22,13 @@ export async function createWriterCampaign(prevState, formData) {
     return { error: 'Start date is required' };
   }
 
-  const campaign = await getActiveCampaign();
-  if (!campaign) {
-    return { error: 'No active campaign found — a main campaign must exist so the writer campaign can match its clients' };
-  }
-
   try {
     await db.prepare("UPDATE writer_campaigns SET status = 'completed' WHERE status = 'active'").run();
 
     const result = await db.prepare(`
-      INSERT INTO writer_campaigns (source_campaign_id, start_date, total_days, status)
-      VALUES (?, ?, ?, 'active')
-    `).run(campaign.id, start_date, total_days);
+      INSERT INTO writer_campaigns (start_date, total_days, status)
+      VALUES (?, ?, 'active')
+    `).run(start_date, total_days);
 
     const writerCampaignId = result.lastInsertRowid;
 
@@ -61,6 +57,7 @@ export async function deleteWriterCampaign(id) {
     await db.prepare('DELETE FROM writer_offpage_tasks WHERE writer_campaign_id = ?').run(id);
     await db.prepare('DELETE FROM writer_offpage_assignments WHERE writer_campaign_id = ?').run(id);
     await db.prepare('DELETE FROM writer_campaign_off_days WHERE writer_campaign_id = ?').run(id);
+    await db.prepare('DELETE FROM writer_clients WHERE writer_campaign_id = ?').run(id);
     await db.prepare('DELETE FROM writer_campaigns WHERE id = ?').run(id);
 
     revalidatePath('/admin/writers');

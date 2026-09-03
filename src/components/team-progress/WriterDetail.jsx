@@ -14,7 +14,7 @@ async function loadOffpageStats(db, writerId, writerCampaignId, taskType, today)
   const todayTasks = await db.prepare(`
     SELECT wot.*, c.name as client_name
     FROM writer_offpage_tasks wot
-    JOIN clients c ON c.id = wot.client_id
+    JOIN writer_clients c ON c.id = wot.client_id
     WHERE wot.writer_id = ? AND wot.writer_campaign_id = ? AND wot.task_type = ? AND wot.task_date = ? AND c.is_active = 1
     ORDER BY c.name, wot.category
   `).all(writerId, writerCampaignId, taskType, today);
@@ -24,7 +24,7 @@ async function loadOffpageStats(db, writerId, writerCampaignId, taskType, today)
   const pendingTasks = await db.prepare(`
     SELECT wot.*, c.name as client_name
     FROM writer_offpage_tasks wot
-    JOIN clients c ON c.id = wot.client_id
+    JOIN writer_clients c ON c.id = wot.client_id
     WHERE wot.writer_id = ? AND wot.writer_campaign_id = ? AND wot.task_type = ?
       AND wot.task_date < ? AND wot.completed_count < wot.target_count AND c.is_active = 1
     ORDER BY wot.task_date DESC, c.name, wot.category

@@ -1,5 +1,5 @@
-import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+﻿import { getDb } from '@/lib/db';
+import { getActiveWebSeoCampaign } from '@/lib/services';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
 import Badge from '@/components/ui/Badge';
@@ -11,7 +11,7 @@ const POST_TYPE_LABELS = { web2: 'Web 2.0', guestpost: 'Guest Post' };
 export default async function WebSeoAssociateDetail({ id, backHref, backLabel }) {
   const db = await getDb();
   const associateId = parseInt(id, 10);
-  const campaign = await getActiveCampaign();
+  const campaign = await getActiveWebSeoCampaign();
   const today = new Date().toISOString().split('T')[0];
 
   // Guard by role too, not just existence — this component is reachable from
@@ -33,14 +33,14 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel })
 
   if (campaign) {
     assignedClientsCount = (await db.prepare(`
-      SELECT COUNT(*) as c FROM web_clients WHERE campaign_id = ? AND assigned_associate_id = ? AND is_active = 1
+      SELECT COUNT(*) as c FROM web_clients WHERE webseo_campaign_id = ? AND assigned_associate_id = ? AND is_active = 1
     `).get(campaign.id, associateId)).c;
 
     todayTasks = await db.prepare(`
       SELECT wt.*, c.business_name as client_name
       FROM webseo_tasks wt
       JOIN web_clients c ON c.id = wt.client_id
-      WHERE wt.associate_id = ? AND wt.campaign_id = ? AND wt.task_date = ?
+      WHERE wt.associate_id = ? AND wt.webseo_campaign_id = ? AND wt.task_date = ?
       ORDER BY c.business_name, wt.post_type
     `).all(associateId, campaign.id, today);
 
@@ -50,7 +50,7 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel })
     const cumulativeRows = await db.prepare(`
       SELECT client_id, post_type, SUM(target_count) as target, SUM(completed_count) as completed
       FROM webseo_tasks
-      WHERE associate_id = ? AND campaign_id = ? AND task_date <= ?
+      WHERE associate_id = ? AND webseo_campaign_id = ? AND task_date <= ?
       GROUP BY client_id, post_type
     `).all(associateId, campaign.id, today);
     for (const row of cumulativeRows) {
@@ -61,7 +61,7 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel })
     overallStats = await db.prepare(`
       SELECT SUM(target_count) as target, SUM(completed_count) as completed
       FROM webseo_tasks
-      WHERE associate_id = ? AND campaign_id = ?
+      WHERE associate_id = ? AND webseo_campaign_id = ?
     `).get(associateId, campaign.id);
 
     upcomingDays = await db.prepare(`
@@ -69,7 +69,7 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel })
         SUM(target_count) as target, SUM(completed_count) as completed,
         COUNT(DISTINCT client_id) as clients
       FROM webseo_tasks
-      WHERE associate_id = ? AND campaign_id = ? AND task_date >= ?
+      WHERE associate_id = ? AND webseo_campaign_id = ? AND task_date >= ?
       GROUP BY task_date
       ORDER BY task_date
     `).all(associateId, campaign.id, today);
@@ -80,7 +80,7 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel })
       SELECT wt.*, c.business_name as client_name
       FROM webseo_tasks wt
       JOIN web_clients c ON c.id = wt.client_id
-      WHERE wt.associate_id = ? AND wt.campaign_id = ?
+      WHERE wt.associate_id = ? AND wt.webseo_campaign_id = ?
         AND wt.task_date < ? AND wt.completed_count < wt.target_count
       ORDER BY wt.task_date DESC, c.business_name, wt.post_type
     `).all(associateId, campaign.id, today);

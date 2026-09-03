@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+﻿import { getDb } from '@/lib/db';
 import { getActiveWriterCampaign } from '@/lib/services';
 import { verifySession } from '@/lib/session';
 import WriterTasksClient from './WriterTasksClient';
@@ -25,7 +25,7 @@ async function loadOffpageSection(db, userId, writerCampaignId, taskType, date, 
   const tasks = await db.prepare(`
     SELECT wot.*, c.name as client_name, c.website
     FROM writer_offpage_tasks wot
-    JOIN clients c ON c.id = wot.client_id
+    JOIN writer_clients c ON c.id = wot.client_id
     WHERE wot.writer_id = ? AND wot.writer_campaign_id = ? AND wot.task_type = ? AND wot.task_date = ? AND c.is_active = 1
     ORDER BY c.name, wot.category
   `).all(userId, writerCampaignId, taskType, date);
@@ -33,7 +33,7 @@ async function loadOffpageSection(db, userId, writerCampaignId, taskType, date, 
   const availableDates = await db.prepare(`
     SELECT DISTINCT wot.task_date, wot.day_number
     FROM writer_offpage_tasks wot
-    JOIN clients c ON c.id = wot.client_id
+    JOIN writer_clients c ON c.id = wot.client_id
     WHERE wot.writer_id = ? AND wot.writer_campaign_id = ? AND wot.task_type = ? AND c.is_active = 1
     ORDER BY wot.task_date
   `).all(userId, writerCampaignId, taskType);
@@ -44,7 +44,7 @@ async function loadOffpageSection(db, userId, writerCampaignId, taskType, date, 
   const pendingTasks = await db.prepare(`
     SELECT wot.*, c.name as client_name, c.website
     FROM writer_offpage_tasks wot
-    JOIN clients c ON c.id = wot.client_id
+    JOIN writer_clients c ON c.id = wot.client_id
     WHERE wot.writer_id = ? AND wot.writer_campaign_id = ? AND wot.task_type = ?
       AND wot.task_date < ? AND wot.completed_count < wot.target_count AND c.is_active = 1
     ORDER BY wot.task_date DESC, c.name, wot.category

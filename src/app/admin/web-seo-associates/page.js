@@ -1,12 +1,12 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+import { getActiveWebSeoCampaign } from '@/lib/services';
 import Link from 'next/link';
 
 export const revalidate = 0;
 
 export default async function WebSEOAssociatesPage() {
   const db = await getDb();
-  const campaign = await getActiveCampaign();
+  const campaign = await getActiveWebSeoCampaign();
 
   let webSeoAssociates = [];
   let webSeoStats = [];
@@ -24,12 +24,12 @@ export default async function WebSEOAssociatesPage() {
     // Get Web SEO stats for each associate
     webSeoStats = await db.prepare(`
       SELECT u.id, u.name, u.lifetime_completed_links,
-        (SELECT COUNT(DISTINCT client_id) FROM webseo_tasks WHERE associate_id = u.id AND campaign_id = ?) as assigned_clients,
-        (SELECT COUNT(DISTINCT day_number) FROM webseo_tasks WHERE associate_id = u.id AND campaign_id = ?) as scheduled_days,
-        (SELECT SUM(target_count) FROM webseo_tasks WHERE associate_id = u.id AND campaign_id = ? AND post_type = 'guestpost') as guestpost_target,
-        (SELECT SUM(completed_count) FROM webseo_tasks WHERE associate_id = u.id AND campaign_id = ? AND post_type = 'guestpost') as guestpost_completed,
-        (SELECT SUM(target_count) FROM webseo_tasks WHERE associate_id = u.id AND campaign_id = ? AND post_type = 'web2') as web2_target,
-        (SELECT SUM(completed_count) FROM webseo_tasks WHERE associate_id = u.id AND campaign_id = ? AND post_type = 'web2') as web2_completed
+        (SELECT COUNT(DISTINCT client_id) FROM webseo_tasks WHERE associate_id = u.id AND webseo_campaign_id = ?) as assigned_clients,
+        (SELECT COUNT(DISTINCT day_number) FROM webseo_tasks WHERE associate_id = u.id AND webseo_campaign_id = ?) as scheduled_days,
+        (SELECT SUM(target_count) FROM webseo_tasks WHERE associate_id = u.id AND webseo_campaign_id = ? AND post_type = 'guestpost') as guestpost_target,
+        (SELECT SUM(completed_count) FROM webseo_tasks WHERE associate_id = u.id AND webseo_campaign_id = ? AND post_type = 'guestpost') as guestpost_completed,
+        (SELECT SUM(target_count) FROM webseo_tasks WHERE associate_id = u.id AND webseo_campaign_id = ? AND post_type = 'web2') as web2_target,
+        (SELECT SUM(completed_count) FROM webseo_tasks WHERE associate_id = u.id AND webseo_campaign_id = ? AND post_type = 'web2') as web2_completed
       FROM users u
       WHERE u.role = 'web_seo_associate' OR u.role = 'webseo'
       ORDER BY u.name
@@ -37,7 +37,7 @@ export default async function WebSEOAssociatesPage() {
 
     // Campaign-level stats
     campaignStats = await db.prepare(`
-      SELECT 
+      SELECT
         COUNT(DISTINCT associate_id) as total_associates,
         COUNT(DISTINCT client_id) as total_clients,
         COUNT(*) as total_tasks,
@@ -48,7 +48,7 @@ export default async function WebSEOAssociatesPage() {
         SUM(CASE WHEN post_type = 'web2' THEN target_count ELSE 0 END) as web2_target,
         SUM(CASE WHEN post_type = 'web2' THEN completed_count ELSE 0 END) as web2_completed
       FROM webseo_tasks
-      WHERE campaign_id = ?
+      WHERE webseo_campaign_id = ?
     `).get(campaign.id);
   }
 
@@ -58,8 +58,8 @@ export default async function WebSEOAssociatesPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       {!campaign ? (
         <div className="card">
-          <h3>No Active Campaign</h3>
-          <p style={{ color: 'var(--text-muted)' }}>Please activate a campaign to manage Web SEO Associates.</p>
+          <h3>No Active Web SEO Campaign</h3>
+          <p style={{ color: 'var(--text-muted)' }}>Start one from Admin → Web Clients to manage Web SEO Associates.</p>
         </div>
       ) : (
         <>

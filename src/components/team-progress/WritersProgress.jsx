@@ -1,43 +1,35 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+import { getActiveWriterCampaign } from '@/lib/services';
 import Link from 'next/link';
 
-const POST_TYPE_LABELS = { guestpost: 'Guest Post', web2: 'Web 2.0', pdf: 'PDF Submission' };
+const POST_TYPE_LABELS = { gbp: 'GBP-Off Page', weboff: 'Web-Off Page' };
 
 export default async function WritersProgress({ basePath } = {}) {
   const db = await getDb();
-  const campaign = await getActiveCampaign();
+  const campaign = await getActiveWriterCampaign();
 
   if (!campaign) {
-    return <div className="card"><p style={{ color: 'var(--danger)', margin: 0 }}>No active campaign found.</p></div>;
+    return <div className="card"><p style={{ color: 'var(--danger)', margin: 0 }}>No active writer campaign found.</p></div>;
   }
 
   const writers = await db.prepare(`
     SELECT u.id, u.name, u.email,
       SUM(wt.target_count) as total_target,
-      SUM(wt.completed_count) as total_completed,
-      wa.daily_post_target
+      SUM(wt.completed_count) as total_completed
     FROM users u
-    JOIN writer_assignments wa ON wa.user_id = u.id AND wa.campaign_id = ?
-    LEFT JOIN writing_tasks wt ON wt.writer_id = u.id AND wt.campaign_id = ?
+    LEFT JOIN writer_offpage_tasks wt ON wt.writer_id = u.id AND wt.writer_campaign_id = ?
+    WHERE u.role = 'writer'
     GROUP BY u.id ORDER BY u.name
-  `).all(campaign.id, campaign.id);
+  `).all(campaign.id);
 
   const writerDetail = await Promise.all(writers.map(async w => {
     const byType = await db.prepare(`
-      SELECT post_type, SUM(target_count) as target, SUM(completed_count) as completed
-      FROM writing_tasks WHERE writer_id = ? AND campaign_id = ?
-      GROUP BY post_type
+      SELECT task_type as post_type, SUM(target_count) as target, SUM(completed_count) as completed
+      FROM writer_offpage_tasks WHERE writer_id = ? AND writer_campaign_id = ?
+      GROUP BY task_type
     `).all(w.id, campaign.id);
 
-    const byWeek = await db.prepare(`
-      SELECT week_number, post_type,
-        SUM(target_count) as target, SUM(completed_count) as completed
-      FROM writing_tasks WHERE writer_id = ? AND campaign_id = ?
-      GROUP BY week_number, post_type ORDER BY week_number
-    `).all(w.id, campaign.id);
-
-    return { ...w, byType, byWeek };
+    return { ...w, byType };
   }));
 
   return (
@@ -54,7 +46,7 @@ export default async function WritersProgress({ basePath } = {}) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
                 <div>
                   <h3 style={{ margin: 0, fontWeight: '600' }}>{w.name}</h3>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{w.email} · Target: {w.daily_post_target}/day</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{w.email}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <div style={{ textAlign: 'right' }}>

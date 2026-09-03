@@ -78,17 +78,6 @@ export default function CampaignForm({ mode = 'create', initialData = null, onSu
         <LinkTargetsFields initialData={initialData} onTargetsChange={setLinkTargets} />
       </Section>
 
-      <Section title="Web SEO Associates Settings" subtitle="Quotas used by the separate Web SEO Associate track">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
-          <Field label="Guest Post Target per Client" hint="Number of guest posts per client for Web SEO Associates">
-            <input type="number" name="webseo_guestpost_target" defaultValue={initialData?.webseo_guestpost_target || 7} min="0" style={inputStyle} />
-          </Field>
-          <Field label="Web 2.0 Post Target per Client" hint="Number of web 2.0 posts per client for Web SEO Associates">
-            <input type="number" name="webseo_web2_target" defaultValue={initialData?.webseo_web2_target || 7} min="0" style={inputStyle} />
-          </Field>
-        </div>
-      </Section>
-
       <div style={{ display: 'flex', gap: '1rem', paddingTop: '0.5rem' }}>
         <button type="submit" className="btn btn-primary" disabled={isPending} style={{ padding: '0.65rem 1.5rem', fontWeight: '600' }}>
           {isPending ? 'Saving...' : mode === 'create' ? '+ Create Campaign' : 'Save Changes'}

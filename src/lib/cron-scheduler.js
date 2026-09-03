@@ -105,9 +105,6 @@ export async function runSyncJob() {
           if (applyResponse.ok) {
             const applyData = await applyResponse.json();
             console.log(`[CRON] Changes applied for ${campaign.name}:`, applyData.message);
-            if (applyData.results.writersAssigned > 0) {
-              console.log(`[CRON] ✅ Writer tasks generated for ${campaign.name}`);
-            }
           }
         }
 

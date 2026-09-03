@@ -47,6 +47,15 @@ export async function getActiveWriterCampaign() {
   return row ? { ...row } : null;
 }
 
+// Web SEO's own independent campaign — see webseo_campaigns in src/lib/db.js.
+// Fully decoupled from the main (SEO) campaigns table: different dates/duration,
+// and unaffected by whether the SEO campaign is active, paused, or completed.
+export async function getActiveWebSeoCampaign() {
+  const db = await getDb();
+  const row = await db.prepare("SELECT * FROM webseo_campaigns WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();
+  return row ? { ...row } : null;
+}
+
 export async function getCampaignProgress(campaignId) {
   const db = await getDb();
 
