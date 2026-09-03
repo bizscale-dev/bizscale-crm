@@ -61,10 +61,13 @@ async function loadOffpageStats(db, writerId, writerCampaignId, taskType, today)
   return { todayTasks, pendingTasks, overallStats, weeklySummary, assignedClientCount: assignedClients?.count || 0 };
 }
 
-export default async function WriterDetail({ id, backHref, backLabel }) {
+export default async function WriterDetail({ id, backHref, backLabel, campaign: campaignProp }) {
   const db = await getDb();
   const writerId = parseInt(id, 10);
-  const writerCampaign = await getActiveWriterCampaign();
+  // Pass campaign to scope this dashboard to a specific (possibly past/completed)
+  // writer campaign instead of always today's active one — used by the read-only
+  // per-campaign report (src/app/admin/writers/campaigns/[id]/writers/[writerId]/page.js).
+  const writerCampaign = campaignProp || await getActiveWriterCampaign();
   const today = new Date().toISOString().split('T')[0];
 
   // Guard by role too, not just existence — this component is reachable from

@@ -8,10 +8,13 @@ import StatCard from '@/components/ui/StatCard';
 const BRAND_COLOR = 'var(--primary)';
 const POST_TYPE_LABELS = { web2: 'Web 2.0', guestpost: 'Guest Post' };
 
-export default async function WebSeoAssociateDetail({ id, backHref, backLabel }) {
+export default async function WebSeoAssociateDetail({ id, backHref, backLabel, campaign: campaignProp }) {
   const db = await getDb();
   const associateId = parseInt(id, 10);
-  const campaign = await getActiveWebSeoCampaign();
+  // Pass campaign to scope this dashboard to a specific (possibly past/completed)
+  // Web SEO campaign instead of always today's active one — used by the read-only
+  // per-campaign report (src/app/admin/web-clients/campaigns/[id]/associates/[associateId]/page.js).
+  const campaign = campaignProp || await getActiveWebSeoCampaign();
   const today = new Date().toISOString().split('T')[0];
 
   // Guard by role too, not just existence — this component is reachable from

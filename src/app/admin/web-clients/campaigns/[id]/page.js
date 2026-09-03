@@ -115,6 +115,7 @@ export default async function WebSeoCampaignDetailPage({ params }) {
                   <th style={thStyle}>Guest Posts</th>
                   <th style={thStyle}>Web 2.0 Posts</th>
                   <th style={thStyle}>Progress</th>
+                  <th style={thStyle}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -137,6 +138,11 @@ export default async function WebSeoCampaignDetailPage({ params }) {
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{pct}%</span>
                         </div>
                       </td>
+                      <td style={tdStyle}>
+                        <Link href={`/admin/web-clients/campaigns/${campaign.id}/associates/${a.id}`} style={viewLinkStyle}>
+                          View
+                        </Link>
+                      </td>
                     </tr>
                   );
                 })}
@@ -151,6 +157,16 @@ export default async function WebSeoCampaignDetailPage({ params }) {
 
 const thStyle = { padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' };
 const tdStyle = { padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' };
+const viewLinkStyle = {
+  padding: '0.4rem 0.75rem',
+  backgroundColor: 'var(--primary)',
+  color: 'white',
+  textDecoration: 'none',
+  borderRadius: '0.25rem',
+  fontSize: '0.75rem',
+  fontWeight: '500',
+  display: 'inline-block',
+};
 
 function StatCard({ title, value, sub, color }) {
   return (
