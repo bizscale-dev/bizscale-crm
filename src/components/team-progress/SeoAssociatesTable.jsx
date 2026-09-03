@@ -10,10 +10,11 @@ import { FUNNEL_BONUS_FIELDS, FUNNEL_MONTH1_WEEK_TARGETS } from '@/lib/funnelCon
  * the admin's own page (src/app/admin/seo-associates/page.js), the SEO
  * Manager's equivalent (src/app/seo-manager/page.js), and a specific past
  * campaign's read-only report (src/app/admin/campaign/[id]/page.js) — basePath
- * controls where "View Dashboard" links to (omit to hide that action entirely,
- * since a past campaign's associate dashboards would otherwise misleadingly show
- * the currently-active campaign's live data instead). Pass campaign to scope to
- * a specific one instead of always the active campaign.
+ * controls where "View Dashboard" links to (omit to hide that action entirely).
+ * The campaign report page points it at /admin/campaign/[id]/associates, whose
+ * page passes the same explicit campaign through to SeoAssociateDetail so the
+ * drill-down shows that campaign's real data even once a different one is active.
+ * Pass campaign to scope to a specific one instead of always the active campaign.
  */
 export default async function SeoAssociatesTable({ basePath, campaign: campaignProp }) {
   const db = await getDb();

@@ -18,10 +18,15 @@ function groupByClient(tasks) {
   return Object.values(byClient);
 }
 
-export default async function SeoAssociateDetail({ id, backHref, backLabel, showFunnelLink = false, basePath, selectedDate, showLegacyTasksView = false }) {
+export default async function SeoAssociateDetail({ id, backHref, backLabel, showFunnelLink = false, basePath, selectedDate, showLegacyTasksView = false, campaign: campaignProp }) {
   const db = await getDb();
   const associateId = parseInt(id, 10);
-  const campaign = await getActiveCampaign();
+  // Pass campaign to scope this dashboard to a specific (possibly past/completed)
+  // campaign instead of always today's active one — used by the read-only per-campaign
+  // report (src/app/admin/campaign/[id]/associates/[associateId]/page.js) so a past
+  // campaign's associate drill-down shows that campaign's real data, not whatever
+  // campaign happens to be active right now.
+  const campaign = campaignProp || await getActiveCampaign();
   const today = new Date().toISOString().split('T')[0];
   const date = selectedDate || today;
 

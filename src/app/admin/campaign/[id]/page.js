@@ -93,7 +93,7 @@ export default async function CampaignDetailPage({ params }) {
         <StatCard title="SEO Links" value={`${seoStats.completed} / ${seoStats.target}`} sub={`${seoPercent}% complete`} color="var(--success)" />
       </div>
 
-      <SeoAssociatesTable campaign={campaign} />
+      <SeoAssociatesTable campaign={campaign} basePath={`/admin/campaign/${id}/associates`} />
     </div>
   );
 }
