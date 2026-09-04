@@ -19,6 +19,28 @@ function isMonth1FunnelClient(client) {
   return client.tunnel_status === 'active' && client.funnel_month === 1;
 }
 
+// Splits `total` across `count` occurrences as evenly as possible (front-loaded
+// remainder, same guarantee as before: the full total is always delivered), but
+// starting the "+1" occurrences at `offset` instead of always at index 0. Every
+// client sharing a rotation slot shares the exact same set of occurrence days —
+// if every client's remainder always landed on their own occurrence 0, every
+// client in that slot would get bumped on the SAME calendar day, and every
+// other slot's clients would be bumped on THEIR shared day 0 too, stacking into
+// a visible staircase across the whole associate's daily totals (big early in
+// the campaign, small later). Staggering `offset` by the client's position
+// within their day-group spreads those bumps across different days instead, so
+// no single day systematically ends up carrying every client's remainder.
+function staggeredSplit(total, count, offset = 0) {
+  if (count <= 0) return [];
+  const base = Math.floor(total / count);
+  const remainder = total % count;
+  const sizes = new Array(count).fill(base);
+  for (let r = 0; r < remainder; r++) {
+    sizes[(offset + r) % count] += 1;
+  }
+  return sizes;
+}
+
 export async function generateSEOTasks(campaignId) {
   const db = await getDb();
   const campaign = await db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
@@ -49,7 +71,6 @@ export async function generateSEOTasks(campaignId) {
   if (clients.length === 0) throw new Error('No clients found for this campaign');
 
   const totalDays = campaign.total_days || 16;
-  const clientsPerDay = campaign.clients_per_day || 4;
   const offDays = await getOffDaysSet(campaignId);
   // total_days means working days — the calendar range extends past weekends/off-days
   // as needed to fit all of them, e.g. a 16-working-day campaign typically spans ~22
@@ -124,28 +145,49 @@ export async function generateSEOTasks(campaignId) {
     if (assignedClients.length === 0) continue;
 
     // First pass: work out exactly which days each client appears on (their
-    // rotation slot recurs every `clientsPerDay` working days — see below), before
-    // generating any rows. Needed so a funnel bonus-month client's EXACT monthly
-    // target can be split across their real occurrence count, rather than
-    // approximated by a shared daily rate.
+    // rotation slot recurs every 5 working days — see below), before generating
+    // any rows. Needed so a funnel bonus-month client's EXACT monthly target can
+    // be split across their real occurrence count, rather than approximated by
+    // a shared daily rate.
     //
     // Month 1 funnel clients are excluded from this rotation entirely (filtered
     // out below) — they get their own dedicated week-bucket schedule further down,
     // which fully replaces whatever this loop would have assigned them. Including
-    // them here anyway would still burn one of that day's `clientsPerDay` slots on
-    // a client whose occurrence gets reassigned elsewhere, leaving that day short
-    // a regular client for no reason — exactly the "2 clients one day, 4 the next"
+    // them here anyway would still burn one of that day's rotation slots on a
+    // client whose occurrence gets reassigned elsewhere, leaving that day short a
+    // regular client for no reason — exactly the "2 clients one day, 4 the next"
     // unevenness this excludes them to avoid.
     const rotationClients = assignedClients.filter(c => !isMonth1FunnelClient(c));
+
+    // Split into 5 rotation slots (one per working day of the week) as evenly as
+    // possible — front-loaded remainder, e.g. 18 clients -> 4/4/4/3/3 — rather
+    // than always filling each slot to a fixed size (e.g. the campaign's
+    // clients_per_day setting) and dumping whatever doesn't divide evenly into
+    // the last slot (e.g. 4/4/4/4/2 for the same 18 clients), which is what
+    // made some days come up noticeably short on both client count and target.
+    const rotationSlotCount = 5;
+    const slotBase = Math.floor(rotationClients.length / rotationSlotCount);
+    const slotRemainder = rotationClients.length % rotationSlotCount;
+    const rotationSlots = [];
+    let slotCursor = 0;
+    for (let s = 0; s < rotationSlotCount; s++) {
+      const size = slotBase + (s < slotRemainder ? 1 : 0);
+      rotationSlots.push(rotationClients.slice(slotCursor, slotCursor + size));
+      slotCursor += size;
+    }
+
+    // Position within its own day-group — the clients sharing a day-group are
+    // consecutive in rotationClients, so this gives each of them a distinct
+    // stagger offset (see staggeredSplit above) instead of all sharing 0.
+    const staggerIndexByClientId = new Map();
+    rotationSlots.forEach(slot => slot.forEach((c, idx) => staggerIndexByClientId.set(c.id, idx)));
+
     const clientOccurrenceDays = new Map();
     for (const { dayNumber: currentWorkday, dateStr: taskDateStr } of workingDays) {
-      // Determine which `clientsPerDay` clients work on this day using rotation —
-      // e.g. with clientsPerDay=4: days 1,6,11 get clients 0-3, days 2,7,12 get
-      // clients 4-7, and so on, wrapping every 5 working days.
+      // Which rotation slot works on this day — wraps every 5 working days (e.g.
+      // days 1,6,11 -> slot 0, days 2,7,12 -> slot 1, and so on).
       const dayInWeek = ((currentWorkday - 1) % 5); // 0-4 for which rotation
-      const startClientIdx = dayInWeek * clientsPerDay;
-      const endClientIdx = Math.min(startClientIdx + clientsPerDay, rotationClients.length);
-      const dayClientsToProcess = rotationClients.slice(startClientIdx, endClientIdx);
+      const dayClientsToProcess = rotationSlots[dayInWeek];
 
       for (const client of dayClientsToProcess) {
         if (!clientOccurrenceDays.has(client.id)) clientOccurrenceDays.set(client.id, []);
@@ -183,6 +225,7 @@ export async function generateSEOTasks(campaignId) {
       }
 
       month1ClientsForAssociate.forEach((client, clientIdx) => {
+        staggerIndexByClientId.set(client.id, clientIdx);
         const occurrences = [];
         weekBuckets.forEach((bucket, weekIdx) => {
           if (bucket.length === 0) return;
@@ -216,6 +259,7 @@ export async function generateSEOTasks(campaignId) {
         // once current_week is advanced up to 4).
         const month1StartWeek = client.funnel_month1_start_week || 1;
         const month1CurrentWeek = client.funnel_month1_current_week || month1StartWeek;
+        const staggerIdx = staggerIndexByClientId.get(client.id) || 0;
 
         for (const [week, weekOccurrences] of occurrencesByWeek.entries()) {
           if (week < month1StartWeek || week > month1CurrentWeek) continue;
@@ -225,11 +269,10 @@ export async function generateSEOTasks(campaignId) {
             const weekTarget = weekTargets[linkType] || 0;
             if (weekTarget <= 0) continue;
 
-            const base = Math.floor(weekTarget / weekOccurrences.length);
-            const remainder = weekTarget % weekOccurrences.length;
+            const sizes = staggeredSplit(weekTarget, weekOccurrences.length, staggerIdx % weekOccurrences.length);
 
             weekOccurrences.forEach(({ dayNumber, dateStr }, i) => {
-              const chunkSize = base + (i < remainder ? 1 : 0);
+              const chunkSize = sizes[i];
               if (chunkSize <= 0) return;
 
               const priorKey = `${client.id}|${dayNumber}|${linkType}`;
@@ -252,15 +295,15 @@ export async function generateSEOTasks(campaignId) {
         // convention used elsewhere in the app for exact monthly splits), so the
         // full defined number is always delivered by month's end instead of an
         // approximated daily rate.
+        const staggerIdx = staggerIndexByClientId.get(client.id) || 0;
         for (const linkType of LINK_TYPES) {
           const monthlyTarget = funnelMonthlyLinkTargets[linkType];
           if (monthlyTarget <= 0) continue;
 
-          const base = Math.floor(monthlyTarget / occurrences.length);
-          const remainder = monthlyTarget % occurrences.length;
+          const sizes = staggeredSplit(monthlyTarget, occurrences.length, staggerIdx % occurrences.length);
 
           occurrences.forEach(({ dayNumber, dateStr }, i) => {
-            const chunkSize = base + (i < remainder ? 1 : 0);
+            const chunkSize = sizes[i];
             if (chunkSize <= 0) return;
 
             const priorKey = `${client.id}|${dayNumber}|${linkType}`;
@@ -285,15 +328,15 @@ export async function generateSEOTasks(campaignId) {
         // recur (previously approximated via a shared daily rate derived from
         // a hardcoded 16-day/3.2-occurrence assumption, which silently
         // shorted every client whenever a campaign didn't run exactly 16 days).
+        const staggerIdx = staggerIndexByClientId.get(client.id) || 0;
         for (const linkType of LINK_TYPES) {
           const monthlyTarget = monthlyLinkTargets[linkType];
           if (monthlyTarget <= 0) continue;
 
-          const base = Math.floor(monthlyTarget / occurrences.length);
-          const remainder = monthlyTarget % occurrences.length;
+          const sizes = staggeredSplit(monthlyTarget, occurrences.length, staggerIdx % occurrences.length);
 
           occurrences.forEach(({ dayNumber, dateStr }, i) => {
-            const chunkSize = base + (i < remainder ? 1 : 0);
+            const chunkSize = sizes[i];
             if (chunkSize <= 0) return;
 
             const priorKey = `${client.id}|${dayNumber}|${linkType}`;
