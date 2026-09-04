@@ -248,8 +248,15 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   // On-time completions: work done on the same day it was assigned, summed across
   // the whole campaign so far (dayCompleted per day — see src/lib/dailyStats.js).
   // Catch-up work done later against an overdue row is never counted here, only
-  // against whichever day it actually happened on.
+  // against whichever day it actually happened on. The percentage's denominator
+  // only counts days that have actually happened (task_date <= today) — a future
+  // day's target is already assigned but hasn't had a chance to be completed on
+  // time yet, so including it would understate the real rate.
   const onTimeCompletion = dailySummary.reduce((s, d) => s + d.dayCompleted, 0);
+  const onTimeEligibleTarget = dailySummary
+    .filter(d => d.task_date <= today)
+    .reduce((s, d) => s + d.target, 0);
+  const onTimePercent = onTimeEligibleTarget > 0 ? Math.round((onTimeCompletion / onTimeEligibleTarget) * 100) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -281,7 +288,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
         <>
           {/* Stats Row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-            <StatCard title="On Time Completion" value={onTimeCompletion} sub="done on the day it was assigned" color="#16b293" />
+            <StatCard title="On Time Completion" value={onTimeCompletion} sub={`${onTimePercent}% done on the day it was assigned`} color="#16b293" />
             <StatCard title="Today's Target" value={todayTarget} sub={`${todayCompleted} completed (${todayPercent}%)`} color="var(--primary)" />
             <StatCard title="Overall Target" value={totalExpectedLinks} sub={`${overallStats?.completed || 0} completed (${overallPercent}%)`} color="var(--success)" />
             <StatCard title="Percentage Completion" value={`${overallPercent}%`} sub={`${overallStats?.completed || 0} / ${totalExpectedLinks} tasks`} color="var(--success)" />
