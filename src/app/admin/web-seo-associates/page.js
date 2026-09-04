@@ -40,7 +40,6 @@ export default async function WebSEOAssociatesPage() {
       SELECT
         COUNT(DISTINCT associate_id) as total_associates,
         COUNT(DISTINCT client_id) as total_clients,
-        COUNT(*) as total_tasks,
         SUM(target_count) as total_target_posts,
         SUM(completed_count) as total_completed_posts,
         SUM(CASE WHEN post_type = 'guestpost' THEN target_count ELSE 0 END) as guestpost_target,
@@ -83,10 +82,13 @@ export default async function WebSEOAssociatesPage() {
             </div>
             <div className="card" style={{ borderLeft: `4px solid ${BRAND_COLOR}` }}>
               <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                Total Tasks
+                Total Target Posts
               </h3>
               <div style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--foreground)' }}>
-                {campaignStats?.total_tasks || 0}
+                {campaignStats?.total_target_posts || 0}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                {campaignStats?.total_completed_posts || 0} completed
               </div>
             </div>
             <div className="card" style={{ borderLeft: `4px solid ${BRAND_COLOR}` }}>
