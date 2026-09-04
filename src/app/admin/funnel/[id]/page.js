@@ -14,22 +14,18 @@ const CATEGORY_COLORS = {
   'PDF Submission': '#f59e0b',
 };
 
-// Maps a client's actual seo_tasks day_numbers to weeks 1-4, mirroring the ordinal
-// assignment taskService.js's generateSEOTasks used to generate them: the highest
-// day_number is always week 4 (the campaign's last working day, reserved for it
-// regardless of where it falls in the rotation), and the rest are assigned 1/2/3 in
-// chronological order. Built from the actual rows rather than fixed day-number
-// boundaries, since campaigns don't always run exactly 16 working days.
-function buildWeekMap(dayNumbers) {
+// Maps a client's actual seo_tasks day_numbers to weeks 1-4. taskService.js's
+// generateSEOTasks only ever generates rows for weeks in
+// [funnel_month1_start_week, funnel_month1_current_week] (see advanceMonth1Week
+// in src/lib/funnel.js) — one occurrence day per week, chronologically ordered —
+// so a client's distinct day_numbers, sorted ascending, correspond 1:1 to that
+// week range in order. Deriving the mapping this way (rather than assuming the
+// highest day_number is always week 4) is what makes this correct for a client
+// manually held at an early week, who may have no week-4 row at all yet.
+function buildWeekMap(dayNumbers, startWeek) {
   const uniqueDays = [...new Set(dayNumbers)].sort((a, b) => a - b);
   const map = new Map();
-  if (uniqueDays.length === 0) return map;
-
-  const week4Day = uniqueDays[uniqueDays.length - 1];
-  const otherDays = uniqueDays.filter(d => d !== week4Day);
-  otherDays.forEach((day, idx) => map.set(day, (idx % 3) + 1));
-  map.set(week4Day, 4);
-
+  uniqueDays.forEach((day, idx) => map.set(day, startWeek + idx));
   return map;
 }
 
@@ -77,7 +73,7 @@ export default async function FunnelDetailPage({ params }) {
         WHERE client_id = ? AND campaign_id = ?
       `).all(clientId, campaign.id);
 
-      const dayToWeek = buildWeekMap(rows.map(r => r.day_number));
+      const dayToWeek = buildWeekMap(rows.map(r => r.day_number), client.funnel_month1_start_week || 1);
 
       const weekMap = new Map();
       for (const row of rows) {
