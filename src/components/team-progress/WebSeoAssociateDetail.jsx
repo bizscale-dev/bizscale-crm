@@ -1,5 +1,6 @@
 ﻿import { getDb } from '@/lib/db';
 import { getActiveWebSeoCampaign } from '@/lib/services';
+import { getAccurateWebSeoDailyStats } from '@/lib/dailyStats';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
 import Badge from '@/components/ui/Badge';
@@ -30,14 +31,10 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
     );
   }
 
-  let todayTasks = [], pendingTasks = [], overallStats = null, upcomingDays = [];
-  let assignedClientsCount = 0;
+  let todayTasks = [], pendingTasks = [], overallStats = null, upcomingDays = [], dailySummary = [];
   let cumulativeByClientType = {};
 
   if (campaign) {
-    assignedClientsCount = (await db.prepare(`
-      SELECT COUNT(*) as c FROM web_clients WHERE webseo_campaign_id = ? AND assigned_associate_id = ? AND is_active = 1
-    `).get(campaign.id, associateId)).c;
 
     todayTasks = await db.prepare(`
       SELECT wt.*, c.business_name as client_name
@@ -67,15 +64,11 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
       WHERE associate_id = ? AND webseo_campaign_id = ?
     `).get(associateId, campaign.id);
 
-    upcomingDays = await db.prepare(`
-      SELECT task_date, day_number,
-        SUM(target_count) as target, SUM(completed_count) as completed,
-        COUNT(DISTINCT client_id) as clients
-      FROM webseo_tasks
-      WHERE associate_id = ? AND webseo_campaign_id = ? AND task_date >= ?
-      GROUP BY task_date
-      ORDER BY task_date
-    `).all(associateId, campaign.id, today);
+    // Every day this associate has ever had (or will have) webseo_tasks for, past
+    // and future alike — past days carry accurate, backlog-creep-immune numbers
+    // (see src/lib/dailyStats.js), today/future stay live like before.
+    dailySummary = await getAccurateWebSeoDailyStats(db, { campaignId: campaign.id, associateId });
+    upcomingDays = dailySummary.filter(d => d.task_date >= today);
 
     // Pending — the task's scheduled day has already passed but it's still not
     // fully done.
@@ -116,6 +109,16 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
   const overallCompleted = overallStats?.completed || 0;
   const overallPercent = overallTarget > 0 ? Math.round((overallCompleted / overallTarget) * 100) : 0;
   const todayPercent = todayTarget > 0 ? Math.round((todayCompleted / todayTarget) * 100) : 0;
+  // On-time completions: work done on the same day it was assigned, summed across
+  // the whole campaign so far (dayCompleted per day — see src/lib/dailyStats.js).
+  // Catch-up work done later against an overdue row is never counted here, only
+  // against whichever day it actually happened on. The percentage's denominator
+  // only counts days that have actually happened (task_date <= today).
+  const onTimeCompletion = dailySummary.reduce((s, d) => s + d.dayCompleted, 0);
+  const onTimeEligibleTarget = dailySummary
+    .filter(d => d.task_date <= today)
+    .reduce((s, d) => s + d.target, 0);
+  const onTimePercent = onTimeEligibleTarget > 0 ? Math.round((onTimeCompletion / onTimeEligibleTarget) * 100) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -135,11 +138,11 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-            <StatCard title="Assigned Clients" value={assignedClientsCount} color={BRAND_COLOR} />
+            <StatCard title="On Time Completion" value={onTimeCompletion} sub={`${onTimePercent}% done on the day it was assigned`} color="#16b293" />
             <StatCard title="Today's Target" value={todayTarget} sub={`${todayCompleted} completed (${todayPercent}%)`} color="var(--primary)" />
             <StatCard title="Overall Target" value={overallTarget} sub={`${overallCompleted} completed (${overallPercent}%)`} color="var(--success)" />
-            <StatCard title="Upcoming Days" value={upcomingDays.length} sub="days with tasks" color="var(--warning)" />
-            <StatCard title="All-Time Completed (Sheet)" value={associate.lifetime_completed_links || 0} sub="across all assigned clients, live from sheet" color="#16b293" />
+            <StatCard title="Percentage Completion" value={`${overallPercent}%`} sub={`${overallCompleted} / ${overallTarget} tasks`} color="var(--success)" />
+            <StatCard title="Upcoming Days" value={upcomingDays.length} sub="remaining days with tasks" color="#f59e0b" />
             <StatCard title="Pending Tasks" value={pendingTasks.length} sub="overdue, not yet completed" color="#f59e0b" />
           </div>
 

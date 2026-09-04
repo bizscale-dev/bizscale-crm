@@ -102,3 +102,71 @@ export async function getAccurateSeoDailyStats(db, { campaignId, associateId = n
     };
   });
 }
+
+/**
+ * Same accurate-per-day approach as getAccurateSeoDailyStats above, for Web SEO
+ * Associates — webseo_tasks instead of seo_tasks, no funnel exclusion (Web SEO
+ * has no funnel concept). daily_activity_log/daily_pending_snapshot are shared
+ * across both (see dailyActivityCapture.js, which captures both seo_tasks and
+ * webseo_tasks into the same tables) — safe to key purely by user_id here since
+ * a web_seo_associate's id never collides with an seo_associate's.
+ */
+export async function getAccurateWebSeoDailyStats(db, { campaignId, associateId = null }) {
+  const today = new Date().toISOString().split('T')[0];
+
+  const associateFilter = associateId ? 'AND wt.associate_id = ?' : '';
+  const targetArgs = associateId ? [campaignId, associateId] : [campaignId];
+
+  const dayRows = await db.prepare(`
+    SELECT wt.associate_id, wt.day_number, wt.task_date, SUM(wt.target_count) as target,
+      COUNT(DISTINCT wt.client_id) as clients
+    FROM webseo_tasks wt
+    WHERE wt.webseo_campaign_id = ? ${associateFilter}
+    GROUP BY wt.associate_id, wt.day_number, wt.task_date
+    ORDER BY wt.task_date
+  `).all(...targetArgs);
+
+  if (dayRows.length === 0) return [];
+
+  const associateIds = [...new Set(dayRows.map(r => r.associate_id))];
+  const placeholders = associateIds.map(() => '?').join(',');
+
+  const liveCompleted = await db.prepare(`
+    SELECT wt.associate_id, wt.task_date, SUM(wt.completed_count) as completed
+    FROM webseo_tasks wt
+    WHERE wt.webseo_campaign_id = ? AND wt.associate_id IN (${placeholders})
+    GROUP BY wt.associate_id, wt.task_date
+  `).all(campaignId, ...associateIds);
+  const liveByKey = new Map(liveCompleted.map(r => [`${r.associate_id}|${r.task_date}`, r.completed]));
+
+  const frozenCompleted = await db.prepare(`
+    SELECT user_id, work_date, SUM(completed_count) as completed
+    FROM daily_activity_log
+    WHERE user_id IN (${placeholders}) AND work_date < ?
+    GROUP BY user_id, work_date
+  `).all(...associateIds, today);
+  const frozenByKey = new Map(frozenCompleted.map(r => [`${r.user_id}|${r.work_date}`, r.completed]));
+
+  const resolvedBacklog = await db.prepare(`
+    SELECT user_id, work_date, resolved_count
+    FROM daily_pending_snapshot
+    WHERE user_id IN (${placeholders}) AND work_date <= ?
+  `).all(...associateIds, today);
+  const resolvedByKey = new Map(resolvedBacklog.map(r => [`${r.user_id}|${r.work_date}`, r.resolved_count]));
+
+  return dayRows.map(row => {
+    const key = `${row.associate_id}|${row.task_date}`;
+    const ownRowCompleted = row.task_date < today ? (frozenByKey.get(key) || 0) : (liveByKey.get(key) || 0);
+    const completed = ownRowCompleted + (resolvedByKey.get(key) || 0);
+
+    return {
+      associate_id: row.associate_id,
+      day_number: row.day_number,
+      task_date: row.task_date,
+      target: row.target,
+      clients: row.clients,
+      completed,
+      dayCompleted: ownRowCompleted,
+    };
+  });
+}
