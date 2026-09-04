@@ -55,12 +55,17 @@ export default async function SeoAssociatesTable({ basePath, campaign: campaignP
 
   const associates = campaign ? await db.prepare(`
     SELECT u.id, u.name, u.email, u.is_active,
-      (SELECT COUNT(*) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as total_tasks,
-      (SELECT SUM(completed_count) FROM seo_tasks WHERE associate_id = u.id AND campaign_id = ?) as completed_tasks,
+      (SELECT COUNT(*) FROM seo_tasks st JOIN clients c ON c.id = st.client_id
+         WHERE st.associate_id = u.id AND st.campaign_id = ?
+           AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')) as total_tasks,
+      (SELECT SUM(st.completed_count) FROM seo_tasks st JOIN clients c ON c.id = st.client_id
+         WHERE st.associate_id = u.id AND st.campaign_id = ?
+           AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')) as completed_tasks,
       (SELECT COALESCE(SUM(st.target_count - st.completed_count), 0)
          FROM seo_tasks st JOIN clients c ON c.id = st.client_id
          WHERE st.associate_id = u.id AND st.campaign_id = ? AND st.task_date < ?
-           AND st.completed_count < st.target_count AND c.is_active = 1) as pending_links,
+           AND st.completed_count < st.target_count AND c.is_active = 1
+           AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')) as pending_links,
       (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
          AND (tunnel_status IS NULL OR tunnel_status NOT IN ('active', 'hold'))) as total_clients,
       (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
@@ -120,17 +125,15 @@ export default async function SeoAssociatesTable({ basePath, campaign: campaignP
               </thead>
               <tbody>
                 {associates.map((associate) => {
-                  // Total Expected Links = normal clients' target + this associate's
-                  // Month 2/3 funnel clients' bonus-target totals (Month 1 excluded —
-                  // it's a fixed platform checklist, not "links"). Uses the non-funnel
-                  // client count on its own, since funnel clients bill at a different
-                  // rate — the "Total Clients" column displayed below folds funnel
-                  // clients back in for a true headcount, but that combined number is
-                  // display-only and must not feed into this formula.
+                  // Total Expected Links = regular (non-funnel) clients' target only.
+                  // Funnel clients (any month) are tracked entirely separately — their
+                  // targets show in the Funnel Tasks columns below, and their
+                  // completions are excluded from `completed_tasks` above (see the
+                  // query), so neither side of this Progress calculation includes them.
                   const funnelM1Expected = associate.funnel_m1 * funnelMonth1TargetPerClient;
                   const funnelM2Expected = associate.funnel_m2 * funnelBonusTargetPerClient;
                   const funnelM3Expected = associate.funnel_m3 * funnelBonusTargetPerClient;
-                  const expectedTotalLinks = (associate.total_clients * monthlyTargetPerClient) + funnelM1Expected + funnelM2Expected + funnelM3Expected;
+                  const expectedTotalLinks = associate.total_clients * monthlyTargetPerClient;
                   const totalClientsDisplay = associate.total_clients + associate.funnel_m1 + associate.funnel_m2 + associate.funnel_m3;
                   const progressPercent = expectedTotalLinks > 0 ? Math.round(((associate.completed_tasks || 0) / expectedTotalLinks) * 100) : 0;
                   return (

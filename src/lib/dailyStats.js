@@ -34,11 +34,17 @@ export async function getAccurateSeoDailyStats(db, { campaignId, associateId = n
   const associateFilter = associateId ? 'AND st.associate_id = ?' : '';
   const targetArgs = associateId ? [campaignId, associateId] : [campaignId];
 
+  // Excludes clients currently in the Funnel (tunnel_status='active', any month) —
+  // they're tracked entirely separately (see the Funnel Clients card on
+  // SeoAssociateDetail.jsx and the Funnel Tasks columns on SeoAssociatesTable.jsx),
+  // so a day's regular target/completed here must not include their rows, the same
+  // way "Total Clients" already excludes them.
   const dayRows = await db.prepare(`
     SELECT st.associate_id, st.day_number, st.task_date, SUM(st.target_count) as target,
       COUNT(DISTINCT st.client_id) as clients
     FROM seo_tasks st
-    WHERE st.campaign_id = ? ${associateFilter}
+    JOIN clients c ON c.id = st.client_id
+    WHERE st.campaign_id = ? AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active') ${associateFilter}
     GROUP BY st.associate_id, st.day_number, st.task_date
     ORDER BY st.task_date
   `).all(...targetArgs);
@@ -49,10 +55,12 @@ export async function getAccurateSeoDailyStats(db, { campaignId, associateId = n
   const placeholders = associateIds.map(() => '?').join(',');
 
   const liveCompleted = await db.prepare(`
-    SELECT associate_id, task_date, SUM(completed_count) as completed
-    FROM seo_tasks
-    WHERE campaign_id = ? AND associate_id IN (${placeholders})
-    GROUP BY associate_id, task_date
+    SELECT st.associate_id, st.task_date, SUM(st.completed_count) as completed
+    FROM seo_tasks st
+    JOIN clients c ON c.id = st.client_id
+    WHERE st.campaign_id = ? AND st.associate_id IN (${placeholders})
+      AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')
+    GROUP BY st.associate_id, st.task_date
   `).all(campaignId, ...associateIds);
   const liveByKey = new Map(liveCompleted.map(r => [`${r.associate_id}|${r.task_date}`, r.completed]));
 

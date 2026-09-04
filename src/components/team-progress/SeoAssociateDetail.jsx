@@ -83,19 +83,19 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     };
     const totalMonthlyTarget = Object.values(monthlyLinkTargets).reduce((a, b) => a + b, 0);
 
-    // Funnel clients' real target (all 3 months, straight from their own seo_tasks
-    // rows) — overallStats.completed below counts every seo_tasks row for this
-    // associate including funnel ones, so funnel targets need to be included here
-    // too or Overall Target's percentage can run past 100%.
-    const funnelExpectedLinks = funnelClients.reduce((s, fc) => s + (fc.total_tasks || 0), 0);
-
-    totalExpectedLinks = (assignedClients?.count || 0) * totalMonthlyTarget + funnelExpectedLinks;
+    // Funnel clients (any month) are tracked entirely separately from here on —
+    // their own Funnel Clients card above has their real progress, so none of the
+    // "regular" queries below (today/date/cumulative/overall/pending/logs) should
+    // include their seo_tasks rows, the same way assignedClients above already
+    // excludes them from the client count.
+    totalExpectedLinks = (assignedClients?.count || 0) * totalMonthlyTarget;
 
     todayTasks = await db.prepare(`
       SELECT st.*, c.name as client_name, c.website
       FROM seo_tasks st
       JOIN clients c ON c.id = st.client_id
       WHERE st.associate_id = ? AND st.campaign_id = ? AND st.task_date = ? AND c.is_active = 1
+        AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')
       ORDER BY c.sort_order, st.link_type
     `).all(associateId, campaign.id, today);
 
@@ -108,6 +108,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
       FROM seo_tasks st
       JOIN clients c ON c.id = st.client_id
       WHERE st.associate_id = ? AND st.campaign_id = ? AND st.task_date = ? AND c.is_active = 1
+        AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')
       ORDER BY c.sort_order, st.link_type
     `).all(associateId, campaign.id, date);
 
@@ -116,6 +117,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
       FROM seo_tasks st
       JOIN clients c ON c.id = st.client_id
       WHERE st.associate_id = ? AND st.campaign_id = ? AND c.is_active = 1
+        AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')
       ORDER BY st.task_date
     `).all(associateId, campaign.id);
 
@@ -124,10 +126,12 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     // 12/6 once the next scheduled day for that client/type syncs) instead of repeating
     // the same day-only slice, which otherwise looks unchanged and confusing.
     const cumulativeRows = await db.prepare(`
-      SELECT client_id, link_type, SUM(target_count) as target, SUM(completed_count) as completed
-      FROM seo_tasks
-      WHERE associate_id = ? AND campaign_id = ? AND task_date <= ?
-      GROUP BY client_id, link_type
+      SELECT st.client_id, st.link_type, SUM(st.target_count) as target, SUM(st.completed_count) as completed
+      FROM seo_tasks st
+      JOIN clients c ON c.id = st.client_id
+      WHERE st.associate_id = ? AND st.campaign_id = ? AND st.task_date <= ?
+        AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')
+      GROUP BY st.client_id, st.link_type
     `).all(associateId, campaign.id, today);
     for (const row of cumulativeRows) {
       if (!cumulativeByClientType[row.client_id]) cumulativeByClientType[row.client_id] = {};
@@ -139,6 +143,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
       FROM seo_tasks st
       JOIN clients c ON c.id = st.client_id
       WHERE st.associate_id = ? AND st.campaign_id = ? AND c.is_active = 1
+        AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')
     `).get(associateId, campaign.id);
 
     recentLogs = await db.prepare(`
@@ -147,6 +152,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
       JOIN seo_tasks st ON st.id = ll.task_id
       JOIN clients c ON c.id = st.client_id
       WHERE ll.logged_by = ? AND st.campaign_id = ? AND c.is_active = 1
+        AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')
       ORDER BY ll.created_at DESC LIMIT 20
     `).all(associateId, campaign.id);
 
@@ -164,6 +170,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
       JOIN clients c ON c.id = st.client_id
       WHERE st.associate_id = ? AND st.campaign_id = ?
         AND st.task_date < ? AND st.completed_count < st.target_count AND c.is_active = 1
+        AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')
       ORDER BY st.task_date DESC, c.sort_order, st.link_type
     `).all(associateId, campaign.id, today);
 

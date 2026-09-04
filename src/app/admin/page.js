@@ -31,13 +31,17 @@ export default async function AdminDashboard() {
   if (campaign) {
     progress = await getCampaignProgress(campaign.id);
 
+    // Excludes clients currently in the Funnel (tunnel_status='active', any month)
+    // — they're tracked entirely separately (Funnel Clients / Funnel Tasks), so
+    // this "regular" progress figure must not include their rows.
     associateProgress = await db.prepare(`
       SELECT u.name, u.id,
         SUM(st.target_count) as target,
         SUM(st.completed_count) as completed
       FROM seo_tasks st
       JOIN users u ON u.id = st.associate_id
-      WHERE st.campaign_id = ?
+      JOIN clients c ON c.id = st.client_id
+      WHERE st.campaign_id = ? AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')
       GROUP BY st.associate_id
       ORDER BY u.name
     `).all(campaign.id);
