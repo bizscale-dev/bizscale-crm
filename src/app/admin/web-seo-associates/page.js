@@ -124,31 +124,24 @@ export default async function WebSEOAssociatesPage() {
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                       <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Name</th>
-                      <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Email</th>
                       <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Status</th>
                       <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Clients</th>
                       <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Guest Posts</th>
                       <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Web 2.0 Posts</th>
                       <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Total Progress</th>
-                      <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>All-Time (Sheet)</th>
+                      <th style={{ padding: '0.75rem 1rem 0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Completed</th>
                       <th style={{ padding: '0.75rem 0', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {webSeoStats.map((associate) => {
                       const totalTarget = (associate.guestpost_target || 0) + (associate.web2_target || 0);
-                      // webseo_tasks rows get wiped and rebuilt from scratch on every client
-                      // sync (see webSeoTaskGenerator.js), so guestpost/web2_completed only
-                      // reflect the current rotation cycle, not real history.
-                      // lifetime_completed_links is a running total from the sheet that's
-                      // never reset — use that for overall progress (same number shown in
-                      // All-Time (Sheet)) instead.
-                      const progressPercent = totalTarget > 0 ? Math.round(((associate.lifetime_completed_links || 0) / totalTarget) * 100) : 0;
+                      const totalCompleted = (associate.guestpost_completed || 0) + (associate.web2_completed || 0);
+                      const progressPercent = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0;
 
                       return (
                         <tr key={associate.id} style={{ borderBottom: '1px solid var(--border)' }}>
                           <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '500', whiteSpace: 'nowrap' }}>{associate.name}</td>
-                          <td style={{ padding: '0.75rem 1rem 0.75rem 0', color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{associate.email}</td>
                           <td style={{ padding: '0.75rem 1rem 0.75rem 0', whiteSpace: 'nowrap' }}>
                             <span style={{
                               padding: '0.25rem 0.5rem',
@@ -185,7 +178,7 @@ export default async function WebSEOAssociatesPage() {
                             </div>
                           </td>
                           <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '600', color: 'var(--success)', whiteSpace: 'nowrap' }}>
-                            {associate.lifetime_completed_links || 0}
+                            {totalCompleted}
                           </td>
                           <td style={{ padding: '0.75rem 0', whiteSpace: 'nowrap' }}>
                             <Link href={`/admin/web-seo-associates/${associate.id}`} style={{
