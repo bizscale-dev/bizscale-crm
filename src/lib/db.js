@@ -161,6 +161,12 @@ async function runMigrations(raw) {
     // webseo_campaigns.name), so a past one is identifiable on its history list
     // instead of just a bare id/date.
     "ALTER TABLE writer_campaigns ADD COLUMN name TEXT",
+    // The raw associate-name text read from the Web Clients import sheet's
+    // associate column, captured even when it doesn't match any web_seo_associate
+    // by name — so an admin can see exactly what the sheet says and map it to a
+    // real associate manually (see web_associate_name_mappings below), instead of
+    // that name being silently dropped into a sync error and never surfaced again.
+    "ALTER TABLE web_clients ADD COLUMN sheet_associate_name TEXT",
   ];
 
   for (const sql of alterStatements) {
@@ -382,6 +388,20 @@ async function runMigrations(raw) {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(webseo_campaign_id, off_date),
       FOREIGN KEY (webseo_campaign_id) REFERENCES webseo_campaigns(id) ON DELETE CASCADE
+    )`,
+    // Persistent mapping from a raw associate-name string as it appears in the Web
+    // Clients import sheet (e.g. a nickname or misspelling) to a real
+    // web_seo_associate user — set once by an admin (see saveWebAssociateMapping
+    // in src/app/admin/web-clients/actions.js) and then applied automatically on
+    // every future import, so the same sheet name doesn't need remapping each
+    // sync. sheet_name is matched case-insensitively at lookup time.
+    `CREATE TABLE IF NOT EXISTS web_associate_name_mappings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sheet_name TEXT NOT NULL,
+      associate_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(sheet_name),
+      FOREIGN KEY (associate_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
     // Permanent, immutable daily record of completed work — captured once per day
     // (see src/lib/dailyActivityCapture.js, run by a 12:25 AM cron) from whatever the

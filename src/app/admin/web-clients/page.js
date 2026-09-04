@@ -5,6 +5,7 @@ import WebClientList from './WebClientList';
 import WebClientImport from './WebClientImport';
 import WebSeoCampaignPanel from './WebSeoCampaignPanel';
 import WebSeoCampaignHistoryList from './WebSeoCampaignHistoryList';
+import UnmatchedAssociateNames from './UnmatchedAssociateNames';
 
 export const revalidate = 0;
 
@@ -16,6 +17,7 @@ export default async function WebClientsPage() {
   let webClients = [];
   let webAssociates = [];
   let offDays = [];
+  let unmatchedNames = [];
 
   if (campaign) {
     // Fetch web clients with their assigned associates
@@ -37,6 +39,19 @@ export default async function WebClientsPage() {
     `).all();
 
     offDays = await listOffDays(campaign.id);
+
+    // Associate names read straight from the sheet that didn't match any real
+    // web_seo_associate by name (and have no saved mapping either — see
+    // web_associate_name_mappings) — an admin maps each one below, once, and
+    // every future import applies it automatically.
+    unmatchedNames = (await db.prepare(`
+      SELECT sheet_associate_name as name, COUNT(*) as client_count
+      FROM web_clients
+      WHERE webseo_campaign_id = ? AND is_active = 1
+        AND assigned_associate_id IS NULL AND sheet_associate_name IS NOT NULL AND sheet_associate_name != ''
+      GROUP BY sheet_associate_name
+      ORDER BY sheet_associate_name
+    `).all(campaign.id));
   }
 
   const BRAND_COLOR = '#16b293';
@@ -64,6 +79,10 @@ export default async function WebClientsPage() {
             </h2>
             <WebClientImport />
           </div>
+
+          {/* Sheet associate names that didn't match a real associate — map them
+              once and it's remembered for every future import. */}
+          <UnmatchedAssociateNames unmatchedNames={unmatchedNames} webAssociates={webAssociates} />
 
           {/* Stats Overview */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>

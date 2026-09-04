@@ -107,6 +107,53 @@ export async function importWebClientsFromGoogleSheet(formData) {
   }
 }
 
+// Maps a raw associate-name string from the import sheet (which didn't match any
+// web_seo_associate by name) to a real associate — saved permanently in
+// web_associate_name_mappings so every future import applies it automatically
+// (see upsertClient in src/lib/webClientsImport.js), and applied immediately to
+// every currently-imported client carrying that exact sheet name.
+export async function saveWebAssociateMapping(sheetName, associateId) {
+  const db = await getDb();
+  const trimmedName = (sheetName || '').trim();
+  const id = parseInt(associateId, 10);
+
+  if (!trimmedName) return { error: 'No sheet name to map' };
+  if (!id) return { error: 'Select an associate' };
+
+  try {
+    const associate = await db.prepare(
+      "SELECT id, name FROM users WHERE id = ? AND role = 'web_seo_associate'"
+    ).get(id);
+    if (!associate) return { error: 'Web SEO Associate not found' };
+
+    await db.prepare(`
+      INSERT INTO web_associate_name_mappings (sheet_name, associate_id)
+      VALUES (?, ?)
+      ON CONFLICT(sheet_name) DO UPDATE SET associate_id = excluded.associate_id
+    `).run(trimmedName, id);
+
+    await db.prepare(`
+      UPDATE web_clients SET assigned_associate_id = ?
+      WHERE LOWER(sheet_associate_name) = LOWER(?)
+    `).run(id, trimmedName);
+
+    const campaign = await getActiveWebSeoCampaign();
+    if (campaign) {
+      try {
+        await generateWebSeoTasks(campaign.id);
+      } catch (genErr) {
+        console.error('[saveWebAssociateMapping] Failed to regenerate web SEO tasks:', genErr.message);
+      }
+    }
+
+    revalidatePath('/admin/web-clients');
+    revalidatePath('/admin/web-seo-associates');
+    return { success: `"${trimmedName}" mapped to ${associate.name} — applied to matching clients and saved for future imports.` };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
 export async function assignWebAssociate(clientId, associateId) {
   try {
     const db = await getDb();

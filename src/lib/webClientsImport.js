@@ -205,10 +205,29 @@ export async function runWebClientsImport(sheetUrl) {
       }
 
       if (associateName && clientId) {
-        const associate = await db.prepare(`
+        // Captured every time regardless of whether it matches, so an unmatched
+        // name is still visible on the client (see the "Unmatched Associate
+        // Names" panel on /admin/web-clients) instead of only appearing once in
+        // this run's transient error list.
+        await db.prepare('UPDATE web_clients SET sheet_associate_name = ? WHERE id = ?').run(associateName, clientId);
+
+        let associate = await db.prepare(`
           SELECT id FROM users
           WHERE LOWER(name) = LOWER(?) AND role = 'web_seo_associate' AND is_active = 1
         `).get(associateName);
+
+        // No exact user-name match — fall back to a previously-saved mapping
+        // (an admin manually pointed this exact sheet name at a real associate
+        // once; see saveWebAssociateMapping) so the same sheet name doesn't need
+        // remapping on every future sync.
+        if (!associate) {
+          const mapping = await db.prepare(`
+            SELECT u.id FROM web_associate_name_mappings m
+            JOIN users u ON u.id = m.associate_id
+            WHERE LOWER(m.sheet_name) = LOWER(?) AND u.role = 'web_seo_associate' AND u.is_active = 1
+          `).get(associateName);
+          if (mapping) associate = mapping;
+        }
 
         if (associate) {
           await db.prepare(`
