@@ -124,23 +124,28 @@ export async function generateSEOTasks(campaignId) {
     if (assignedClients.length === 0) continue;
 
     // First pass: work out exactly which days each client appears on (their
-    // rotation slot recurs every 5 working days — see below), before generating
-    // any rows. Needed so a funnel bonus-month client's EXACT monthly target can
-    // be split across their real occurrence count, rather than approximated by
-    // a shared daily rate.
+    // rotation slot recurs every `clientsPerDay` working days — see below), before
+    // generating any rows. Needed so a funnel bonus-month client's EXACT monthly
+    // target can be split across their real occurrence count, rather than
+    // approximated by a shared daily rate.
+    //
+    // Month 1 funnel clients are excluded from this rotation entirely (filtered
+    // out below) — they get their own dedicated week-bucket schedule further down,
+    // which fully replaces whatever this loop would have assigned them. Including
+    // them here anyway would still burn one of that day's `clientsPerDay` slots on
+    // a client whose occurrence gets reassigned elsewhere, leaving that day short
+    // a regular client for no reason — exactly the "2 clients one day, 4 the next"
+    // unevenness this excludes them to avoid.
+    const rotationClients = assignedClients.filter(c => !isMonth1FunnelClient(c));
     const clientOccurrenceDays = new Map();
     for (const { dayNumber: currentWorkday, dateStr: taskDateStr } of workingDays) {
-      // Determine which 4 clients work on this day using rotation
-      // Days 1,6,11: clients 0-3
-      // Days 2,7,12: clients 4-7
-      // Days 3,8,13: clients 8-11
-      // Days 4,9,14: clients 12-15
-      // Days 5,10,15: clients 16-19
-      // Day 16: remaining clients
+      // Determine which `clientsPerDay` clients work on this day using rotation —
+      // e.g. with clientsPerDay=4: days 1,6,11 get clients 0-3, days 2,7,12 get
+      // clients 4-7, and so on, wrapping every 5 working days.
       const dayInWeek = ((currentWorkday - 1) % 5); // 0-4 for which rotation
-      const startClientIdx = dayInWeek * 4;
-      const endClientIdx = Math.min(startClientIdx + 4, assignedClients.length);
-      const dayClientsToProcess = assignedClients.slice(startClientIdx, endClientIdx);
+      const startClientIdx = dayInWeek * clientsPerDay;
+      const endClientIdx = Math.min(startClientIdx + clientsPerDay, rotationClients.length);
+      const dayClientsToProcess = rotationClients.slice(startClientIdx, endClientIdx);
 
       for (const client of dayClientsToProcess) {
         if (!clientOccurrenceDays.has(client.id)) clientOccurrenceDays.set(client.id, []);

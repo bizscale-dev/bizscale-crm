@@ -11,27 +11,24 @@ export default async function TasksPage() {
   let seoTaskSummary = [];
   let writingTaskSummary = [];
   let webSeoTaskSummary = [];
-  let dailyTarget = 0; // 66 links per day for the whole team
 
   if (campaign) {
-    // Calculate daily target: (total active clients × 50 links) / 16 working days
-    const totalActiveClients = (await db.prepare(`
-      SELECT COUNT(*) as count FROM clients WHERE campaign_id = ? AND is_active = 1
-    `).get(campaign.id))?.count || 0;
-    
-    const totalExpectedLinks = totalActiveClients * 50;
-    dailyTarget = Math.round(totalExpectedLinks / 16);
-
+    // "clients" here is that day's real scheduled client count (from the actual
+    // generated rotation), and "target"/"completed" are the real per-day sums —
+    // not an estimate. Previously this queried a separate, unused
+    // "assigned_clients" (the associate's whole roster, constant across every
+    // day) and displayed a rough (assigned_clients × 50) / 16 formula instead of
+    // the real target this query already had on hand, which is why the numbers
+    // shown here didn't match the real day-to-day rotation.
     seoTaskSummary = await db.prepare(`
       SELECT u.id, u.name as associate_name, st.day_number, st.task_date,
         SUM(st.target_count) as target, SUM(st.completed_count) as completed,
-        COUNT(DISTINCT st.client_id) as clients,
-        (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ?) as assigned_clients
+        COUNT(DISTINCT st.client_id) as clients
       FROM seo_tasks st JOIN users u ON u.id = st.associate_id
       WHERE st.campaign_id = ?
       GROUP BY st.associate_id, st.day_number
       ORDER BY st.day_number, u.name
-    `).all(campaign.id, campaign.id);
+    `).all(campaign.id);
 
     writingTaskSummary = await db.prepare(`
       SELECT u.name as writer_name, wt.week_number, wt.day_number, wt.task_date, wt.post_type,
@@ -87,26 +84,22 @@ export default async function TasksPage() {
                         <th style={{ padding: '0.75rem 0' }}>Day</th>
                         <th style={{ padding: '0.75rem 0' }}>Date</th>
                         <th style={{ padding: '0.75rem 0' }}>Associate</th>
-                        <th style={{ padding: '0.75rem 0' }}>Assigned Clients</th>
-                        <th style={{ padding: '0.75rem 0' }}>Expected Daily Target</th>
+                        <th style={{ padding: '0.75rem 0' }}>Clients Scheduled</th>
+                        <th style={{ padding: '0.75rem 0' }}>Target</th>
                         <th style={{ padding: '0.75rem 0' }}>Completed</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {seoTaskSummary.map((t, i) => {
-                        // Expected daily target for this associate = (assigned clients × 50) / 16 days
-                        const expectedDailyForAssociate = t.assigned_clients > 0 ? Math.round((t.assigned_clients * 50) / 16) : 0;
-                        return (
-                          <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                            <td style={{ padding: '0.75rem 0' }}>Day {t.day_number}</td>
-                            <td style={{ padding: '0.75rem 0' }}>{t.task_date}</td>
-                            <td style={{ padding: '0.75rem 0', fontWeight: '500' }}>{t.associate_name}</td>
-                            <td style={{ padding: '0.75rem 0' }}>{t.assigned_clients}</td>
-                            <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--primary)' }}>{expectedDailyForAssociate}</td>
-                            <td style={{ padding: '0.75rem 0', color: 'var(--success)' }}>{t.completed}</td>
-                          </tr>
-                        );
-                      })}
+                      {seoTaskSummary.map((t, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '0.75rem 0' }}>Day {t.day_number}</td>
+                          <td style={{ padding: '0.75rem 0' }}>{t.task_date}</td>
+                          <td style={{ padding: '0.75rem 0', fontWeight: '500' }}>{t.associate_name}</td>
+                          <td style={{ padding: '0.75rem 0' }}>{t.clients}</td>
+                          <td style={{ padding: '0.75rem 0', fontWeight: '600', color: 'var(--primary)' }}>{t.target}</td>
+                          <td style={{ padding: '0.75rem 0', color: 'var(--success)' }}>{t.completed}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
