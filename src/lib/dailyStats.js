@@ -34,17 +34,16 @@ export async function getAccurateSeoDailyStats(db, { campaignId, associateId = n
   const associateFilter = associateId ? 'AND st.associate_id = ?' : '';
   const targetArgs = associateId ? [campaignId, associateId] : [campaignId];
 
-  // Excludes clients currently in the Funnel (tunnel_status='active', any month) —
-  // they're tracked entirely separately (see the Funnel Clients card on
-  // SeoAssociateDetail.jsx and the Funnel Tasks columns on SeoAssociatesTable.jsx),
-  // so a day's regular target/completed here must not include their rows, the same
-  // way "Total Clients" already excludes them.
+  // Excludes clients currently in Funnel Month 1 specifically (tunnel_status='active'
+  // AND funnel_month=1) — Month 2/3 funnel clients still count as regular here, only
+  // Month 1 is tracked entirely separately (see the Funnel Clients card on
+  // SeoAssociateDetail.jsx and the Funnel Tasks M1 column on SeoAssociatesTable.jsx).
   const dayRows = await db.prepare(`
     SELECT st.associate_id, st.day_number, st.task_date, SUM(st.target_count) as target,
       COUNT(DISTINCT st.client_id) as clients
     FROM seo_tasks st
     JOIN clients c ON c.id = st.client_id
-    WHERE st.campaign_id = ? AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active') ${associateFilter}
+    WHERE st.campaign_id = ? AND NOT (c.tunnel_status = 'active' AND c.funnel_month = 1) ${associateFilter}
     GROUP BY st.associate_id, st.day_number, st.task_date
     ORDER BY st.task_date
   `).all(...targetArgs);
@@ -59,7 +58,7 @@ export async function getAccurateSeoDailyStats(db, { campaignId, associateId = n
     FROM seo_tasks st
     JOIN clients c ON c.id = st.client_id
     WHERE st.campaign_id = ? AND st.associate_id IN (${placeholders})
-      AND (c.tunnel_status IS NULL OR c.tunnel_status != 'active')
+      AND NOT (c.tunnel_status = 'active' AND c.funnel_month = 1)
     GROUP BY st.associate_id, st.task_date
   `).all(campaignId, ...associateIds);
   const liveByKey = new Map(liveCompleted.map(r => [`${r.associate_id}|${r.task_date}`, r.completed]));
