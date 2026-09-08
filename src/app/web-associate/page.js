@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+import { getActiveWebSeoCampaign } from '@/lib/services';
 import { verifySession } from '@/lib/session';
 import StatCard from '@/components/ui/StatCard';
 import PageHeader from '@/components/ui/PageHeader';
@@ -10,7 +10,7 @@ export default async function WebAssociateDashboard() {
   const db = await getDb();
   const session = await verifySession();
   const userId = session.userId;
-  const campaign = await getActiveCampaign();
+  const campaign = await getActiveWebSeoCampaign();
   const today = new Date().toISOString().split('T')[0];
 
   let todayTasks = [], pendingTasks = [], overallStats = null;
@@ -20,7 +20,7 @@ export default async function WebAssociateDashboard() {
       SELECT wt.*, c.business_name as client_name
       FROM webseo_tasks wt
       JOIN web_clients c ON c.id = wt.client_id
-      WHERE wt.associate_id = ? AND wt.campaign_id = ? AND wt.task_date = ?
+      WHERE wt.associate_id = ? AND wt.webseo_campaign_id = ? AND wt.task_date = ?
       ORDER BY c.business_name, wt.post_type
     `).all(userId, campaign.id, today);
 
@@ -30,7 +30,7 @@ export default async function WebAssociateDashboard() {
       SELECT wt.*, c.business_name as client_name
       FROM webseo_tasks wt
       JOIN web_clients c ON c.id = wt.client_id
-      WHERE wt.associate_id = ? AND wt.campaign_id = ?
+      WHERE wt.associate_id = ? AND wt.webseo_campaign_id = ?
         AND wt.task_date < ? AND wt.completed_count < wt.target_count
       ORDER BY wt.task_date DESC, c.business_name, wt.post_type
     `).all(userId, campaign.id, today);
@@ -38,7 +38,7 @@ export default async function WebAssociateDashboard() {
     overallStats = await db.prepare(`
       SELECT SUM(target_count) as target, SUM(completed_count) as completed
       FROM webseo_tasks
-      WHERE associate_id = ? AND campaign_id = ?
+      WHERE associate_id = ? AND webseo_campaign_id = ?
     `).get(userId, campaign.id);
   }
 

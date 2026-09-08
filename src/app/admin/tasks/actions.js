@@ -1,7 +1,7 @@
 'use server';
 
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+import { getActiveCampaign, getActiveWebSeoCampaign } from '@/lib/services';
 import { generateSEOTasks } from '@/lib/taskService';
 import { generateWebSeoTasks } from '@/lib/webSeoTaskGenerator';
 import { revalidatePath } from 'next/cache';
@@ -33,8 +33,8 @@ export async function generateAll() {
 }
 
 export async function generateWebSeo() {
-  const campaign = await getActiveCampaign();
-  if (!campaign) return { error: 'No active campaign' };
+  const campaign = await getActiveWebSeoCampaign();
+  if (!campaign) return { error: 'No active Web SEO campaign' };
 
   try {
     const result = await generateWebSeoTasks(campaign.id);
@@ -48,11 +48,11 @@ export async function generateWebSeo() {
 
 export async function clearWebSeo() {
   const db = await getDb();
-  const campaign = await getActiveCampaign();
-  if (!campaign) return { error: 'No active campaign' };
+  const campaign = await getActiveWebSeoCampaign();
+  if (!campaign) return { error: 'No active Web SEO campaign' };
 
   try {
-    await db.prepare('DELETE FROM webseo_tasks WHERE campaign_id = ?').run(campaign.id);
+    await db.prepare('DELETE FROM webseo_tasks WHERE webseo_campaign_id = ?').run(campaign.id);
     revalidatePath('/admin/tasks');
     revalidatePath('/admin/web-seo-associates');
     return { success: 'Web SEO tasks cleared' };

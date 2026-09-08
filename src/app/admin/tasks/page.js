@@ -1,12 +1,15 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+import { getActiveCampaign, getActiveWebSeoCampaign } from '@/lib/services';
 import TaskActions from './TaskActions';
 
 export const revalidate = 0;
 
 export default async function TasksPage() {
   const db = await getDb();
+  // SEO and Web SEO run on fully independent campaigns now — each section below
+  // is gated on its own, so one being inactive doesn't hide the other.
   const campaign = await getActiveCampaign();
+  const webSeoCampaign = await getActiveWebSeoCampaign();
 
   let seoTaskSummary = [];
   let writingTaskSummary = [];
@@ -38,33 +41,36 @@ export default async function TasksPage() {
       GROUP BY wt.writer_id, wt.day_number, wt.post_type
       ORDER BY wt.day_number, u.name
     `).all(campaign.id);
+  }
 
+  if (webSeoCampaign) {
     webSeoTaskSummary = await db.prepare(`
       SELECT u.id, u.name as associate_name, wst.day_number, wst.task_date, wst.post_type,
         SUM(wst.target_count) as target, SUM(wst.completed_count) as completed,
         COUNT(DISTINCT wst.client_id) as clients,
-        (SELECT COUNT(*) FROM web_clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1) as assigned_clients
+        (SELECT COUNT(*) FROM web_clients WHERE assigned_associate_id = u.id AND webseo_campaign_id = ? AND is_active = 1) as assigned_clients
       FROM webseo_tasks wst JOIN users u ON u.id = wst.associate_id
-      WHERE wst.campaign_id = ?
+      WHERE wst.webseo_campaign_id = ?
       GROUP BY wst.associate_id, wst.day_number, wst.post_type
       ORDER BY wst.day_number, u.name
-    `).all(campaign.id, campaign.id);
+    `).all(webSeoCampaign.id, webSeoCampaign.id);
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      {!campaign ? (
+      {!campaign && !webSeoCampaign && (
         <div className="card">
           <p style={{ color: 'var(--danger)', margin: 0 }}>
-            No active campaign found. You must activate a campaign before managing tasks.
+            No active SEO or Web SEO campaign found. Activate one before managing tasks.
           </p>
         </div>
-      ) : (
-        <>
+      )}
+
+      <>
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Task Generation</h2>
             <p style={{ color: 'var(--text-muted)', margin: 0 }}>
-              Generate daily SEO and Writing tasks for the duration of the campaign based on the target settings and assigned users. This will overwrite any uncompleted tasks.
+              Generate daily SEO, Writing, and Web SEO tasks based on each track&apos;s own target settings and assigned users — SEO/Writing use the active SEO campaign, Web SEO uses the active Web SEO campaign. This will overwrite any uncompleted tasks.
             </p>
             <TaskActions />
           </div>
@@ -178,8 +184,7 @@ export default async function TasksPage() {
               )}
             </div>
           </div>
-        </>
-      )}
+      </>
     </div>
   );
 }
