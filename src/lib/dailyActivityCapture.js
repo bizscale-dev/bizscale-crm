@@ -1,5 +1,5 @@
 import { getDb } from './db';
-import { LINK_TYPE_LABELS } from './services';
+import { LINK_TYPE_LABELS, getActiveCampaign, getActiveWebSeoCampaign } from './services';
 
 const POST_TYPE_LABELS = {
   guestpost: 'Guest Post',
@@ -124,21 +124,33 @@ export async function captureDailyActivity(dateStr) {
  * seo_tasks/webseo_tasks are scoped here — writers use a different, older sync
  * (writerOffpageSync.js) with no backlog-catchup concept, so they're not tracked.
  * resolved_count (written separately by the sync routes) is left untouched.
+ *
+ * Scoped to each track's currently active campaign — same as the live "Pending
+ * Tasks" card elsewhere in the app. Neither seo_tasks nor webseo_tasks rows get
+ * deleted when a campaign is replaced (only an explicit campaign deletion cascades
+ * that), so without this scoping, incomplete rows left over from a past/replaced
+ * campaign — or, for webseo_tasks, from before campaigns were split into their own
+ * webseo_campaigns table (campaign_id NULL) — would count as "still stuck"
+ * forever, wildly inflating this box for numbers that were never real outstanding
+ * work to begin with.
  */
 async function snapshotRemainingBacklog(db, dateStr) {
-  const seoRemaining = await db.prepare(`
+  const campaign = await getActiveCampaign();
+  const webSeoCampaign = await getActiveWebSeoCampaign();
+
+  const seoRemaining = campaign ? await db.prepare(`
     SELECT associate_id as user_id, SUM(target_count - completed_count) as remaining
     FROM seo_tasks
-    WHERE task_date <= ? AND completed_count < target_count
+    WHERE campaign_id = ? AND task_date <= ? AND completed_count < target_count
     GROUP BY associate_id
-  `).all(dateStr);
+  `).all(campaign.id, dateStr) : [];
 
-  const webseoRemaining = await db.prepare(`
+  const webseoRemaining = webSeoCampaign ? await db.prepare(`
     SELECT associate_id as user_id, SUM(target_count - completed_count) as remaining
     FROM webseo_tasks
-    WHERE task_date <= ? AND completed_count < target_count
+    WHERE webseo_campaign_id = ? AND task_date <= ? AND completed_count < target_count
     GROUP BY associate_id
-  `).all(dateStr);
+  `).all(webSeoCampaign.id, dateStr) : [];
 
   const remainingByUser = new Map();
   for (const row of [...seoRemaining, ...webseoRemaining]) {
