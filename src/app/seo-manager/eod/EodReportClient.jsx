@@ -14,6 +14,13 @@ const BRAND_COLOR = 'var(--primary)';
 // safety net until a real submit succeeds.
 const STAGED_STORAGE_KEY = 'bizscale-eod-staged-seo-manager-v1';
 
+// The entry currently being filled in (not yet saved into the staged list) is
+// kept as a draft too — navigating back or reloading mid-entry (e.g. after
+// picking a client and typing up the work done) used to wipe all of it, which
+// is exactly the moment a manager has the most to lose. Cleared automatically
+// once the entry is saved (moves into `staged`) or the form is reset.
+const DRAFT_STORAGE_KEY = 'bizscale-eod-draft-seo-manager-v1';
+
 // Groups a flat list of entries first by client/heading name, then within each
 // client by the exact (work done, description) pair — so pages saved together in
 // one go (same work done/description, e.g. several pages picked in a single Save)
@@ -106,22 +113,41 @@ function readStagedFromStorage() {
   }
 }
 
+// Same idea as readStagedFromStorage above, for the in-progress entry — only
+// meaningful while step is 'page' or 'details' (before the user has picked a
+// client there's nothing worth restoring).
+function readDraftFromStorage() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw);
+    return draft && typeof draft === 'object' ? draft : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function EodReportClient({ webClients, history, today }) {
   const router = useRouter();
 
   // 'select' -> pick a web client, 'page' -> pick which page(s) on that site,
   // 'details' -> fill in work done + description, 'saved' -> add more or submit
-  const [step, setStep] = useState(() => (readStagedFromStorage().length > 0 ? 'saved' : 'select'));
-  const [selectedClientId, setSelectedClientId] = useState('');
-  const [manualHeading, setManualHeading] = useState('');
+  const [step, setStep] = useState(() => {
+    const draft = readDraftFromStorage();
+    if (draft?.step === 'page' || draft?.step === 'details') return draft.step;
+    return readStagedFromStorage().length > 0 ? 'saved' : 'select';
+  });
+  const [selectedClientId, setSelectedClientId] = useState(() => readDraftFromStorage()?.selectedClientId || '');
+  const [manualHeading, setManualHeading] = useState(() => readDraftFromStorage()?.manualHeading || '');
   const [pageLoading, setPageLoading] = useState(false);
-  const [pages, setPages] = useState([]);
+  const [pages, setPages] = useState(() => readDraftFromStorage()?.pages || []);
   const [pageFetchError, setPageFetchError] = useState(null);
-  const [allowManualPage, setAllowManualPage] = useState(false);
-  const [selectedPageUrls, setSelectedPageUrls] = useState([]);
-  const [manualPageUrls, setManualPageUrls] = useState('');
-  const [workDone, setWorkDone] = useState('');
-  const [description, setDescription] = useState('');
+  const [allowManualPage, setAllowManualPage] = useState(() => readDraftFromStorage()?.allowManualPage || false);
+  const [selectedPageUrls, setSelectedPageUrls] = useState(() => readDraftFromStorage()?.selectedPageUrls || []);
+  const [manualPageUrls, setManualPageUrls] = useState(() => readDraftFromStorage()?.manualPageUrls || '');
+  const [workDone, setWorkDone] = useState(() => readDraftFromStorage()?.workDone || '');
+  const [description, setDescription] = useState(() => readDraftFromStorage()?.description || '');
   const [staged, setStaged] = useState(readStagedFromStorage);
   const [lastSavedCount, setLastSavedCount] = useState(() => readStagedFromStorage().length || 1);
   const [submitting, setSubmitting] = useState(false);
@@ -140,6 +166,26 @@ export default function EodReportClient({ webClients, history, today }) {
       // localStorage unavailable — staged entries just won't survive a reload.
     }
   }, [staged]);
+
+  // Mirrors the in-progress entry to localStorage as a draft while it's being
+  // filled in (step 'page' or 'details'), and clears it once the entry is saved
+  // (step returns to 'select'/'saved') or the whole report is submitted — so
+  // there's never a stale draft left behind describing an entry that's already
+  // safely in `staged` or submitted.
+  useEffect(() => {
+    try {
+      if (step === 'page' || step === 'details') {
+        window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
+          step, selectedClientId, manualHeading, pages, allowManualPage,
+          selectedPageUrls, manualPageUrls, workDone, description,
+        }));
+      } else {
+        window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      }
+    } catch {
+      // localStorage unavailable — the in-progress entry just won't survive a reload.
+    }
+  }, [step, selectedClientId, manualHeading, pages, allowManualPage, selectedPageUrls, manualPageUrls, workDone, description]);
 
   const selectedClient = webClients.find(c => String(c.id) === String(selectedClientId));
   const entryLabel = selectedClient?.label || manualHeading.trim();
