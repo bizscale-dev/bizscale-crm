@@ -167,6 +167,15 @@ async function runMigrations(raw) {
     // real associate manually (see web_associate_name_mappings below), instead of
     // that name being silently dropped into a sync error and never surfaced again.
     "ALTER TABLE web_clients ADD COLUMN sheet_associate_name TEXT",
+    // Which specific Funnel month (1/2/3) a row's client was in at capture time,
+    // alongside the existing coarse is_funnel flag — needed because Month 1 is
+    // excluded from "regular" SEO totals everywhere else in the app (see
+    // dailyStats.js's getAccurateSeoDailyStats) while Month 2/3 still count as
+    // regular, so is_funnel alone (any month) can't tell those apart when reading
+    // back frozen history. NULL for non-funnel rows and for rows captured before
+    // this column existed (falls back to "not Month 1" for those, same as their
+    // pre-existing is_funnel=0/1 treatment did).
+    "ALTER TABLE daily_activity_log ADD COLUMN funnel_month INTEGER",
   ];
 
   for (const sql of alterStatements) {

@@ -63,10 +63,17 @@ export async function getAccurateSeoDailyStats(db, { campaignId, associateId = n
   `).all(campaignId, ...associateIds);
   const liveByKey = new Map(liveCompleted.map(r => [`${r.associate_id}|${r.task_date}`, r.completed]));
 
+  // Excludes Month 1 funnel rows here too, matching dayRows/liveCompleted above —
+  // daily_activity_log.is_funnel alone can't tell Month 1 apart from Month 2/3
+  // (it's just "any funnel month"), so this needs the funnel_month column
+  // specifically. Rows captured before that column existed have funnel_month
+  // NULL, which this treats as "not Month 1" (same as their historical
+  // is_funnel=0/1 treatment) — only rows explicitly recorded as Month 1 are cut.
   const frozenCompleted = await db.prepare(`
     SELECT user_id, work_date, SUM(completed_count) as completed
     FROM daily_activity_log
     WHERE user_id IN (${placeholders}) AND work_date < ?
+      AND NOT (is_funnel = 1 AND funnel_month = 1)
     GROUP BY user_id, work_date
   `).all(...associateIds, today);
   const frozenByKey = new Map(frozenCompleted.map(r => [`${r.user_id}|${r.work_date}`, r.completed]));

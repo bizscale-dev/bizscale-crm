@@ -44,7 +44,8 @@ export async function captureDailyActivity(dateStr) {
   const seoRows = await db.prepare(`
     SELECT st.associate_id as user_id, c.name as client_name, st.link_type as label_key,
       st.target_count, st.completed_count,
-      CASE WHEN c.tunnel_status = 'active' THEN 1 ELSE 0 END as is_funnel
+      CASE WHEN c.tunnel_status = 'active' THEN 1 ELSE 0 END as is_funnel,
+      CASE WHEN c.tunnel_status = 'active' THEN c.funnel_month ELSE NULL END as funnel_month
     FROM seo_tasks st JOIN clients c ON c.id = st.client_id
     WHERE st.task_date = ?
   `).all(dateStr);
@@ -69,16 +70,19 @@ export async function captureDailyActivity(dateStr) {
       user_id: r.user_id, client_name: r.client_name, task_type: '',
       label: LINK_TYPE_LABELS[r.label_key] || r.label_key,
       target_count: r.target_count, completed_count: r.completed_count, is_funnel: r.is_funnel,
+      funnel_month: r.funnel_month,
     })),
     ...webseoRows.map(r => ({
       user_id: r.user_id, client_name: r.client_name, task_type: '',
       label: POST_TYPE_LABELS[r.label_key] || r.label_key,
       target_count: r.target_count, completed_count: r.completed_count, is_funnel: 0,
+      funnel_month: null,
     })),
     ...writerRows.map(r => ({
       user_id: r.user_id, client_name: r.client_name, task_type: r.task_type,
       label: r.label_key,
       target_count: r.target_count, completed_count: r.completed_count, is_funnel: r.is_funnel,
+      funnel_month: null,
     })),
   ];
 
@@ -100,15 +104,16 @@ export async function captureDailyActivity(dateStr) {
   }
 
   const sql = `
-    INSERT INTO daily_activity_log (user_id, client_name, task_type, label, work_date, target_count, completed_count, is_verified, is_funnel)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO daily_activity_log (user_id, client_name, task_type, label, work_date, target_count, completed_count, is_verified, is_funnel, funnel_month)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, client_name, task_type, label, work_date)
     DO UPDATE SET target_count = excluded.target_count, completed_count = excluded.completed_count,
-      is_verified = excluded.is_verified, is_funnel = excluded.is_funnel, captured_at = CURRENT_TIMESTAMP
+      is_verified = excluded.is_verified, is_funnel = excluded.is_funnel, funnel_month = excluded.funnel_month,
+      captured_at = CURRENT_TIMESTAMP
   `;
   await db.batch(entries.map(e => ({
     sql,
-    args: [e.user_id, e.client_name, e.task_type, e.label, dateStr, e.target_count, e.completed_count, e.is_verified, e.is_funnel],
+    args: [e.user_id, e.client_name, e.task_type, e.label, dateStr, e.target_count, e.completed_count, e.is_verified, e.is_funnel, e.funnel_month],
   })));
 
   await snapshotRemainingBacklog(db, dateStr);
