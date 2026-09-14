@@ -179,11 +179,30 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <label style={labelStyle}>Due Date</label>
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle} />
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                // Clicking anywhere in the field opens the native date picker
+                // (a calendar to click a day on), not just the small calendar
+                // icon at the edge — showPicker() is supported in Chrome/Edge;
+                // browsers without it just fall back to normal text-field focus.
+                onClick={(e) => e.target.showPicker?.()}
+                style={{ ...inputStyle, cursor: 'pointer' }}
+              />
             </div>
             <div>
               <label style={labelStyle}>Due Time</label>
-              <input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} style={inputStyle} />
+              <input
+                type="time"
+                value={dueTime}
+                onChange={(e) => setDueTime(e.target.value)}
+                // Same as Due Date above — opens the native time picker, which
+                // shows an explicit AM/PM toggle to click instead of having to
+                // type/scroll that segment by hand.
+                onClick={(e) => e.target.showPicker?.()}
+                style={{ ...inputStyle, cursor: 'pointer' }}
+              />
             </div>
           </div>
 
