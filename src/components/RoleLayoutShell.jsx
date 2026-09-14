@@ -160,6 +160,22 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
                       </span>
                     )}
 
+                    {/* Notification dot — only rendered when an item carries a
+                        positive badgeCount (e.g. unsubmitted Manager Tasks).
+                        Items with no badgeCount render exactly as before. */}
+                    {!!item.badgeCount && (
+                      <span style={{
+                        position: 'absolute',
+                        top: sidebarOpen ? '0.6rem' : '0.4rem',
+                        right: sidebarOpen ? '1rem' : '0.6rem',
+                        width: '9px',
+                        height: '9px',
+                        borderRadius: '50%',
+                        backgroundColor: 'var(--danger)',
+                        border: '2px solid var(--card-bg)',
+                      }} />
+                    )}
+
                     {active && (
                       <div style={{
                         position: 'absolute',

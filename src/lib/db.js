@@ -486,6 +486,37 @@ async function runMigrations(raw) {
       UNIQUE(user_id, work_date),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
+    // One row per task an admin writes and assigns out to one or more managers
+    // (seo_manager/web_seo_manager/writers_manager) — see manager_task_assignees
+    // below for the per-assignee submission tracking.
+    `CREATE TABLE IF NOT EXISTS manager_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_text TEXT NOT NULL,
+      due_date DATE NOT NULL,
+      due_time TEXT NOT NULL,
+      created_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    // One row per (task, assigned manager) — each assigned manager submits their
+    // own proof independently, so a shared task doesn't close out for everyone
+    // just because one assignee submitted. "Submitted" is derived as
+    // submitted_at IS NOT NULL rather than a separate boolean flag, matching
+    // eod_reports' lack of a redundant flag. proof_image_base64 stores the full
+    // data:image/...;base64,... data-URL (not bare base64) so it can be dropped
+    // straight into an <img src> with no separate mime_type column needed.
+    `CREATE TABLE IF NOT EXISTS manager_task_assignees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      submission_description TEXT,
+      proof_image_base64 TEXT,
+      submitted_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(task_id, user_id),
+      FOREIGN KEY (task_id) REFERENCES manager_tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
   ];
 
   for (const sql of createTableStatements) {

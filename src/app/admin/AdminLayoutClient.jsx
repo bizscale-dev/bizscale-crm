@@ -11,6 +11,7 @@ const navItems = [
   { href: '/admin/funnel', label: 'Funnel' },
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/tasks', label: 'Tasks' },
+  { href: '/admin/manager-tasks', label: 'Manager Tasks' },
   { href: '/admin/link-sync', label: 'Sync Completed Links' },
   { href: '/admin/seo-associates', label: 'SEO Associates' },
   { href: '/admin/web-seo-associates', label: 'Web SEO Associates' },
