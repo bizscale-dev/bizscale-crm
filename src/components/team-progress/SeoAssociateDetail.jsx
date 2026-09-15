@@ -512,7 +512,17 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
                   </thead>
                   <tbody>
                     {dailySummary.map(d => {
-                      const pct = d.target > 0 ? Math.round((d.dayCompleted / d.target) * 100) : 0;
+                      // A day's real completed count can legitimately exceed its
+                      // current target — a client whose occurrence was on this
+                      // day when real work was frozen into history can later get
+                      // rescheduled to a different day (a roster/funnel change,
+                      // a campaign regeneration), shrinking this day's live
+                      // target after the fact without touching the honest record
+                      // of what was actually completed. Capped at 100% here for
+                      // display only — dayCompleted/target themselves are shown
+                      // uncapped right next to it, so the real counts stay visible.
+                      const rawPct = d.target > 0 ? Math.round((d.dayCompleted / d.target) * 100) : 0;
+                      const pct = Math.min(100, rawPct);
                       const isToday = d.task_date === today;
                       const isPast = d.task_date < today;
                       return (

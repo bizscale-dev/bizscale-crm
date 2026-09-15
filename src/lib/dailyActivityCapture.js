@@ -103,6 +103,39 @@ export async function captureDailyActivity(dateStr) {
     e.is_verified = priorKeys.has(`${e.user_id}|${e.client_name}|${e.task_type}|${e.label}`) ? 1 : 0;
   }
 
+  // A client's live rotation can move to a different day after this date was
+  // already captured once (a later client roster change, funnel move, or
+  // campaign regeneration reshuffles which day their tasks fall on) — the
+  // INSERT ... ON CONFLICT below only ever upserts whatever's in `entries` now,
+  // it never removes a row for a (user, client, label) combo that WAS captured
+  // for this date before but no longer shows up in today's live query. Left
+  // alone, that stale row sits in daily_activity_log forever, permanently
+  // inflating this date's frozen completed/target totals with a client that
+  // isn't actually scheduled here anymore (surfaced as "sum of a whole day's
+  // work" exceeding the day's real target once the rotation moves on).
+  //
+  // Only safe to auto-remove when completed_count is 0 — a pure phantom
+  // occurrence nobody ever did any real work against. A stale row with real
+  // completed_count > 0 represents genuine historical achievement (verified
+  // work actually done that day, under whatever schedule existed at the time)
+  // and must never be silently deleted just because a LATER regeneration
+  // reshuffled the rotation — daily_activity_log is documented as a permanent
+  // record precisely so today's schedule changes can't rewrite yesterday's
+  // real results. Scoped to only the users being captured here so an unrelated
+  // user's row for the same date is never touched.
+  const currentKeys = new Set(entries.map(e => `${e.user_id}|${e.client_name}|${e.task_type}|${e.label}`));
+  const existingForDate = await db.prepare(`
+    SELECT id, user_id, client_name, task_type, label, completed_count
+    FROM daily_activity_log
+    WHERE user_id IN (${userIds.map(() => '?').join(',')}) AND work_date = ?
+  `).all(...userIds, dateStr);
+  const staleIds = existingForDate
+    .filter(r => !currentKeys.has(`${r.user_id}|${r.client_name}|${r.task_type}|${r.label}`) && r.completed_count === 0)
+    .map(r => r.id);
+  if (staleIds.length > 0) {
+    await db.prepare(`DELETE FROM daily_activity_log WHERE id IN (${staleIds.map(() => '?').join(',')})`).run(...staleIds);
+  }
+
   const sql = `
     INSERT INTO daily_activity_log (user_id, client_name, task_type, label, work_date, target_count, completed_count, is_verified, is_funnel, funnel_month)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

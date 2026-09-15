@@ -331,7 +331,14 @@ async function WeeklySummary({ campaign, db }) {
             </thead>
             <tbody>
               {dailyRows.map(d => {
-                const pct = d.target > 0 ? Math.round((d.dayCompleted / d.target) * 100) : 0;
+                // Capped at 100% for display only — see the matching comment in
+                // SeoAssociateDetail.jsx's Daily Summary table. A day's real
+                // completed count can legitimately exceed its current target
+                // once a later regeneration reshuffles which day a client's
+                // occurrence falls on; dayCompleted/target are still shown
+                // uncapped right next to it.
+                const rawPct = d.target > 0 ? Math.round((d.dayCompleted / d.target) * 100) : 0;
+                const pct = Math.min(100, rawPct);
                 const isToday = d.task_date === today;
                 const isPast = d.task_date < today;
                 return (
