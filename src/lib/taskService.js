@@ -104,6 +104,23 @@ export async function generateSEOTasks(campaignId) {
     priorCompleted.set(`${row.client_id}|${row.day_number}|${row.link_type}`, row.completed_count);
   }
 
+  // Clients who already had ANY seo_tasks row (scheduled or not) before this
+  // regeneration — used below to keep a brand-new client (just enrolled in the
+  // Funnel, or freshly assigned) from getting occurrences backdated into days
+  // before today. Every client's occurrence days are normally computed across
+  // the WHOLE campaign date range (workingDays, built from the campaign's
+  // start_date, not from today), which is correct for a client that's been in
+  // the rotation all along — a regeneration must keep their past days' history
+  // stable. But a client with no prior rows at all is, by definition, brand new
+  // to this campaign's rotation — they were never actually due on any past day,
+  // so they should only ever be scheduled from today onward, not slotted
+  // retroactively into days that already passed before they existed here.
+  const existingClientIdRows = await db.prepare(`
+    SELECT DISTINCT client_id FROM seo_tasks WHERE campaign_id = ?
+  `).all(campaignId);
+  const existingClientIds = new Set(existingClientIdRows.map(r => r.client_id));
+  const todayStr = moment().format('YYYY-MM-DD');
+
   // Clear existing tasks for this campaign
   await db.prepare('DELETE FROM seo_tasks WHERE campaign_id = ?').run(campaignId);
 
@@ -237,6 +254,49 @@ export async function generateSEOTasks(campaignId) {
         }
         clientOccurrenceDays.set(client.id, occurrences);
       });
+    }
+
+    // Clamp (not drop) any past-dated occurrence for a client who wasn't already
+    // in the rotation before this regeneration (see existingClientIds above) —
+    // moved forward to the nearest today-or-later working day instead of being
+    // removed outright. Dropping was tried first but breaks Month 1 funnel
+    // clients: a brand-new enrollment only has ONE eligible occurrence (week 1,
+    // since month1CurrentWeek defaults to 1) — if that single day landed in the
+    // past, dropping it left the client with zero tasks anywhere, silently
+    // erasing their week 1 work instead of rescheduling it. Clamping guarantees
+    // every client's full target is always delivered somewhere current/future,
+    // never dropped and never backdated. Occurrences are then deduplicated by
+    // dayNumber (multiple originally-past days can collapse onto the same
+    // clamped day) so the split logic below sees the correct occurrence count
+    // and never produces two rows for the same (client, day, link type).
+    // Existing clients are left untouched here regardless of date, so their
+    // already-passed days' history/rotation keeps working exactly as before.
+    const sortedWorkingDaysForClamp = [...workingDays].sort((a, b) => a.dayNumber - b.dayNumber);
+    const firstFutureWorkingDay = sortedWorkingDaysForClamp.find(d => d.dateStr >= todayStr)
+      || sortedWorkingDaysForClamp[sortedWorkingDaysForClamp.length - 1];
+
+    for (const client of assignedClients) {
+      if (existingClientIds.has(client.id) || !firstFutureWorkingDay) continue;
+      const occurrences = clientOccurrenceDays.get(client.id);
+      if (!occurrences) continue;
+
+      const clamped = occurrences.map(o => o.dateStr < todayStr
+        ? { ...o, dayNumber: firstFutureWorkingDay.dayNumber, dateStr: firstFutureWorkingDay.dateStr }
+        : o);
+
+      // Dedupe by (dayNumber, week) — Month 1 occurrences carry a `week` field
+      // that must stay distinct even if two different weeks clamp onto the same
+      // day; regular/M2/M3 occurrences have no `week` field, so plain dayNumber
+      // dedup applies to them.
+      const seen = new Set();
+      const deduped = clamped.filter(o => {
+        const key = `${o.dayNumber}|${o.week ?? ''}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      clientOccurrenceDays.set(client.id, deduped);
     }
 
     // Second pass: generate each client's rows across their own occurrence days.
