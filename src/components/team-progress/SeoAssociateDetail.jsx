@@ -239,13 +239,19 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   // On-time completions: work done on the same day it was assigned, summed across
   // the whole campaign so far (dayCompleted per day — see src/lib/dailyStats.js).
   // Catch-up work done later against an overdue row is never counted here, only
-  // against whichever day it actually happened on. The percentage's denominator
-  // only counts days that have actually happened (task_date <= today) — a future
-  // day's target is already assigned but hasn't had a chance to be completed on
-  // time yet, so including it would understate the real rate.
-  const onTimeCompletion = dailySummary.reduce((s, d) => s + d.dayCompleted, 0);
+  // against whichever day it actually happened on. Both sides are scoped to
+  // task_date < today — strictly before today, not <= — since today's own day
+  // hasn't finished yet. Counting today's full target as already "eligible" the
+  // moment the day starts (target_count > 0, dayCompleted still 0 first thing in
+  // the morning) unfairly judged an in-progress day as a shortfall before there
+  // was any real chance to complete it; a future day is excluded for the exact
+  // same reason (see the target-inclusion check above), and today deserves that
+  // same benefit of the doubt until it's actually over.
+  const onTimeCompletion = dailySummary
+    .filter(d => d.task_date < today)
+    .reduce((s, d) => s + d.dayCompleted, 0);
   const onTimeEligibleTarget = dailySummary
-    .filter(d => d.task_date <= today)
+    .filter(d => d.task_date < today)
     .reduce((s, d) => s + d.target, 0);
   const onTimePercent = onTimeEligibleTarget > 0 ? Math.round((onTimeCompletion / onTimeEligibleTarget) * 100) : 0;
   // Overall completed: dayCompleted (own-day work) PLUS resolved backlog credit —
