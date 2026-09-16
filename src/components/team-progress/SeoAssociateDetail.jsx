@@ -43,7 +43,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     );
   }
 
-  let todayTasks = [], overallStats = null, recentLogs = [], upcomingDays = [], dailySummary = [], pendingTasks = [], weeklySummary = [], funnelClients = [];
+  let todayTasks = [], recentLogs = [], upcomingDays = [], dailySummary = [], pendingTasks = [], weeklySummary = [], funnelClients = [];
   let dateTasks = [], availableDates = [];
   let totalExpectedLinks = 0;
   let cumulativeByClientType = {};
@@ -88,9 +88,9 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     // "regular" queries below (today/date/cumulative/overall/pending/logs) should
     // include their seo_tasks rows. Month 2/3 funnel clients still count as
     // regular here (same as before), via their own real seo_tasks total —
-    // overallStats.completed below counts every non-Month-1 seo_tasks row for
-    // this associate including Month 2/3, so their targets need to be included
-    // here too or Overall Target's percentage can run past 100%.
+    // overallCompleted below (see near onTimeCompletion) counts every non-Month-1
+    // day for this associate including Month 2/3, so their targets need to be
+    // included here too or Overall Target's percentage can run past 100%.
     const funnelM2M3ExpectedLinks = funnelClients
       .filter(fc => fc.funnel_month !== 1)
       .reduce((s, fc) => s + (fc.total_tasks || 0), 0);
@@ -143,14 +143,6 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
       if (!cumulativeByClientType[row.client_id]) cumulativeByClientType[row.client_id] = {};
       cumulativeByClientType[row.client_id][row.link_type] = { target: row.target, completed: row.completed };
     }
-
-    overallStats = await db.prepare(`
-      SELECT SUM(st.target_count) as target, SUM(st.completed_count) as completed
-      FROM seo_tasks st
-      JOIN clients c ON c.id = st.client_id
-      WHERE st.associate_id = ? AND st.campaign_id = ? AND c.is_active = 1
-        AND NOT (c.tunnel_status = 'active' AND c.funnel_month = 1)
-    `).get(associateId, campaign.id);
 
     recentLogs = await db.prepare(`
       SELECT ll.*, c.name as client_name, st.link_type, st.task_date
@@ -239,7 +231,6 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   // didn't match any specific day's actual front-loaded-remainder target).
   const todayTarget = todayTasks.reduce((s, t) => s + t.target_count, 0);
   const todayCompleted = todayTasks.reduce((s, t) => s + t.completed_count, 0);
-  const overallPercent = totalExpectedLinks > 0 ? Math.round((overallStats?.completed / totalExpectedLinks) * 100) : 0;
   const todayPercent = todayTarget > 0 ? Math.round((todayCompleted / todayTarget) * 100) : 0;
   // The real count of still-missing links (target - completed) summed across every
   // pending row — not just the number of distinct client/link-type rows, which
@@ -257,6 +248,18 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     .filter(d => d.task_date <= today)
     .reduce((s, d) => s + d.target, 0);
   const onTimePercent = onTimeEligibleTarget > 0 ? Math.round((onTimeCompletion / onTimeEligibleTarget) * 100) : 0;
+  // Overall completed: dayCompleted (own-day work) PLUS resolved backlog credit —
+  // same accurate, backlog-creep-immune source as everything else on this page
+  // (see src/lib/dailyStats.js). Previously this came from a separate query
+  // summing seo_tasks.completed_count LIVE, unconditionally, even for past days —
+  // exactly the "backlog creep" problem getAccurateSeoDailyStats was built to
+  // avoid elsewhere. Any live correction to an old row (a manual data fix, a
+  // sync revert, catch-up crediting a different day) doesn't retroactively raise
+  // or lower that old day's own frozen number, so a live-only sum could drift
+  // out of sync with the frozen totals used by On Time Completion above — even
+  // showing LESS than onTimeCompletion, which should always be a subset of it.
+  const overallCompleted = dailySummary.reduce((s, d) => s + d.completed, 0);
+  const overallPercent = totalExpectedLinks > 0 ? Math.round((overallCompleted / totalExpectedLinks) * 100) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -290,8 +293,8 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
             <StatCard title="On Time Completion" value={onTimeCompletion} sub={`${onTimePercent}% done on the day it was assigned`} color="#16b293" />
             <StatCard title="Today's Target" value={todayTarget} sub={`${todayCompleted} completed (${todayPercent}%)`} color="var(--primary)" />
-            <StatCard title="Overall Target" value={totalExpectedLinks} sub={`${overallStats?.completed || 0} completed (${overallPercent}%)`} color="var(--success)" />
-            <StatCard title="Percentage Completion" value={`${overallPercent}%`} sub={`${overallStats?.completed || 0} / ${totalExpectedLinks} tasks`} color="var(--success)" />
+            <StatCard title="Overall Target" value={totalExpectedLinks} sub={`${overallCompleted} completed (${overallPercent}%)`} color="var(--success)" />
+            <StatCard title="Percentage Completion" value={`${overallPercent}%`} sub={`${overallCompleted} / ${totalExpectedLinks} tasks`} color="var(--success)" />
             <StatCard title="Upcoming Days" value={upcomingDays.length} sub="remaining days with tasks" color="#f59e0b" />
             <StatCard title="Pending Tasks" value={pendingLinksMissing} sub="overdue, not yet completed" color="#f59e0b" />
           </div>

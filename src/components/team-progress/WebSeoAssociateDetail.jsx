@@ -31,7 +31,7 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
     );
   }
 
-  let todayTasks = [], pendingTasks = [], overallStats = null, upcomingDays = [], dailySummary = [];
+  let todayTasks = [], pendingTasks = [], upcomingDays = [], dailySummary = [];
   let cumulativeByClientType = {};
 
   if (campaign) {
@@ -57,12 +57,6 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
       if (!cumulativeByClientType[row.client_id]) cumulativeByClientType[row.client_id] = {};
       cumulativeByClientType[row.client_id][row.post_type] = { target: row.target, completed: row.completed };
     }
-
-    overallStats = await db.prepare(`
-      SELECT SUM(target_count) as target, SUM(completed_count) as completed
-      FROM webseo_tasks
-      WHERE associate_id = ? AND webseo_campaign_id = ?
-    `).get(associateId, campaign.id);
 
     // Every day this associate has ever had (or will have) webseo_tasks for, past
     // and future alike — past days carry accurate, backlog-creep-immune numbers
@@ -105,9 +99,6 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
 
   const todayTarget = todayTasks.reduce((s, t) => s + t.target_count, 0);
   const todayCompleted = todayTasks.reduce((s, t) => s + t.completed_count, 0);
-  const overallTarget = overallStats?.target || 0;
-  const overallCompleted = overallStats?.completed || 0;
-  const overallPercent = overallTarget > 0 ? Math.round((overallCompleted / overallTarget) * 100) : 0;
   const todayPercent = todayTarget > 0 ? Math.round((todayCompleted / todayTarget) * 100) : 0;
   // On-time completions: work done on the same day it was assigned, summed across
   // the whole campaign so far (dayCompleted per day — see src/lib/dailyStats.js).
@@ -119,6 +110,16 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
     .filter(d => d.task_date <= today)
     .reduce((s, d) => s + d.target, 0);
   const onTimePercent = onTimeEligibleTarget > 0 ? Math.round((onTimeCompletion / onTimeEligibleTarget) * 100) : 0;
+  // Overall target/completed: same accurate, backlog-creep-immune source as
+  // everything else on this page (see src/lib/dailyStats.js), instead of a
+  // separate query summing webseo_tasks LIVE unconditionally — a live-only sum
+  // for past days could drift from the frozen totals used by On Time Completion
+  // above (any live correction to an old row doesn't retroactively change that
+  // day's own frozen number), even showing LESS than onTimeCompletion, which
+  // should always be a subset of it.
+  const overallTarget = dailySummary.reduce((s, d) => s + d.target, 0);
+  const overallCompleted = dailySummary.reduce((s, d) => s + d.completed, 0);
+  const overallPercent = overallTarget > 0 ? Math.round((overallCompleted / overallTarget) * 100) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
