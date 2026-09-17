@@ -162,17 +162,22 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
 
                     {/* Notification dot — only rendered when an item carries a
                         positive badgeCount (e.g. unsubmitted Manager Tasks).
-                        Items with no badgeCount render exactly as before. */}
+                        Items with no badgeCount render exactly as before. Green,
+                        oversized, and animated with a soft "breathing" pulse
+                        (scale + glow) specifically so it pulls the eye in a
+                        sidebar full of static text — a plain static dot is too
+                        easy to miss at a glance. */}
                     {!!item.badgeCount && (
-                      <span style={{
+                      <span className="nav-badge-breathing" style={{
                         position: 'absolute',
-                        top: sidebarOpen ? '0.6rem' : '0.4rem',
-                        right: sidebarOpen ? '1rem' : '0.6rem',
-                        width: '9px',
-                        height: '9px',
+                        top: sidebarOpen ? '0.5rem' : '0.3rem',
+                        right: sidebarOpen ? '0.9rem' : '0.5rem',
+                        width: '14px',
+                        height: '14px',
                         borderRadius: '50%',
-                        backgroundColor: 'var(--danger)',
+                        backgroundColor: '#22c55e',
                         border: '2px solid var(--card-bg)',
+                        boxShadow: '0 0 0 0 rgba(34, 197, 94, 0.7)',
                       }} />
                     )}
 
@@ -205,6 +210,20 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
                 opacity: 1;
                 transform: translateY(-50%) scaleY(1);
               }
+            }
+
+            @keyframes navBadgeBreathe {
+              0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+              }
+              50% {
+                transform: scale(1.25);
+                box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+              }
+            }
+            .nav-badge-breathing {
+              animation: navBadgeBreathe 1.6s ease-in-out infinite;
             }
           `}</style>
         </nav>

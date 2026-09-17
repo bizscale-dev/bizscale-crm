@@ -176,6 +176,20 @@ async function runMigrations(raw) {
     // this column existed (falls back to "not Month 1" for those, same as their
     // pre-existing is_funnel=0/1 treatment did).
     "ALTER TABLE daily_activity_log ADD COLUMN funnel_month INTEGER",
+    // Late-submission approval workflow for Manager Tasks (see
+    // src/app/admin/manager-tasks/). A manager submitting after the task's
+    // due_date/due_time must give a reason, and that submission needs admin
+    // sign-off before it counts as done — is_late is set once at submit time
+    // (never re-derived later, so it stays accurate even if the task's due
+    // date is somehow edited afterward); approval_status is NULL for an
+    // on-time submission (no review needed at all) or a not-yet-submitted
+    // task, 'pending' the moment a late submission comes in, then
+    // 'approved'/'rejected' once an admin reviews it.
+    "ALTER TABLE manager_task_assignees ADD COLUMN is_late INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE manager_task_assignees ADD COLUMN late_reason TEXT",
+    "ALTER TABLE manager_task_assignees ADD COLUMN approval_status TEXT CHECK(approval_status IS NULL OR approval_status IN ('pending','approved','rejected'))",
+    "ALTER TABLE manager_task_assignees ADD COLUMN reviewed_by INTEGER",
+    "ALTER TABLE manager_task_assignees ADD COLUMN reviewed_at DATETIME",
   ];
 
   for (const sql of alterStatements) {

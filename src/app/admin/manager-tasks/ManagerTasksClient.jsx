@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createManagerTask } from './actions';
+import { createManagerTask, approveTaskSubmission, rejectTaskSubmission } from './actions';
 
 const BRAND_COLOR = 'var(--primary)';
 
@@ -56,9 +56,41 @@ function groupManagersByRole(managers) {
   return groups;
 }
 
+const REVIEW_LABELS = {
+  pending: { text: '🟠 Late — pending your review', color: '#f59e0b' },
+  approved: { text: '✅ Late — approved', color: 'var(--success)' },
+  rejected: { text: '❌ Late — rejected', color: 'var(--danger)' },
+};
+
+const smallButtonStyle = {
+  padding: '0.4rem 0.9rem',
+  border: 'none',
+  borderRadius: '0.4rem',
+  cursor: 'pointer',
+  fontWeight: '600',
+  fontSize: '0.8rem',
+};
+
 function AssigneeStatus({ assignee }) {
+  const router = useRouter();
   const [expanded, setExpanded] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewError, setReviewError] = useState(null);
   const submitted = !!assignee.submitted_at;
+  const isLate = !!assignee.is_late;
+
+  const handleReview = async (decision) => {
+    setReviewError(null);
+    setReviewing(true);
+    const action = decision === 'approved' ? approveTaskSubmission : rejectTaskSubmission;
+    const result = await action(assignee.id);
+    setReviewing(false);
+    if (result?.error) {
+      setReviewError(result.error);
+      return;
+    }
+    router.refresh();
+  };
 
   return (
     <div style={{
@@ -76,8 +108,10 @@ function AssigneeStatus({ assignee }) {
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{assignee.role}</div>
         </div>
         {submitted ? (
-          <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: '600' }}>
-            ✅ Submitted {new Date(assignee.submitted_at).toLocaleString()}
+          <span style={{ fontSize: '0.8rem', fontWeight: '600', color: isLate ? (REVIEW_LABELS[assignee.approval_status]?.color || '#f59e0b') : 'var(--success)' }}>
+            {isLate
+              ? (REVIEW_LABELS[assignee.approval_status]?.text || REVIEW_LABELS.pending.text)
+              : `✅ Submitted ${new Date(assignee.submitted_at).toLocaleString()}`}
           </span>
         ) : (
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>
@@ -88,6 +122,12 @@ function AssigneeStatus({ assignee }) {
 
       {submitted && expanded && (
         <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
+          {isLate && (
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+              Submitted late: {new Date(assignee.submitted_at).toLocaleString()}
+              {assignee.late_reason && <><br />Reason: {assignee.late_reason}</>}
+            </div>
+          )}
           <div style={{ fontSize: '0.85rem', marginBottom: '0.75rem', whiteSpace: 'pre-wrap' }}>
             {assignee.submission_description}
           </div>
@@ -95,8 +135,31 @@ function AssigneeStatus({ assignee }) {
             <img
               src={assignee.proof_image_base64}
               alt="Proof"
-              style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)' }}
+              style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: isLate && assignee.approval_status === 'pending' ? '0.75rem' : 0 }}
             />
+          )}
+          {isLate && assignee.approval_status === 'pending' && (
+            <div onClick={(e) => e.stopPropagation()}>
+              {reviewError && <div style={{ fontSize: '0.8rem', color: 'var(--danger)', marginBottom: '0.5rem' }}>{reviewError}</div>}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  disabled={reviewing}
+                  onClick={() => handleReview('approved')}
+                  style={{ ...smallButtonStyle, backgroundColor: 'var(--success)', color: 'white', opacity: reviewing ? 0.6 : 1 }}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={reviewing}
+                  onClick={() => handleReview('rejected')}
+                  style={{ ...smallButtonStyle, backgroundColor: 'var(--danger)', color: 'white', opacity: reviewing ? 0.6 : 1 }}
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}

@@ -87,3 +87,48 @@ export async function createManagerTask(formData) {
     return { error: err.message || 'Failed to create task — please try again.' };
   }
 }
+
+/**
+ * Approves or rejects one late submission. Only ever acts on an assignee row
+ * that's actually is_late=1 and approval_status='pending' — an on-time
+ * submission was never routed for review in the first place (approval_status
+ * stays NULL), so there's nothing here for these to accidentally touch.
+ */
+async function reviewTaskSubmission(assigneeId, decision) {
+  const { session, error: authError } = await requireAdmin();
+  if (authError) return { error: authError };
+
+  const id = parseInt(assigneeId, 10);
+  if (!id || Number.isNaN(id)) {
+    return { error: 'Invalid submission' };
+  }
+
+  try {
+    const db = await getDb();
+
+    const result = await db.prepare(`
+      UPDATE manager_task_assignees
+      SET approval_status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND is_late = 1 AND approval_status = 'pending'
+    `).run(decision, session.userId, id);
+
+    if (!result.changes) {
+      return { error: 'This submission is no longer pending review' };
+    }
+
+    revalidatePath('/admin/manager-tasks');
+
+    return { success: true };
+  } catch (err) {
+    console.error('[ManagerTasks] reviewTaskSubmission failed:', err);
+    return { error: err.message || 'Failed to review — please try again.' };
+  }
+}
+
+export async function approveTaskSubmission(assigneeId) {
+  return reviewTaskSubmission(assigneeId, 'approved');
+}
+
+export async function rejectTaskSubmission(assigneeId) {
+  return reviewTaskSubmission(assigneeId, 'rejected');
+}

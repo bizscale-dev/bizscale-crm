@@ -73,10 +73,26 @@ const primaryButtonStyle = {
   fontSize: '0.875rem',
 };
 
+// Same overdue check the server re-validates in submitTaskProof — used here
+// only to decide whether to show the mandatory reason field before submit;
+// the server is the actual source of truth on whether it's really late.
+function isOverdue(task) {
+  const dueAt = new Date(`${task.due_date}T${task.due_time}:00`);
+  return !Number.isNaN(dueAt.getTime()) && new Date() > dueAt;
+}
+
+const APPROVAL_LABELS = {
+  pending: { text: '⏳ Pending admin approval', color: '#f59e0b' },
+  approved: { text: '✅ Approved', color: 'var(--success)' },
+  rejected: { text: '❌ Rejected', color: 'var(--danger)' },
+};
+
 function TaskCard({ task }) {
   const router = useRouter();
   const submitted = !!task.submitted_at;
+  const overdue = !submitted && isOverdue(task);
   const [description, setDescription] = useState(() => submitted ? '' : readDraft(task.task_id));
+  const [lateReason, setLateReason] = useState('');
   const [imageDataUrl, setImageDataUrl] = useState(null);
   const [imageError, setImageError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -115,9 +131,13 @@ function TaskCard({ task }) {
       setError('Proof image is required');
       return;
     }
+    if (overdue && !lateReason.trim()) {
+      setError('This task is overdue — please give a reason before submitting');
+      return;
+    }
 
     setSubmitting(true);
-    const result = await submitTaskProof(task.task_id, description, imageDataUrl);
+    const result = await submitTaskProof(task.task_id, description, imageDataUrl, lateReason);
     setSubmitting(false);
 
     if (result?.error) {
@@ -148,6 +168,18 @@ function TaskCard({ task }) {
           <div style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: '600', marginBottom: '0.5rem' }}>
             ✅ Submitted {new Date(task.submitted_at).toLocaleString()}
           </div>
+          {!!task.is_late && (
+            <div style={{ marginBottom: '0.75rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: '600', color: APPROVAL_LABELS[task.approval_status]?.color || '#f59e0b' }}>
+                {APPROVAL_LABELS[task.approval_status]?.text || '⏳ Pending admin approval'} — submitted late
+              </div>
+              {task.late_reason && (
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Reason: {task.late_reason}
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ fontSize: '0.85rem', marginBottom: '0.75rem', whiteSpace: 'pre-wrap' }}>
             {task.submission_description}
           </div>
@@ -164,6 +196,11 @@ function TaskCard({ task }) {
           {error && (
             <div style={{ fontSize: '0.85rem', color: 'var(--danger)' }}>{error}</div>
           )}
+          {overdue && (
+            <div style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: '600' }}>
+              ⚠️ This task is overdue — submitting now will need admin approval.
+            </div>
+          )}
           <div>
             <label style={labelStyle}>Description</label>
             <textarea
@@ -174,6 +211,18 @@ function TaskCard({ task }) {
               placeholder="What did you do to complete this task?"
             />
           </div>
+          {overdue && (
+            <div>
+              <label style={labelStyle}>Reason for late submission</label>
+              <textarea
+                value={lateReason}
+                onChange={(e) => setLateReason(e.target.value)}
+                rows={2}
+                style={{ ...inputStyle, resize: 'vertical' }}
+                placeholder="Why is this being submitted after the due date/time?"
+              />
+            </div>
+          )}
           <div>
             <label style={labelStyle}>Proof Image</label>
             <input type="file" accept="image/*" onChange={handleFileChange} />

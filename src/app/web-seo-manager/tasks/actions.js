@@ -41,8 +41,15 @@ export async function getUnsubmittedTaskCount() {
  * id, and confirms the (task_id, user_id) assignee row actually belongs to them
  * before writing — a manager can only submit their own assignment, never
  * another manager's.
+ *
+ * Late-submission approval: if submitted after the task's due_date/due_time,
+ * a reason is mandatory and the submission goes to 'pending' admin review
+ * instead of counting as done outright — see approveTaskSubmission/
+ * rejectTaskSubmission in src/app/admin/manager-tasks/actions.js. Lateness is
+ * decided once, here, at submit time (not re-derived later), so it stays
+ * accurate even if the task's due date is edited afterward.
  */
-export async function submitTaskProof(taskId, description, proofImageBase64) {
+export async function submitTaskProof(taskId, description, proofImageBase64, lateReason) {
   const { session, error: authError } = await requireWebSeoManager();
   if (authError) return { error: authError };
 
@@ -66,21 +73,36 @@ export async function submitTaskProof(taskId, description, proofImageBase64) {
     const db = await getDb();
 
     const assignee = await db.prepare(`
-      SELECT id FROM manager_task_assignees WHERE task_id = ? AND user_id = ?
+      SELECT a.id, t.due_date, t.due_time FROM manager_task_assignees a
+      JOIN manager_tasks t ON t.id = a.task_id
+      WHERE a.task_id = ? AND a.user_id = ?
     `).get(id, session.userId);
     if (!assignee) {
       return { error: 'This task is not assigned to you' };
     }
 
+    const dueAt = new Date(`${assignee.due_date}T${assignee.due_time}:00`);
+    const isLate = Number.isNaN(dueAt.getTime()) ? false : new Date() > dueAt;
+
+    const cleanedLateReason = (lateReason || '').trim();
+    if (isLate && !cleanedLateReason) {
+      return { error: 'This task is overdue — please give a reason before submitting' };
+    }
+
     await db.prepare(`
       UPDATE manager_task_assignees
-      SET submission_description = ?, proof_image_base64 = ?, submitted_at = CURRENT_TIMESTAMP
+      SET submission_description = ?, proof_image_base64 = ?, submitted_at = CURRENT_TIMESTAMP,
+        is_late = ?, late_reason = ?, approval_status = ?
       WHERE task_id = ? AND user_id = ?
-    `).run(cleanedDescription, proofImageBase64, id, session.userId);
+    `).run(
+      cleanedDescription, proofImageBase64, isLate ? 1 : 0,
+      isLate ? cleanedLateReason : null, isLate ? 'pending' : null,
+      id, session.userId
+    );
 
     revalidatePath('/web-seo-manager/tasks');
 
-    return { success: true };
+    return { success: true, isLate };
   } catch (err) {
     console.error('[ManagerTasks] submitTaskProof failed:', err);
     return { error: err.message || 'Failed to submit — please try again.' };

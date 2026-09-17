@@ -21,7 +21,8 @@ export default async function ManagerTasksPage() {
   const rows = await db.prepare(`
     SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at,
       a.id as assignee_row_id, a.user_id, u.name as manager_name, u.role as manager_role,
-      a.submitted_at, a.submission_description, a.proof_image_base64
+      a.submitted_at, a.submission_description, a.proof_image_base64,
+      a.is_late, a.late_reason, a.approval_status
     FROM manager_tasks t
     JOIN manager_task_assignees a ON a.task_id = t.id
     JOIN users u ON u.id = a.user_id
@@ -50,6 +51,9 @@ export default async function ManagerTasksPage() {
       submitted_at: row.submitted_at,
       submission_description: row.submission_description,
       proof_image_base64: row.proof_image_base64,
+      is_late: row.is_late,
+      late_reason: row.late_reason,
+      approval_status: row.approval_status,
     });
   }
 
