@@ -127,10 +127,6 @@ function TaskCard({ task }) {
       setError('Description is required');
       return;
     }
-    if (!imageDataUrl) {
-      setError('Proof image is required');
-      return;
-    }
     if (overdue && !lateReason.trim()) {
       setError('This task is overdue — please give a reason before submitting');
       return;
@@ -224,7 +220,7 @@ function TaskCard({ task }) {
             </div>
           )}
           <div>
-            <label style={labelStyle}>Proof Image</label>
+            <label style={labelStyle}>Proof Image (optional)</label>
             <input type="file" accept="image/*" onChange={handleFileChange} />
             {imageError && <div style={{ fontSize: '0.8rem', color: 'var(--danger)', marginTop: '0.35rem' }}>{imageError}</div>}
             {imageDataUrl && (

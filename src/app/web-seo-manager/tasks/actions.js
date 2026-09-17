@@ -67,11 +67,16 @@ export async function submitTaskProof(taskId, description, proofImageBase64, lat
   if (!cleanedDescription) {
     return { error: 'Description is required' };
   }
-  if (!proofImageBase64 || typeof proofImageBase64 !== 'string' || !proofImageBase64.startsWith('data:image/')) {
-    return { error: 'Proof image is required' };
-  }
-  if (proofImageBase64.length > MAX_BASE64_LENGTH) {
-    return { error: 'Proof image is too large (max 2MB)' };
+  // Proof image is optional — only validated (format, size cap) when one was
+  // actually provided; a missing image is no longer a rejection.
+  const hasImage = !!proofImageBase64;
+  if (hasImage) {
+    if (typeof proofImageBase64 !== 'string' || !proofImageBase64.startsWith('data:image/')) {
+      return { error: 'Proof image looks invalid — try re-attaching it' };
+    }
+    if (proofImageBase64.length > MAX_BASE64_LENGTH) {
+      return { error: 'Proof image is too large (max 2MB)' };
+    }
   }
 
   try {
@@ -100,7 +105,7 @@ export async function submitTaskProof(taskId, description, proofImageBase64, lat
         is_late = ?, late_reason = ?, approval_status = ?
       WHERE task_id = ? AND user_id = ?
     `).run(
-      cleanedDescription, proofImageBase64, isLate ? 1 : 0,
+      cleanedDescription, hasImage ? proofImageBase64 : null, isLate ? 1 : 0,
       isLate ? cleanedLateReason : null, isLate ? 'pending' : null,
       id, session.userId
     );
