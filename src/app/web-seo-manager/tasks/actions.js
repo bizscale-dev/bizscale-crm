@@ -18,10 +18,15 @@ async function requireWebSeoManager() {
 }
 
 /**
- * Count of this manager's assigned tasks still awaiting their own submission —
- * feeds the Tasks nav item's notification dot (see WebSeoManagerLayoutClient.jsx).
- * No due-date gating: an overdue, still-unsubmitted task should keep showing the
- * dot, not silently stop counting once its deadline passes.
+ * Count of things this manager needs to look at — feeds the Tasks nav item's
+ * notification dot (see the portal's LayoutClient.jsx). Two cases:
+ *   1. An assigned task still awaiting their own submission (no due-date
+ *      gating — an overdue, still-unsubmitted task keeps showing the dot,
+ *      not silently stops once its deadline passes).
+ *   2. A late submission the admin has just approved/rejected that they
+ *      haven't opened their Tasks page to see yet (review_seen = 0 — see
+ *      reviewTaskSubmission in admin/manager-tasks/actions.js). The dot
+ *      disappears again once they actually view it there.
  */
 export async function getUnsubmittedTaskCount() {
   const { session, error } = await requireWebSeoManager();
@@ -30,7 +35,7 @@ export async function getUnsubmittedTaskCount() {
   const db = await getDb();
   const row = await db.prepare(`
     SELECT COUNT(*) as c FROM manager_task_assignees
-    WHERE user_id = ? AND submitted_at IS NULL
+    WHERE user_id = ? AND (submitted_at IS NULL OR review_seen = 0)
   `).get(session.userId);
   return row?.c || 0;
 }

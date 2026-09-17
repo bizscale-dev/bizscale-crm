@@ -93,6 +93,11 @@ export async function createManagerTask(formData) {
  * that's actually is_late=1 and approval_status='pending' — an on-time
  * submission was never routed for review in the first place (approval_status
  * stays NULL), so there's nothing here for these to accidentally touch.
+ *
+ * review_seen is reset to 0 here — this is the moment the manager has
+ * something new to find out about, so it brings their nav dot back (see
+ * getUnsubmittedTaskCount in each portal's tasks/actions.js). It flips back
+ * to 1 the next time they actually open their Tasks page.
  */
 async function reviewTaskSubmission(assigneeId, decision) {
   const { session, error: authError } = await requireAdmin();
@@ -108,7 +113,7 @@ async function reviewTaskSubmission(assigneeId, decision) {
 
     const result = await db.prepare(`
       UPDATE manager_task_assignees
-      SET approval_status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
+      SET approval_status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, review_seen = 0
       WHERE id = ? AND is_late = 1 AND approval_status = 'pending'
     `).run(decision, session.userId, id);
 

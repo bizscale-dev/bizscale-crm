@@ -190,6 +190,15 @@ async function runMigrations(raw) {
     "ALTER TABLE manager_task_assignees ADD COLUMN approval_status TEXT CHECK(approval_status IS NULL OR approval_status IN ('pending','approved','rejected'))",
     "ALTER TABLE manager_task_assignees ADD COLUMN reviewed_by INTEGER",
     "ALTER TABLE manager_task_assignees ADD COLUMN reviewed_at DATETIME",
+    // Brings the nav dot back once an admin approves/rejects a late
+    // submission, so the manager finds out — set to 0 (unseen) by
+    // approveTaskSubmission/rejectTaskSubmission at the moment of decision,
+    // and flipped back to 1 the next time the manager actually opens their
+    // Tasks page (see the manager's tasks/page.js — visiting the page IS
+    // "reading" the result). Defaults to 1 (nothing to notify about) for
+    // every other row — an unsubmitted task or a still-pending review already
+    // has its own dot logic and doesn't need this.
+    "ALTER TABLE manager_task_assignees ADD COLUMN review_seen INTEGER NOT NULL DEFAULT 1",
   ];
 
   for (const sql of alterStatements) {
