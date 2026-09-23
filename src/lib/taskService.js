@@ -104,43 +104,51 @@ export async function generateSEOTasks(campaignId) {
     priorCompleted.set(`${row.client_id}|${row.day_number}|${row.link_type}`, row.completed_count);
   }
 
-  // Clients who already had ANY seo_tasks row (scheduled or not) before this
-  // regeneration — used below to keep a brand-new client (just enrolled in the
-  // Funnel, or freshly assigned) from getting occurrences backdated into days
-  // before today. Every client's occurrence days are normally computed across
-  // the WHOLE campaign date range (workingDays, built from the campaign's
-  // start_date, not from today), which is correct for a client that's been in
-  // the rotation all along — a regeneration must keep their past days' history
-  // stable. But a client with no prior rows at all is, by definition, brand new
-  // to this campaign's rotation — they were never actually due on any past day,
-  // so they should only ever be scheduled from today onward, not slotted
-  // retroactively into days that already passed before they existed here.
-  const existingClientIdRows = await db.prepare(`
-    SELECT DISTINCT client_id FROM seo_tasks WHERE campaign_id = ?
-  `).all(campaignId);
-  const existingClientIds = new Set(existingClientIdRows.map(r => r.client_id));
   const todayStr = moment().format('YYYY-MM-DD');
 
-  // A client deactivated (or put on hold) since the last regeneration drops
-  // out of the active roster below and gets none of their occurrences
-  // recomputed at all — including their PAST ones. Since target is always
-  // read live (see the file-level doc comment above), wiping their past rows
-  // outright doesn't just stop future work, it also erases their real
-  // already-completed history from every past day's target sum — while that
-  // day's frozen completed total (daily_activity_log) still includes the
-  // real work that was genuinely done against them, producing a >100% ratio
-  // for a day that used to add up correctly. Snapshot their past rows
-  // (task_date < today) verbatim before the wipe below and restore them
-  // unchanged afterward — their future rows are correctly NOT restored
-  // (nothing should still be due for a client no longer being worked), only
-  // history survives.
-  const excludedClientPastRows = await db.prepare(`
-    SELECT * FROM seo_tasks
-    WHERE campaign_id = ? AND task_date < ?
-      AND client_id NOT IN (
-        SELECT id FROM clients WHERE campaign_id = ? AND is_active = 1 AND (tunnel_status IS NULL OR tunnel_status != 'hold')
-      )
-  `).all(campaignId, todayStr, campaignId);
+  // Every past-dated row (task_date < today), for every client regardless of
+  // current status — snapshotted verbatim before the wipe below and restored
+  // unchanged afterward. This is the single source of truth for "what
+  // already happened", and the second pass further down never recomputes a
+  // past-dated occurrence for a client who already has one here — only
+  // TODAY-and-future occurrences ever get freshly generated. Two real bugs
+  // this fixes at the root instead of chasing each symptom:
+  //   1. A client deactivated (or put back on hold) since the last
+  //      regeneration used to drop out of the active roster below with NONE
+  //      of their occurrences recomputed — including their past ones. Since
+  //      target is always read live, that erased their real completed
+  //      history from every past day's target sum while that day's frozen
+  //      completed total (daily_activity_log) still included the real work
+  //      genuinely done, producing a >100% ratio for a day that used to add
+  //      up correctly.
+  //   2. Even an ACTIVE client's rotation slot can land on a different
+  //      calendar day purely because the roster composition changed
+  //      elsewhere (someone else added/removed reshuffles everyone's slot) —
+  //      previously this silently relabeled already-completed real work onto
+  //      a new date, and the completed-links sync would then re-credit the
+  //      NEW date too (since it just tops up toward the sheet's cumulative
+  //      total), so the same real work ended up double-counted across two
+  //      dates. Preserving past rows unconditionally makes a regeneration
+  //      structurally unable to touch a day that's already happened, for
+  //      any client, active or not.
+  const pastRows = await db.prepare(`
+    SELECT * FROM seo_tasks WHERE campaign_id = ? AND task_date < ?
+  `).all(campaignId, todayStr);
+  const clientsWithPastHistory = new Set(pastRows.map(r => r.client_id));
+
+  // Already-used target per (client, link type) from the preserved past rows
+  // — subtracted below from a Normal/funnel-Month-2-3 client's monthly
+  // target, so the occurrences generated fresh only cover what's genuinely
+  // still remaining instead of re-allocating the FULL monthly amount across
+  // just the future occurrences (which would inflate their real total
+  // whenever some of it was already earned on a preserved past day). Month 1
+  // doesn't need this: each week's target is an independent fixed amount
+  // (FUNNEL_MONTH1_WEEK_TARGETS), not a shared monthly pool to divide.
+  const usedTargetByClientLinkType = new Map();
+  for (const row of pastRows) {
+    const key = `${row.client_id}|${row.link_type}`;
+    usedTargetByClientLinkType.set(key, (usedTargetByClientLinkType.get(key) || 0) + row.target_count);
+  }
 
   // Clear existing tasks for this campaign
   await db.prepare('DELETE FROM seo_tasks WHERE campaign_id = ?').run(campaignId);
@@ -277,40 +285,48 @@ export async function generateSEOTasks(campaignId) {
       });
     }
 
-    // Clamp (not drop) any past-dated occurrence for a client who wasn't already
-    // in the rotation before this regeneration (see existingClientIds above) —
-    // moved forward to the nearest today-or-later working day instead of being
-    // removed outright. Dropping was tried first but breaks Month 1 funnel
-    // clients: a brand-new enrollment only has ONE eligible occurrence (week 1,
-    // since month1CurrentWeek defaults to 1) — if that single day landed in the
-    // past, dropping it left the client with zero tasks anywhere, silently
-    // erasing their week 1 work instead of rescheduling it. Clamping guarantees
-    // every client's full target is always delivered somewhere current/future,
-    // never dropped and never backdated. Occurrences are then deduplicated by
-    // dayNumber (multiple originally-past days can collapse onto the same
-    // clamped day) so the split logic below sees the correct occurrence count
-    // and never produces two rows for the same (client, day, link type).
-    // Existing clients are left untouched here regardless of date, so their
-    // already-passed days' history/rotation keeps working exactly as before.
+    // Two different treatments for a past-dated occurrence, depending on
+    // whether this client has any real history at all (clientsWithPastHistory,
+    // built from pastRows above):
+    //
+    // - A client with NO past history (brand new to this campaign's rotation
+    //   — just enrolled in the Funnel, or freshly assigned) has never
+    //   genuinely been due on any past day, so a past-dated occurrence here
+    //   gets CLAMPED forward to the nearest today-or-later working day
+    //   instead of dropped — guarantees their full target is always
+    //   delivered somewhere current/future, never silently lost (tried
+    //   dropping first; it left a brand-new Month 1 enrollment — which only
+    //   has ONE eligible occurrence, week 1 — with zero tasks anywhere).
+    // - A client WHO ALREADY has past history simply has any past-dated
+    //   occurrence DROPPED here (not clamped) — that day's real record
+    //   already lives in pastRows and gets restored verbatim below, so
+    //   generating a second, freshly-computed version of it here would
+    //   either duplicate it or (worse) relabel it onto today's date.
+    //
+    // Both paths dedupe by (dayNumber, week) afterward — Month 1 occurrences
+    // carry a `week` field that must stay distinct even if two different
+    // weeks clamp onto the same day; regular/M2/M3 occurrences have no
+    // `week` field, so plain dayNumber dedup applies to them.
     const sortedWorkingDaysForClamp = [...workingDays].sort((a, b) => a.dayNumber - b.dayNumber);
     const firstFutureWorkingDay = sortedWorkingDaysForClamp.find(d => d.dateStr >= todayStr)
       || sortedWorkingDaysForClamp[sortedWorkingDaysForClamp.length - 1];
 
     for (const client of assignedClients) {
-      if (existingClientIds.has(client.id) || !firstFutureWorkingDay) continue;
       const occurrences = clientOccurrenceDays.get(client.id);
       if (!occurrences) continue;
 
-      const clamped = occurrences.map(o => o.dateStr < todayStr
-        ? { ...o, dayNumber: firstFutureWorkingDay.dayNumber, dateStr: firstFutureWorkingDay.dateStr }
-        : o);
+      const hasHistory = clientsWithPastHistory.has(client.id);
 
-      // Dedupe by (dayNumber, week) — Month 1 occurrences carry a `week` field
-      // that must stay distinct even if two different weeks clamp onto the same
-      // day; regular/M2/M3 occurrences have no `week` field, so plain dayNumber
-      // dedup applies to them.
+      const adjusted = hasHistory
+        ? occurrences.filter(o => o.dateStr >= todayStr)
+        : (firstFutureWorkingDay
+          ? occurrences.map(o => o.dateStr < todayStr
+            ? { ...o, dayNumber: firstFutureWorkingDay.dayNumber, dateStr: firstFutureWorkingDay.dateStr }
+            : o)
+          : occurrences);
+
       const seen = new Set();
-      const deduped = clamped.filter(o => {
+      const deduped = adjusted.filter(o => {
         const key = `${o.dayNumber}|${o.week ?? ''}`;
         if (seen.has(key)) return false;
         seen.add(key);
@@ -375,10 +391,20 @@ export async function generateSEOTasks(campaignId) {
         // across this client's occurrences, front-loaded remainder (same
         // convention used elsewhere in the app for exact monthly splits), so the
         // full defined number is always delivered by month's end instead of an
-        // approximated daily rate.
+        // approximated daily rate. A client with past history only has FUTURE
+        // occurrences left in the list at this point (see the filter above) —
+        // subtract what pastRows already accounts for so this only splits the
+        // genuinely remaining target across them, not the full monthly amount
+        // again (that history's own target already exists, restored verbatim).
         const staggerIdx = staggerIndexByClientId.get(client.id) || 0;
+        const hasHistory = clientsWithPastHistory.has(client.id);
         for (const linkType of LINK_TYPES) {
-          const monthlyTarget = funnelMonthlyLinkTargets[linkType];
+          const fullMonthlyTarget = funnelMonthlyLinkTargets[linkType];
+          if (fullMonthlyTarget <= 0) continue;
+          const usedKey = `${client.id}|${linkType}`;
+          const monthlyTarget = hasHistory
+            ? Math.max(0, fullMonthlyTarget - (usedTargetByClientLinkType.get(usedKey) || 0))
+            : fullMonthlyTarget;
           if (monthlyTarget <= 0) continue;
 
           const sizes = staggeredSplit(monthlyTarget, occurrences.length, staggerIdx % occurrences.length);
@@ -409,9 +435,18 @@ export async function generateSEOTasks(campaignId) {
         // recur (previously approximated via a shared daily rate derived from
         // a hardcoded 16-day/3.2-occurrence assumption, which silently
         // shorted every client whenever a campaign didn't run exactly 16 days).
+        // Same remaining-target treatment as the funnel M2/M3 branch above for
+        // a client with past history — only the genuinely-remaining amount
+        // gets split across their future-only occurrence list.
         const staggerIdx = staggerIndexByClientId.get(client.id) || 0;
+        const hasHistory = clientsWithPastHistory.has(client.id);
         for (const linkType of LINK_TYPES) {
-          const monthlyTarget = monthlyLinkTargets[linkType];
+          const fullMonthlyTarget = monthlyLinkTargets[linkType];
+          if (fullMonthlyTarget <= 0) continue;
+          const usedKey = `${client.id}|${linkType}`;
+          const monthlyTarget = hasHistory
+            ? Math.max(0, fullMonthlyTarget - (usedTargetByClientLinkType.get(usedKey) || 0))
+            : fullMonthlyTarget;
           if (monthlyTarget <= 0) continue;
 
           const sizes = staggeredSplit(monthlyTarget, occurrences.length, staggerIdx % occurrences.length);
@@ -449,21 +484,22 @@ export async function generateSEOTasks(campaignId) {
     })));
   }
 
-  // Restore a now-excluded client's past rows exactly as they were — see the
-  // snapshot/comment above. Verbatim re-insert, not re-derived, so their real
-  // historical target/completed stays exactly what it always was.
-  if (excludedClientPastRows.length > 0) {
+  // Restore every client's past rows exactly as they were — see the
+  // snapshot/comment above. Verbatim re-insert, not re-derived, so real
+  // historical target/completed stays exactly what it always was for every
+  // client, not just ones excluded from this regeneration's active roster.
+  if (pastRows.length > 0) {
     const restoreSql = `
       INSERT INTO seo_tasks (campaign_id, associate_id, client_id, day_number, task_date, link_type, target_count, completed_count)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    await db.batch(excludedClientPastRows.map(r => ({
+    await db.batch(pastRows.map(r => ({
       sql: restoreSql,
       args: [r.campaign_id, r.associate_id, r.client_id, r.day_number, r.task_date, r.link_type, r.target_count, r.completed_count],
     })));
   }
 
-  return allTasks.length + excludedClientPastRows.length;
+  return allTasks.length + pastRows.length;
 }
 
 // Get today's SEO tasks for an associate
