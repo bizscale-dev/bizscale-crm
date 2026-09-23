@@ -258,8 +258,14 @@ async function WeeklySummary({ campaign, db }) {
           </thead>
           <tbody>
             {weeklyStats.map((ws) => {
-              const seoPct = ws.seo.target > 0 ? Math.round((ws.seo.completed / ws.seo.target) * 100) : 0;
-              const writingPct = ws.writing.target > 0 ? Math.round((ws.writing.completed / ws.writing.target) * 100) : 0;
+              // Capped at 100% for display only — see the matching comment on
+              // the Daily Summary table below. A week's real completed total
+              // can legitimately exceed its target once a client's rotation
+              // slot moves to a different week after real work was already
+              // frozen into history; ws.seo.completed/target are still shown
+              // uncapped right next to the bar.
+              const seoPct = ws.seo.target > 0 ? Math.min(100, Math.round((ws.seo.completed / ws.seo.target) * 100)) : 0;
+              const writingPct = ws.writing.target > 0 ? Math.min(100, Math.round((ws.writing.completed / ws.writing.target) * 100)) : 0;
               
               return (
                 <tr key={ws.week} style={{ borderBottom: '1px solid var(--border)' }}>

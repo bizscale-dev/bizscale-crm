@@ -115,7 +115,10 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
   const onTimeEligibleTarget = dailySummary
     .filter(d => d.task_date < today)
     .reduce((s, d) => s + d.target, 0);
-  const onTimePercent = onTimeEligibleTarget > 0 ? Math.round((onTimeCompletion / onTimeEligibleTarget) * 100) : 0;
+  // Capped at 100% for display only — the underlying onTimeCompletion/
+  // onTimeEligibleTarget counts above stay real and uncapped (see the
+  // matching comment in SeoAssociateDetail.jsx).
+  const onTimePercent = onTimeEligibleTarget > 0 ? Math.min(100, Math.round((onTimeCompletion / onTimeEligibleTarget) * 100)) : 0;
   // Overall target/completed: same accurate, backlog-creep-immune source as
   // everything else on this page (see src/lib/dailyStats.js), instead of a
   // separate query summing webseo_tasks LIVE unconditionally — a live-only sum

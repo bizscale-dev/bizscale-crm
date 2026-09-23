@@ -121,6 +121,27 @@ export async function generateSEOTasks(campaignId) {
   const existingClientIds = new Set(existingClientIdRows.map(r => r.client_id));
   const todayStr = moment().format('YYYY-MM-DD');
 
+  // A client deactivated (or put on hold) since the last regeneration drops
+  // out of the active roster below and gets none of their occurrences
+  // recomputed at all — including their PAST ones. Since target is always
+  // read live (see the file-level doc comment above), wiping their past rows
+  // outright doesn't just stop future work, it also erases their real
+  // already-completed history from every past day's target sum — while that
+  // day's frozen completed total (daily_activity_log) still includes the
+  // real work that was genuinely done against them, producing a >100% ratio
+  // for a day that used to add up correctly. Snapshot their past rows
+  // (task_date < today) verbatim before the wipe below and restore them
+  // unchanged afterward — their future rows are correctly NOT restored
+  // (nothing should still be due for a client no longer being worked), only
+  // history survives.
+  const excludedClientPastRows = await db.prepare(`
+    SELECT * FROM seo_tasks
+    WHERE campaign_id = ? AND task_date < ?
+      AND client_id NOT IN (
+        SELECT id FROM clients WHERE campaign_id = ? AND is_active = 1 AND (tunnel_status IS NULL OR tunnel_status != 'hold')
+      )
+  `).all(campaignId, todayStr, campaignId);
+
   // Clear existing tasks for this campaign
   await db.prepare('DELETE FROM seo_tasks WHERE campaign_id = ?').run(campaignId);
 
@@ -428,7 +449,21 @@ export async function generateSEOTasks(campaignId) {
     })));
   }
 
-  return allTasks.length;
+  // Restore a now-excluded client's past rows exactly as they were — see the
+  // snapshot/comment above. Verbatim re-insert, not re-derived, so their real
+  // historical target/completed stays exactly what it always was.
+  if (excludedClientPastRows.length > 0) {
+    const restoreSql = `
+      INSERT INTO seo_tasks (campaign_id, associate_id, client_id, day_number, task_date, link_type, target_count, completed_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    await db.batch(excludedClientPastRows.map(r => ({
+      sql: restoreSql,
+      args: [r.campaign_id, r.associate_id, r.client_id, r.day_number, r.task_date, r.link_type, r.target_count, r.completed_count],
+    })));
+  }
+
+  return allTasks.length + excludedClientPastRows.length;
 }
 
 // Get today's SEO tasks for an associate

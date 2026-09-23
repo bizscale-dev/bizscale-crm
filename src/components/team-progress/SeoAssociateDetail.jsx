@@ -253,7 +253,14 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   const onTimeEligibleTarget = dailySummary
     .filter(d => d.task_date < today)
     .reduce((s, d) => s + d.target, 0);
-  const onTimePercent = onTimeEligibleTarget > 0 ? Math.round((onTimeCompletion / onTimeEligibleTarget) * 100) : 0;
+  // Capped at 100% for display only — the underlying onTimeCompletion/
+  // onTimeEligibleTarget counts above stay real and uncapped. A day's real
+  // completed total can legitimately exceed its own target once a client's
+  // rotation slot later moves to a different day after real work was already
+  // frozen into that day's history (see the matching comment on Daily
+  // Summary's per-day cap below) — that same effect can push the summed
+  // on-time ratio past 100% too.
+  const onTimePercent = onTimeEligibleTarget > 0 ? Math.min(100, Math.round((onTimeCompletion / onTimeEligibleTarget) * 100)) : 0;
   // Overall completed: dayCompleted (own-day work) PLUS resolved backlog credit —
   // same accurate, backlog-creep-immune source as everything else on this page
   // (see src/lib/dailyStats.js). Previously this came from a separate query
@@ -467,7 +474,10 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
                 </thead>
                 <tbody>
                   {weeklySummary.map((ws) => {
-                    const pct = ws.target > 0 ? Math.round((ws.completed / ws.target) * 100) : 0;
+                    // Capped at 100% for display only — same reasoning as the
+                    // On Time Completion card and the Daily Summary table
+                    // below; ws.completed/ws.target are shown uncapped.
+                    const pct = ws.target > 0 ? Math.min(100, Math.round((ws.completed / ws.target) * 100)) : 0;
                     return (
                       <tr key={ws.week} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '0.75rem 0', fontWeight: '600' }}>Week {ws.week}</td>
