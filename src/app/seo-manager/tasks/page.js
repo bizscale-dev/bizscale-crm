@@ -1,11 +1,13 @@
 import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import TasksClient from './TasksClient';
+import { ensureRecurringManagerTasks } from '@/lib/recurringManagerTasks';
 
 export const revalidate = 0;
 
 export default async function SeoManagerTasksPage() {
   const session = await verifySession();
+  await ensureRecurringManagerTasks();
   const db = await getDb();
 
   const tasks = await db.prepare(`

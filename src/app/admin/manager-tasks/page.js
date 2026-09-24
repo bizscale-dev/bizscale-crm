@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
 import ManagerTasksClient from './ManagerTasksClient';
+import { ensureRecurringManagerTasks } from '@/lib/recurringManagerTasks';
 
 export const revalidate = 0;
 
@@ -10,6 +11,7 @@ const ROLE_LABELS = {
 };
 
 export default async function ManagerTasksPage() {
+  await ensureRecurringManagerTasks();
   const db = await getDb();
 
   const managers = await db.prepare(`
@@ -19,7 +21,7 @@ export default async function ManagerTasksPage() {
   `).all();
 
   const rows = await db.prepare(`
-    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at,
+    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id,
       a.id as assignee_row_id, a.user_id, u.name as manager_name, u.role as manager_role,
       a.submitted_at, a.submission_description, a.proof_image_base64,
       a.is_late, a.late_reason, a.approval_status
@@ -40,6 +42,7 @@ export default async function ManagerTasksPage() {
         due_date: row.due_date,
         due_time: row.due_time,
         created_at: row.created_at,
+        template_id: row.template_id,
         assignees: [],
       });
     }
@@ -57,8 +60,16 @@ export default async function ManagerTasksPage() {
     });
   }
 
+  const templateRows = await db.prepare(`
+    SELECT t.id, t.task_text, t.weekdays, t.due_time, t.is_active,
+      (SELECT GROUP_CONCAT(u.name, ', ') FROM manager_task_template_assignees ta
+        JOIN users u ON u.id = ta.user_id WHERE ta.template_id = t.id) as assignee_names
+    FROM manager_task_templates t ORDER BY t.created_at DESC
+  `).all();
+
   return (
     <ManagerTasksClient
+      templates={templateRows}
       managers={managers.map((m) => ({ ...m, roleLabel: ROLE_LABELS[m.role] || m.role }))}
       tasks={[...byTask.values()]}
       roleLabels={ROLE_LABELS}

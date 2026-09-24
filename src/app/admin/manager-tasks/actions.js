@@ -3,6 +3,7 @@
 import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
+import { ensureRecurringManagerTasks } from '@/lib/recurringManagerTasks';
 
 const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
 
@@ -86,6 +87,88 @@ export async function createManagerTask(formData) {
     console.error('[ManagerTasks] createManagerTask failed:', err);
     return { error: err.message || 'Failed to create task — please try again.' };
   }
+}
+
+/**
+ * Creates a recurring ("default") task: repeats on the chosen weekdays, and
+ * each occurrence is due that same day at due_time (default end of day), so
+ * every occurrence has exactly one day to be completed. Occurrences are
+ * spawned by ensureRecurringManagerTasks (src/lib/recurringManagerTasks.js).
+ */
+export async function createRecurringTemplate(formData) {
+  const { session, error: authError } = await requireAdmin();
+  if (authError) return { error: authError };
+
+  const taskText = (formData.get('task_text') || '').toString().trim();
+  const dueTime = (formData.get('due_time') || '').toString().trim() || '23:59';
+  const weekdays = [...new Set(formData.getAll('weekdays')
+    .map((v) => parseInt(v, 10))
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort();
+  const assigneeIds = formData.getAll('assignee_ids')
+    .map((v) => parseInt(v, 10))
+    .filter((n) => !Number.isNaN(n));
+
+  if (!taskText) return { error: 'Task description is required' };
+  if (weekdays.length === 0) return { error: 'Pick at least one day of the week to repeat on' };
+  if (assigneeIds.length === 0) return { error: 'Select at least one manager to assign this task to' };
+
+  try {
+    const db = await getDb();
+    const placeholders = assigneeIds.map(() => '?').join(',');
+    const rolePlaceholders = MANAGER_ROLES.map(() => '?').join(',');
+    const valid = await db.prepare(`
+      SELECT id FROM users
+      WHERE id IN (${placeholders}) AND role IN (${rolePlaceholders}) AND is_active = 1
+    `).all(...assigneeIds, ...MANAGER_ROLES);
+    if (valid.length === 0) return { error: 'None of the selected managers are valid' };
+
+    const create = db.transaction(async (tx) => {
+      const result = await tx.prepare(`
+        INSERT INTO manager_task_templates (task_text, weekdays, due_time, created_by)
+        VALUES (?, ?, ?, ?)
+      `).run(taskText, weekdays.join(','), dueTime, session.userId);
+      for (const m of valid) {
+        await tx.prepare(`
+          INSERT INTO manager_task_template_assignees (template_id, user_id) VALUES (?, ?)
+        `).run(result.lastInsertRowid, m.id);
+      }
+    });
+    await create();
+
+    // Spawn today's occurrence right away if today is one of the chosen days.
+    await ensureRecurringManagerTasks();
+
+    revalidatePath('/admin/manager-tasks');
+    return { success: true, assignedCount: valid.length };
+  } catch (err) {
+    console.error('[ManagerTasks] createRecurringTemplate failed:', err);
+    return { error: err.message || 'Failed to create recurring task — please try again.' };
+  }
+}
+
+export async function setRecurringTemplateActive(templateId, active) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return { error: authError };
+  const id = parseInt(templateId, 10);
+  if (!id) return { error: 'Invalid template' };
+  const db = await getDb();
+  await db.prepare('UPDATE manager_task_templates SET is_active = ? WHERE id = ?').run(active ? 1 : 0, id);
+  revalidatePath('/admin/manager-tasks');
+  return { success: true };
+}
+
+// Deleting a template stops future occurrences only — already-spawned
+// occurrences (and their submissions) are ordinary tasks and are kept.
+export async function deleteRecurringTemplate(templateId) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return { error: authError };
+  const id = parseInt(templateId, 10);
+  if (!id) return { error: 'Invalid template' };
+  const db = await getDb();
+  await db.prepare('UPDATE manager_tasks SET template_id = NULL WHERE template_id = ?').run(id);
+  await db.prepare('DELETE FROM manager_task_templates WHERE id = ?').run(id);
+  revalidatePath('/admin/manager-tasks');
+  return { success: true };
 }
 
 /**

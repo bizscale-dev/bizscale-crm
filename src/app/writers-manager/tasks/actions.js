@@ -3,6 +3,7 @@
 import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
+import { ensureRecurringManagerTasks } from '@/lib/recurringManagerTasks';
 
 // ~2MB of raw image bytes, inflated by base64's ~1.37x overhead — matches the
 // client-side cap in TasksClient.jsx. Re-validated here since client-side
@@ -31,6 +32,8 @@ async function requireWritersManager() {
 export async function getUnsubmittedTaskCount() {
   const { session, error } = await requireWritersManager();
   if (error) return 0;
+
+  await ensureRecurringManagerTasks();
 
   const db = await getDb();
   const row = await db.prepare(`

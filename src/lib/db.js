@@ -199,6 +199,9 @@ async function runMigrations(raw) {
     // every other row — an unsubmitted task or a still-pending review already
     // has its own dot logic and doesn't need this.
     "ALTER TABLE manager_task_assignees ADD COLUMN review_seen INTEGER NOT NULL DEFAULT 1",
+    // Links a spawned occurrence back to its recurring template (NULL for a
+    // normal one-off task).
+    "ALTER TABLE manager_tasks ADD COLUMN template_id INTEGER",
   ];
 
   for (const sql of alterStatements) {
@@ -540,6 +543,32 @@ async function runMigrations(raw) {
       FOREIGN KEY (task_id) REFERENCES manager_tasks(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
+    // Recurring ("default") Manager Tasks: a template that spawns one normal
+    // manager_tasks row per matching weekday, due that same day — see
+    // src/lib/recurringManagerTasks.js. weekdays is a comma-separated list of
+    // JS getDay() numbers (0 = Sunday ... 6 = Saturday).
+    `CREATE TABLE IF NOT EXISTS manager_task_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_text TEXT NOT NULL,
+      weekdays TEXT NOT NULL,
+      due_time TEXT NOT NULL DEFAULT '23:59',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS manager_task_template_assignees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      UNIQUE(template_id, user_id),
+      FOREIGN KEY (template_id) REFERENCES manager_task_templates(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    // One spawned occurrence per (template, day) — makes the generator safe to
+    // call from several places/concurrently (INSERT OR IGNORE).
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_manager_tasks_template_day
+      ON manager_tasks(template_id, due_date) WHERE template_id IS NOT NULL`,
   ];
 
   for (const sql of createTableStatements) {
