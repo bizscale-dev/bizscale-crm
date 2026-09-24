@@ -7,7 +7,7 @@ import {
   createRecurringTemplate, setRecurringTemplateActive, deleteRecurringTemplate,
 } from './actions';
 
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const BRAND_COLOR = 'var(--primary)';
 
@@ -172,14 +172,129 @@ function AssigneeStatus({ assignee }) {
   );
 }
 
+// Separate "Default Tasks" portion: a task tied to ONE weekday (no date), which
+// repeats every week — it appears on that day and is due by 12 AM (end of that
+// day). Distinct from the one-off form below, which takes a specific date/time.
+function DefaultTasksSection({ managers, roleLabels, templates }) {
+  const router = useRouter();
+  const [taskText, setTaskText] = useState('');
+  const [weekday, setWeekday] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState(null);
+  const managersByRole = groupManagersByRole(managers);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setMessage(null);
+    const formData = new FormData();
+    formData.set('task_text', taskText);
+    if (weekday !== '') formData.append('weekdays', weekday);
+    selectedIds.forEach((id) => formData.append('assignee_ids', id));
+    const result = await createRecurringTemplate(formData);
+    setSubmitting(false);
+    if (result?.error) {
+      setMessage({ type: 'error', text: result.error });
+      return;
+    }
+    setMessage({ type: 'success', text: `Default task created — repeats every ${WEEKDAY_NAMES[parseInt(weekday, 10)]} for ${result.assignedCount} manager(s).` });
+    setTaskText('');
+    setWeekday('');
+    setSelectedIds([]);
+    router.refresh();
+  };
+
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.1rem' }}>🔁 Default Tasks (weekly)</h2>
+      <p style={{ margin: '0 0 1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+        Pick one day of the week — no date needed. The task appears for the managers every week on that day and is due by 12 AM (end of that day).
+      </p>
+
+      {message && (
+        <div style={{
+          padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem',
+          backgroundColor: message.type === 'error' ? 'rgba(220, 38, 38, 0.1)' : 'rgba(22, 178, 147, 0.1)',
+          color: message.type === 'error' ? 'var(--danger)' : 'var(--success)',
+        }}>
+          {message.text}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div>
+          <label style={labelStyle}>Task</label>
+          <textarea value={taskText} onChange={(e) => setTaskText(e.target.value)} rows={2}
+            style={{ ...inputStyle, resize: 'vertical' }} placeholder="Describe the recurring task..." />
+        </div>
+        <div>
+          <label style={labelStyle}>Day of the week</label>
+          <select value={weekday} onChange={(e) => setWeekday(e.target.value)} style={inputStyle}>
+            <option value="">Select a day…</option>
+            {WEEKDAY_NAMES.map((name, d) => <option key={d} value={d}>{name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Assign To</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {[...managersByRole.entries()].map(([role, roleManagers]) => (
+              <div key={role}>
+                <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>{roleLabels[role] || role}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  {roleManagers.map((m) => (
+                    <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={selectedIds.includes(m.id)}
+                        onChange={() => setSelectedIds((prev) => prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id])} />
+                      {m.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <button type="submit" disabled={submitting} style={{ ...primaryButtonStyle, opacity: submitting ? 0.6 : 1 }}>
+            {submitting ? 'Creating...' : 'Create Default Task'}
+          </button>
+        </div>
+      </form>
+
+      {templates.length > 0 && (
+        <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {templates.map((t) => (
+            <div key={t.id} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', opacity: t.is_active ? 1 : 0.55 }}>
+              <div>
+                <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{t.task_text}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Every {String(t.weekdays).split(',').map((d) => WEEKDAY_NAMES[parseInt(d, 10)]).join(', ')} · due 12 AM · {t.assignee_names || 'no managers'}{t.is_active ? '' : ' · paused'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="button" style={{ ...smallButtonStyle, backgroundColor: 'transparent', border: '1px solid var(--border)', color: 'var(--foreground)' }}
+                  onClick={async () => { await setRecurringTemplateActive(t.id, !t.is_active); router.refresh(); }}>
+                  {t.is_active ? 'Pause' : 'Resume'}
+                </button>
+                <button type="button" style={{ ...smallButtonStyle, backgroundColor: 'var(--danger)', color: 'white' }}
+                  onClick={async () => { if (confirm('Delete this default task? Already-created occurrences are kept.')) { await deleteRecurringTemplate(t.id); router.refresh(); } }}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ManagerTasksClient({ managers, tasks, roleLabels, templates = [] }) {
   const router = useRouter();
   const [taskText, setTaskText] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [dueTime, setDueTime] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
-  const [repeatWeekly, setRepeatWeekly] = useState(false);
-  const [weekdays, setWeekdays] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -196,14 +311,11 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
 
     const formData = new FormData();
     formData.set('task_text', taskText);
-    if (!repeatWeekly) formData.set('due_date', dueDate);
+    formData.set('due_date', dueDate);
     formData.set('due_time', dueTime);
     selectedIds.forEach((id) => formData.append('assignee_ids', id));
-    if (repeatWeekly) weekdays.forEach((d) => formData.append('weekdays', d));
 
-    const result = repeatWeekly
-      ? await createRecurringTemplate(formData)
-      : await createManagerTask(formData);
+    const result = await createManagerTask(formData);
     setSubmitting(false);
 
     if (result?.error) {
@@ -211,10 +323,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
       return;
     }
 
-    setMessage({ type: 'success', text: repeatWeekly
-      ? `Recurring task created for ${result.assignedCount} manager(s).`
-      : `Task assigned to ${result.assignedCount} manager(s).` });
-    setWeekdays([]);
+    setMessage({ type: 'success', text: `Task assigned to ${result.assignedCount} manager(s).` });
     setTaskText('');
     setDueDate('');
     setDueTime('');
@@ -252,40 +361,8 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
             />
           </div>
 
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer', fontWeight: '600' }}>
-              <input type="checkbox" checked={repeatWeekly} onChange={(e) => setRepeatWeekly(e.target.checked)} />
-              🔁 Repeat every week (default task)
-            </label>
-            {repeatWeekly && (
-              <div style={{ marginTop: '0.75rem' }}>
-                <label style={labelStyle}>Repeat on</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  {WEEKDAY_LABELS.map((label, d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setWeekdays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d])}
-                      style={{
-                        padding: '0.4rem 0.8rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.8rem',
-                        border: '1px solid var(--border)',
-                        backgroundColor: weekdays.includes(d) ? BRAND_COLOR : 'transparent',
-                        color: weekdays.includes(d) ? 'white' : 'var(--foreground)',
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.5rem 0 0' }}>
-                  Each occurrence appears on its day and must be completed that same day (by the due time below, default end of day).
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: repeatWeekly ? '1fr' : '1fr 1fr', gap: '1rem' }}>
-            {!repeatWeekly && <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div>
               <label style={labelStyle}>Due Date</label>
               <input
                 type="date"
@@ -298,9 +375,9 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
                 onClick={(e) => e.target.showPicker?.()}
                 style={{ ...inputStyle, cursor: 'pointer' }}
               />
-            </div>}
+            </div>
             <div>
-              <label style={labelStyle}>Due Time{repeatWeekly ? ' (optional — defaults to 11:59 PM)' : ''}</label>
+              <label style={labelStyle}>Due Time</label>
               <input
                 type="time"
                 value={dueTime}
@@ -344,39 +421,13 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
 
           <div>
             <button type="submit" disabled={submitting} style={{ ...primaryButtonStyle, opacity: submitting ? 0.6 : 1 }}>
-              {submitting ? 'Assigning...' : (repeatWeekly ? 'Create Recurring Task' : 'Assign Task')}
+              {submitting ? 'Assigning...' : 'Assign Task'}
             </button>
           </div>
         </form>
       </div>
 
-      {templates.length > 0 && (
-        <div style={cardStyle}>
-          <h2 style={{ margin: '0 0 1.25rem', fontSize: '1.1rem' }}>Recurring Tasks</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {templates.map((t) => (
-              <div key={t.id} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', opacity: t.is_active ? 1 : 0.55 }}>
-                <div>
-                  <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{t.task_text}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                    Every {String(t.weekdays).split(',').map((d) => WEEKDAY_LABELS[parseInt(d, 10)]).join(', ')} · due {t.due_time} · {t.assignee_names || 'no managers'}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button type="button" style={{ ...smallButtonStyle, backgroundColor: 'transparent', border: '1px solid var(--border)', color: 'var(--foreground)' }}
-                    onClick={async () => { await setRecurringTemplateActive(t.id, !t.is_active); router.refresh(); }}>
-                    {t.is_active ? 'Pause' : 'Resume'}
-                  </button>
-                  <button type="button" style={{ ...smallButtonStyle, backgroundColor: 'var(--danger)', color: 'white' }}
-                    onClick={async () => { if (confirm('Delete this recurring task? Already-created occurrences are kept.')) { await deleteRecurringTemplate(t.id); router.refresh(); } }}>
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <DefaultTasksSection managers={managers} roleLabels={roleLabels} templates={templates} />
 
       <div style={cardStyle}>
         <h2 style={{ margin: '0 0 1.25rem', fontSize: '1.1rem' }}>Assigned Tasks</h2>
@@ -390,7 +441,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', gap: '1rem' }}>
                   <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{task.template_id ? '🔁 ' : ''}{task.task_text}</div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                    Due {task.due_date} {task.due_time}
+                    Due {task.due_date} {task.template_id ? '(12 AM)' : task.due_time}
                   </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem' }}>

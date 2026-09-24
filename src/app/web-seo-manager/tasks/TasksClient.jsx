@@ -153,9 +153,9 @@ function TaskCard({ task }) {
       backgroundColor: 'var(--card-bg)',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
-        <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{task.task_text}</div>
+        <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{task.template_id ? '🔁 ' : ''}{task.task_text}</div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-          Due {task.due_date} {task.due_time}
+          Due {task.due_date} {task.template_id ? '12 AM' : task.due_time}
         </div>
       </div>
 

@@ -100,7 +100,9 @@ export async function createRecurringTemplate(formData) {
   if (authError) return { error: authError };
 
   const taskText = (formData.get('task_text') || '').toString().trim();
-  const dueTime = (formData.get('due_time') || '').toString().trim() || '23:59';
+  // Default tasks are always due at 12 AM (end of their day) — stored as 23:59 so
+  // the same-day lateness check (due_date + due_time) stays valid.
+  const dueTime = '23:59';
   const weekdays = [...new Set(formData.getAll('weekdays')
     .map((v) => parseInt(v, 10))
     .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort();
@@ -109,7 +111,7 @@ export async function createRecurringTemplate(formData) {
     .filter((n) => !Number.isNaN(n));
 
   if (!taskText) return { error: 'Task description is required' };
-  if (weekdays.length === 0) return { error: 'Pick at least one day of the week to repeat on' };
+  if (weekdays.length !== 1) return { error: 'Pick the one day of the week this task repeats on' };
   if (assigneeIds.length === 0) return { error: 'Select at least one manager to assign this task to' };
 
   try {
