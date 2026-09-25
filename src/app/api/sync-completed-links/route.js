@@ -2,6 +2,7 @@ import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { parseGoogleSheetUrl, fetchGoogleSheetRows, parseCsv } from '@/lib/googleSheets';
 import { logSyncRun } from '@/lib/syncLog';
+import { autoAdvanceMonth1Weeks } from '@/lib/funnel';
 
 // 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
 // for why this matters (a killed function fails silently with no error surfaced).
@@ -265,6 +266,15 @@ export async function POST(request) {
         VALUES (?, ?, ?)
         ON CONFLICT(user_id, work_date) DO UPDATE SET resolved_count = resolved_count + excluded.resolved_count
       `).run(associateId, today, resolved);
+    }
+
+    // Month 1 funnel clients whose current week's 5 working days are over move up
+    // a week automatically. Failure here must never fail the sync itself.
+    try {
+      const advancedWeeks = await autoAdvanceMonth1Weeks(campaign.id);
+      if (advancedWeeks > 0) console.log(`[SYNC] Auto-advanced ${advancedWeeks} Month 1 client(s) to their next week`);
+    } catch (e) {
+      console.error('[SYNC] Month 1 auto-advance failed:', e);
     }
 
     console.log(`[SYNC] Complete: ${syncedCount} records synced from ${syncedClients.length} clients`);

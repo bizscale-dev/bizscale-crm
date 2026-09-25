@@ -2,7 +2,7 @@
 
 import { getDb } from '@/lib/db';
 import { LINK_TYPES } from '@/lib/linkTargetConstants';
-import { enrollClientInFunnel, advanceOneFunnelClient, advanceMonth1Week, jumpFunnelClientToMonth, graduateFunnelClientNow, graduateFunnelClientsNow, enrollHeldClientAtMonth, moveHeldClientToNormal } from '@/lib/funnel';
+import { enrollClientInFunnel, advanceOneFunnelClient, advanceMonth1Week, moveMonth1WeekBack, jumpFunnelClientToMonth, graduateFunnelClientNow, graduateFunnelClientsNow, enrollHeldClientAtMonth, moveHeldClientToNormal } from '@/lib/funnel';
 import { revalidatePath } from 'next/cache';
 
 export async function addFunnelTemplate(campaignId, templateData) {
@@ -74,6 +74,20 @@ export async function advanceMonth1WeekAction(clientId) {
     revalidatePath('/admin/funnel');
     revalidatePath('/admin/tasks');
     return { success: `Client advanced to Week ${result.newWeek}` };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+// Manual: move a Month 1 client back one week — the week being left is emptied,
+// earlier weeks' history stays (see moveMonth1WeekBack in src/lib/funnel.js).
+export async function moveMonth1WeekBackAction(clientId) {
+  try {
+    const result = await moveMonth1WeekBack(clientId);
+    if (!result.moved) return { error: result.error || 'Could not move back' };
+    revalidatePath('/admin/funnel');
+    revalidatePath('/admin/tasks');
+    return { success: `Client moved back to Week ${result.newWeek}` };
   } catch (err) {
     return { error: err.message };
   }

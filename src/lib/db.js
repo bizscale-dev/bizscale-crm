@@ -202,6 +202,10 @@ async function runMigrations(raw) {
     // Links a spawned occurrence back to its recurring template (NULL for a
     // normal one-off task).
     "ALTER TABLE manager_tasks ADD COLUMN template_id INTEGER",
+    // First working day of a Month 1 client's CURRENT week — the 5-working-day
+    // clock that drives automatic week advancement (see autoAdvanceMonth1Weeks
+    // in src/lib/funnel.js). NULL until the clock is first started.
+    "ALTER TABLE clients ADD COLUMN funnel_month1_week_started_on DATE",
   ];
 
   for (const sql of alterStatements) {

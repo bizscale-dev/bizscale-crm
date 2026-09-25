@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { moveFunnelClientToNormalAction, moveFunnelClientsToNormalAction, jumpFunnelClientToMonthAction, advanceMonth1WeekAction } from './actions';
+import { moveFunnelClientToNormalAction, moveFunnelClientsToNormalAction, jumpFunnelClientToMonthAction, advanceMonth1WeekAction, moveMonth1WeekBackAction } from './actions';
 
 const BRAND_COLOR = '#16b293';
 
@@ -44,6 +44,21 @@ export default function FunnelClientsTable({ funnelClients }) {
     setMessage(null);
     startTransition(async () => {
       const result = await advanceMonth1WeekAction(clientId);
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error });
+      } else {
+        setMessage({ type: 'success', text: result.success });
+        router.refresh();
+      }
+    });
+  };
+
+  const handleMoveBackWeek = (clientId, clientName, prevWeek) => {
+    if (!confirm(`Move "${clientName}" back to Week ${prevWeek}? The week they're leaving is emptied (its tasks are removed); earlier weeks' history stays.`)) return;
+
+    setMessage(null);
+    startTransition(async () => {
+      const result = await moveMonth1WeekBackAction(clientId);
       if (result.error) {
         setMessage({ type: 'error', text: result.error });
       } else {
@@ -212,6 +227,26 @@ export default function FunnelClientsTable({ funnelClients }) {
                           }}
                         >
                           Advance to Week {(client.funnel_month1_current_week || client.funnel_month1_start_week || 1) + 1}
+                        </button>
+                      )}
+                      {client.funnel_month === 1 && (client.funnel_month1_current_week || client.funnel_month1_start_week || 1) > (client.funnel_month1_start_week || 1) && (
+                        <button
+                          type="button"
+                          onClick={() => handleMoveBackWeek(client.id, client.name, (client.funnel_month1_current_week || 1) - 1)}
+                          disabled={isPending}
+                          style={{
+                            padding: '0.4rem 0.75rem',
+                            backgroundColor: 'transparent',
+                            border: '1px solid var(--text-muted)',
+                            color: 'var(--text-muted)',
+                            borderRadius: '0.25rem',
+                            fontSize: '0.75rem',
+                            fontWeight: '500',
+                            cursor: isPending ? 'not-allowed' : 'pointer',
+                            opacity: isPending ? 0.6 : 1
+                          }}
+                        >
+                          Back to Week {(client.funnel_month1_current_week || 1) - 1}
                         </button>
                       )}
                       {[2, 3].filter(m => m > client.funnel_month).map(m => (

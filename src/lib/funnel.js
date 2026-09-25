@@ -2,6 +2,7 @@ import { getDb } from './db';
 import { FUNNEL_MONTH1_ITEMS } from './funnelConstants';
 import { computeFunnelMonth1Window, computeFunnelNextMonthWindow } from './campaign-cycle';
 import { generateSEOTasks } from './taskService';
+import { getOffDaysSet, getWorkingDays } from './offDays';
 
 function todayStr() {
   return new Date().toISOString().split('T')[0];
@@ -69,9 +70,10 @@ export async function enrollClientInFunnel(clientId, campaignId, enrollDate = to
     UPDATE clients
     SET tunnel_status = 'active', tunnel_start_date = ?, funnel_month = 1,
         funnel_month_end_date = ?, funnel_cycle_index_at_enroll = ?,
-        funnel_month1_start_week = ?, funnel_month1_current_week = ?
+        funnel_month1_start_week = ?, funnel_month1_current_week = ?,
+        funnel_month1_week_started_on = ?
     WHERE id = ?
-  `).run(enrollDate, monthEndDate, cycleIndexAtEnroll, week, week, clientId);
+  `).run(enrollDate, monthEndDate, cycleIndexAtEnroll, week, week, enrollDate, clientId);
 
   await generateSEOTasks(campaignId);
 
@@ -103,10 +105,96 @@ export async function advanceMonth1Week(clientId) {
   }
 
   const nextWeek = currentWeek + 1;
-  await db.prepare('UPDATE clients SET funnel_month1_current_week = ? WHERE id = ?').run(nextWeek, clientId);
+  await db.prepare('UPDATE clients SET funnel_month1_current_week = ?, funnel_month1_week_started_on = ? WHERE id = ?')
+    .run(nextWeek, await nextWorkingDayOnOrAfter(client.campaign_id, todayStr()), clientId);
   await generateSEOTasks(client.campaign_id);
 
   return { advanced: true, newWeek: nextWeek };
+}
+
+// First working day (not a weekend/off-day) on or after dateStr.
+async function nextWorkingDayOnOrAfter(campaignId, dateStr) {
+  const offDays = await getOffDaysSet(campaignId);
+  return getWorkingDays(dateStr, 1, offDays)[0]?.dateStr || dateStr;
+}
+
+/**
+ * Move a Month 1 client BACK one week (manual). The week being left is emptied —
+ * its (single, dated) task row is removed — while every earlier week's rows stay
+ * exactly as recorded. The week clock restarts from the next working day.
+ * Won't go below the client's own start week.
+ */
+export async function moveMonth1WeekBack(clientId) {
+  const db = await getDb();
+  const client = await db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
+  if (!client || client.tunnel_status !== 'active' || client.funnel_month !== 1) {
+    return { moved: false, error: 'Client is not currently on Month 1 of the funnel' };
+  }
+  const startWeek = client.funnel_month1_start_week || 1;
+  const currentWeek = client.funnel_month1_current_week || startWeek;
+  if (currentWeek <= startWeek) {
+    return { moved: false, error: currentWeek === 1 ? 'Already at week 1' : `Already at this client's first week (week ${startWeek})` };
+  }
+
+  // One dated row-set per week, in week order: the week being left is the latest.
+  const dates = await db.prepare(
+    'SELECT DISTINCT task_date FROM seo_tasks WHERE campaign_id = ? AND client_id = ? ORDER BY task_date'
+  ).all(client.campaign_id, clientId);
+  const weeksWithRows = dates.length;
+  const weeksExpected = currentWeek - startWeek + 1;
+  if (weeksWithRows >= weeksExpected) {
+    const leaving = dates[weeksWithRows - 1].task_date;
+    await db.prepare('DELETE FROM seo_tasks WHERE campaign_id = ? AND client_id = ? AND task_date = ?')
+      .run(client.campaign_id, clientId, leaving);
+  }
+
+  const newWeek = currentWeek - 1;
+  await db.prepare('UPDATE clients SET funnel_month1_current_week = ?, funnel_month1_week_started_on = ? WHERE id = ?')
+    .run(newWeek, await nextWorkingDayOnOrAfter(client.campaign_id, todayStr()), clientId);
+  await generateSEOTasks(client.campaign_id);
+
+  return { moved: true, newWeek };
+}
+
+/**
+ * Automatic week advancement for Month 1 clients: a week is complete once its 5
+ * working days have passed (weekends/off-days don't count), then the client moves
+ * up one week (max week 4 — Month 2 stays manual) and the new week's task appears
+ * the next working day. Idempotent; safe to call from any sync. A client whose
+ * week clock was never started (rollout) gets it started today rather than being
+ * advanced immediately, so no one jumps ahead on deploy.
+ */
+export async function autoAdvanceMonth1Weeks(campaignId) {
+  const db = await getDb();
+  const today = todayStr();
+  const offDays = await getOffDaysSet(campaignId);
+
+  const clients = await db.prepare(`
+    SELECT id, funnel_month1_start_week s, funnel_month1_current_week c, funnel_month1_week_started_on started
+    FROM clients
+    WHERE campaign_id = ? AND is_active = 1 AND tunnel_status = 'active' AND funnel_month = 1
+  `).all(campaignId);
+
+  let advanced = 0;
+  for (const cl of clients) {
+    const week = cl.c || cl.s || 1;
+    if (!cl.started) {
+      await db.prepare('UPDATE clients SET funnel_month1_week_started_on = ? WHERE id = ?')
+        .run(getWorkingDays(today, 1, offDays)[0]?.dateStr || today, cl.id);
+      continue;
+    }
+    if (week >= 4) continue;
+
+    const fifth = getWorkingDays(cl.started, 5, offDays)[4];
+    if (!fifth || today <= fifth.dateStr) continue; // week's 5th working day not over yet
+
+    await db.prepare('UPDATE clients SET funnel_month1_current_week = ?, funnel_month1_week_started_on = ? WHERE id = ?')
+      .run(week + 1, getWorkingDays(today, 1, offDays)[0]?.dateStr || today, cl.id);
+    advanced++;
+  }
+
+  if (advanced > 0) await generateSEOTasks(campaignId);
+  return advanced;
 }
 
 /**
