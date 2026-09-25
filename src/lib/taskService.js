@@ -317,6 +317,36 @@ export async function generateSEOTasks(campaignId) {
 
       const hasHistory = clientsWithPastHistory.has(client.id);
 
+      // Month 1 (manually advanced week by week): a week the admin has just
+      // advanced to has NO preserved row yet, even though the client has
+      // history from earlier weeks — and that week's bucket day is often
+      // already in the past (weeks are carved chronologically from the
+      // campaign start). Dropping it like a normal past occurrence meant an
+      // advance produced no tasks at all. Each Month 1 week is one occurrence
+      // and one dated row, so the number of distinct past dates the client
+      // already has = how many of their eligible weeks (start..) are already
+      // covered by preserved history: drop only those, and clamp any later
+      // eligible week's past-dated occurrence forward to the next working
+      // day instead.
+      if (isMonth1FunnelClient(client) && hasHistory && firstFutureWorkingDay) {
+        const pastDates = new Set(pastRows.filter(r => r.client_id === client.id).map(r => r.task_date));
+        const startWeek = client.funnel_month1_start_week || 1;
+        const coveredUpTo = startWeek + pastDates.size; // first week NOT yet covered
+        const m1 = occurrences
+          .filter(o => o.week >= coveredUpTo)
+          .map(o => o.dateStr < todayStr
+            ? { ...o, dayNumber: firstFutureWorkingDay.dayNumber, dateStr: firstFutureWorkingDay.dateStr }
+            : o);
+        const seenM1 = new Set();
+        clientOccurrenceDays.set(client.id, m1.filter(o => {
+          const key = `${o.dayNumber}|${o.week}`;
+          if (seenM1.has(key)) return false;
+          seenM1.add(key);
+          return true;
+        }));
+        continue;
+      }
+
       const adjusted = hasHistory
         ? occurrences.filter(o => o.dateStr >= todayStr)
         : (firstFutureWorkingDay
