@@ -128,6 +128,7 @@ export default function ClientList({ clients, associates = [] }) {
             <th style={{ padding: '1rem 0' }}>Associate</th>
             <th style={{ padding: '1rem 0' }}>Writer</th>
             <th style={{ padding: '1rem 0' }}>Status</th>
+            <th style={{ padding: '1rem 0', minWidth: '150px' }}>Progress</th>
             <th style={{ padding: '1rem 0' }}>Actions</th>
           </tr>
         </thead>
@@ -146,6 +147,25 @@ export default function ClientList({ clients, associates = [] }) {
                 <Badge tone={c.is_active ? 'success' : 'danger'}>
                   {c.is_active ? 'Active' : 'Deactivated'}
                 </Badge>
+              </td>
+              <td style={{ padding: '1rem 0.75rem 1rem 0' }}>
+                {(() => {
+                  // Whole-campaign SEO progress for this client: completed vs target
+                  // across every generated task row (all weeks/occurrences).
+                  const target = c.progress_target || 0;
+                  const done = c.progress_completed || 0;
+                  const pct = target > 0 ? Math.min(100, Math.round((done / target) * 100)) : 0;
+                  return target > 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{ flex: 1, height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', backgroundColor: pct >= 100 ? 'var(--success)' : 'var(--primary)' }} />
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{done}/{target} ({pct}%)</span>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No tasks</span>
+                  );
+                })()}
               </td>
               <td style={{ padding: '1rem 0' }}>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>

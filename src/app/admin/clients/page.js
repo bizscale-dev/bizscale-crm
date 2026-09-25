@@ -17,7 +17,9 @@ export default async function ClientsPage() {
     clients = (await db.prepare(`
       SELECT c.*,
         u_assoc.name as assigned_associate,
-        u_writer.name as assigned_writer
+        u_writer.name as assigned_writer,
+        (SELECT COALESCE(SUM(st.target_count), 0) FROM seo_tasks st WHERE st.client_id = c.id AND st.campaign_id = c.campaign_id) as progress_target,
+        (SELECT COALESCE(SUM(st.completed_count), 0) FROM seo_tasks st WHERE st.client_id = c.id AND st.campaign_id = c.campaign_id) as progress_completed
       FROM clients c
       LEFT JOIN users u_assoc ON u_assoc.id = c.assigned_associate_id
       LEFT JOIN users u_writer ON u_writer.id = c.assigned_writer_id
