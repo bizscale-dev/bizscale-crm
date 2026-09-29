@@ -272,7 +272,12 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   // out of sync with the frozen totals used by On Time Completion above — even
   // showing LESS than onTimeCompletion, which should always be a subset of it.
   const overallCompleted = dailySummary.reduce((s, d) => s + d.completed, 0);
-  const overallPercent = totalExpectedLinks > 0 ? Math.round((overallCompleted / totalExpectedLinks) * 100) : 0;
+  // Capped at 100% for display only — overallCompleted itself stays real and
+  // uncapped (shown uncapped in the card's sub-label right next to this).
+  // completed includes resolved backlog credit on top of each day's own work,
+  // which can legitimately push the raw ratio past 100% (see the comment
+  // above), same reasoning as On Time Completion and Weekly Summary's caps.
+  const overallPercent = totalExpectedLinks > 0 ? Math.min(100, Math.round((overallCompleted / totalExpectedLinks) * 100)) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>

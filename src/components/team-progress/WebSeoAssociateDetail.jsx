@@ -128,7 +128,11 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
   // should always be a subset of it.
   const overallTarget = dailySummary.reduce((s, d) => s + d.target, 0);
   const overallCompleted = dailySummary.reduce((s, d) => s + d.completed, 0);
-  const overallPercent = overallTarget > 0 ? Math.round((overallCompleted / overallTarget) * 100) : 0;
+  // Capped at 100% for display only — overallCompleted stays real and uncapped
+  // (shown uncapped right next to this) — same reasoning as On Time Completion's
+  // cap: completed includes resolved backlog credit, which can legitimately
+  // push the raw ratio past 100%.
+  const overallPercent = overallTarget > 0 ? Math.min(100, Math.round((overallCompleted / overallTarget) * 100)) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
