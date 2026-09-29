@@ -135,7 +135,12 @@ export default async function SeoAssociatesTable({ basePath, campaign: campaignP
                   const funnelM3Expected = associate.funnel_m3 * funnelBonusTargetPerClient;
                   const expectedTotalLinks = (associate.total_clients * monthlyTargetPerClient) + funnelM2Expected + funnelM3Expected;
                   const totalClientsDisplay = associate.total_clients + associate.funnel_m1 + associate.funnel_m2 + associate.funnel_m3;
-                  const progressPercent = expectedTotalLinks > 0 ? Math.round(((associate.completed_tasks || 0) / expectedTotalLinks) * 100) : 0;
+                  // Capped at 100% for display only — the Completed column right next
+                  // to this still shows the real, uncapped count. completed_tasks is a
+                  // live sum that can legitimately exceed expectedTotalLinks (e.g.
+                  // backlog paid down on a later day, or a client's rotation slot
+                  // shifting), same reasoning as the per-associate stat cards' caps.
+                  const progressPercent = expectedTotalLinks > 0 ? Math.min(100, Math.round(((associate.completed_tasks || 0) / expectedTotalLinks) * 100)) : 0;
                   return (
                     <tr key={associate.id} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: '0.75rem 1rem 0.75rem 0', fontWeight: '500', whiteSpace: 'nowrap' }}>{associate.name}</td>
