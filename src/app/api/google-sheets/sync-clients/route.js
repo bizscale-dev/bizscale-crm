@@ -221,13 +221,16 @@ export async function POST(request) {
     for (let i = 1; i < rows.length; i++) { // Skip header
       const row = rows[i];
       const clientName = row[2]?.trim(); // Column C (index 2)
+      const joiningDate = row[4]?.trim() || null; // Column E (index 4)
       const associateName = row[7]?.trim(); // Column H (index 7)
       const writerName = row[8]?.trim(); // Column I (index 8)
 
       if (clientName) {
         parsedCount++;
-        // Add client to map (no website in this sheet, so empty string)
-        sheetClients.set(clientName.toLowerCase(), { name: clientName, website: '' });
+        // Add client to map (no website in this sheet, so empty string). Stored
+        // verbatim as whatever text is in the sheet's Joining Date column — see
+        // clients.joining_date in src/lib/db.js.
+        sheetClients.set(clientName.toLowerCase(), { name: clientName, website: '', joiningDate });
 
         // Add to associate assignment
         if (associateName) {

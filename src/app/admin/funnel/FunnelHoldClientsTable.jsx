@@ -120,7 +120,7 @@ export default function FunnelHoldClientsTable({ holdClients, campaignId }) {
                   {client.website ? <a href={client.website} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>{client.website}</a> : '—'}
                 </td>
                 <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
-                  {client.created_at ? formatDateOnly(client.created_at) : '—'}
+                  {client.joining_date || (client.created_at ? formatDateOnly(client.created_at) : '—')}
                 </td>
                 <td style={{ padding: '0.75rem 0' }}>
                   <select

@@ -168,9 +168,9 @@ export async function POST(request) {
         // into the normal rotation) from /admin/funnel. No more automatic
         // enrollment (see src/lib/funnel.js's enrollClientInFunnel).
         const insertResult = await db.prepare(`
-          INSERT INTO clients (campaign_id, name, website, is_active, sort_order, assigned_associate_id, assigned_writer_id, tunnel_status)
-          VALUES (?, ?, ?, 1, ?, ?, ?, 'hold')
-        `).run(campaign.id, clientData.name, clientData.website || '', maxSortOrder, assignedAssociateId, assignedWriterId);
+          INSERT INTO clients (campaign_id, name, website, is_active, sort_order, assigned_associate_id, assigned_writer_id, tunnel_status, joining_date)
+          VALUES (?, ?, ?, 1, ?, ?, ?, 'hold', ?)
+        `).run(campaign.id, clientData.name, clientData.website || '', maxSortOrder, assignedAssociateId, assignedWriterId, clientData.joiningDate || null);
 
         results.clientsAdded++;
 

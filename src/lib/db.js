@@ -206,6 +206,12 @@ async function runMigrations(raw) {
     // clock that drives automatic week advancement (see autoAdvanceMonth1Weeks
     // in src/lib/funnel.js). NULL until the clock is first started.
     "ALTER TABLE clients ADD COLUMN funnel_month1_week_started_on DATE",
+    // The Joining Date text exactly as it appears in column E of the Active
+    // Clients sheet (see src/app/api/google-sheets/sync-clients/route.js) —
+    // stored verbatim as whatever string the sheet shows, not reparsed into a
+    // different date format, so the admin UI always matches the sheet. NULL for
+    // a client added before this column existed, or whose sheet row had no date.
+    "ALTER TABLE clients ADD COLUMN joining_date TEXT",
   ];
 
   for (const sql of alterStatements) {

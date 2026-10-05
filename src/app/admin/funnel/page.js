@@ -23,7 +23,7 @@ export default async function FunnelPage() {
     // week by week — see funnel_month1_start_week/current_week), Month 2/3 use the
     // Month 2 & 3 Bonus Link Targets, all day-distributed and Google Sheet-synced.
     funnelClients = await db.prepare(`
-      SELECT c.id, c.name, c.website, c.tunnel_start_date, c.funnel_month, c.assigned_associate_id,
+      SELECT c.id, c.name, c.website, c.tunnel_start_date, c.joining_date, c.funnel_month, c.assigned_associate_id,
         c.funnel_month1_start_week, c.funnel_month1_current_week,
         (SELECT COALESCE(SUM(completed_count), 0) FROM seo_tasks WHERE client_id = c.id AND campaign_id = c.campaign_id) as completed_tasks,
         (SELECT COALESCE(SUM(target_count), 0) FROM seo_tasks WHERE client_id = c.id AND campaign_id = c.campaign_id) as total_tasks
@@ -35,7 +35,7 @@ export default async function FunnelPage() {
     // Newly-discovered clients sit here — zero tasks, awaiting a manual decision
     // (see src/lib/funnel.js) — instead of auto-enrolling into the Funnel.
     holdClients = await db.prepare(`
-      SELECT id, name, website, assigned_associate_id, created_at
+      SELECT id, name, website, assigned_associate_id, joining_date, created_at
       FROM clients
       WHERE campaign_id = ? AND tunnel_status = 'hold' AND is_active = 1
       ORDER BY id DESC

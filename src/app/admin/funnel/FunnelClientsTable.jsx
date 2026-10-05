@@ -186,7 +186,7 @@ export default function FunnelClientsTable({ funnelClients }) {
                     {client.website ? <a href={client.website} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>{client.website}</a> : '—'}
                   </td>
                   <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
-                    {client.tunnel_start_date ? formatDateOnly(client.tunnel_start_date) : '—'}
+                    {client.joining_date || (client.tunnel_start_date ? formatDateOnly(client.tunnel_start_date) : '—')}
                   </td>
                   <td style={{ padding: '0.75rem 0' }}>
                     <span style={{

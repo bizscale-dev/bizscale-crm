@@ -75,7 +75,7 @@ export async function POST(request) {
     // Mark as active (tasks remain as is)
     if (changes.reactivated && changes.reactivated.length > 0) {
       for (const client of changes.reactivated) {
-        await db.prepare('UPDATE clients SET is_active = 1 WHERE id = ?').run(client.db_id);
+        await db.prepare('UPDATE clients SET is_active = 1, joining_date = COALESCE(?, joining_date) WHERE id = ?').run(client.joiningDate || null, client.db_id);
         results.reactivated++;
         console.log(`Reactivated client ${client.name}`);
       }
