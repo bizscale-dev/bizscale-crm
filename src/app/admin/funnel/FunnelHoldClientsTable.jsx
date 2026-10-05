@@ -6,6 +6,18 @@ import { enrollClientInFunnelAction, enrollHeldClientAtMonthAction, moveHeldClie
 
 const BRAND_COLOR = '#16b293';
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Formats a 'YYYY-MM-DD HH:MM:SS' date string directly from its digits rather
+// than via `new Date(...)` — parsing as UTC and formatting in the browser's
+// local timezone can shift the displayed day back by one for anyone west of
+// UTC.
+function formatDateOnly(dateStr) {
+  const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return '—';
+  return `${d} ${MONTH_NAMES[m - 1]} ${y}`;
+}
+
 const inputStyle = {
   padding: '0.4rem 0.6rem',
   borderRadius: '0.5rem',
@@ -95,6 +107,7 @@ export default function FunnelHoldClientsTable({ holdClients, campaignId }) {
             <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
               <th style={thStyle}>Client Name</th>
               <th style={thStyle}>Website</th>
+              <th style={thStyle}>Joining Date</th>
               <th style={thStyle}>Start at Week</th>
               <th style={thStyle}>Actions</th>
             </tr>
@@ -105,6 +118,9 @@ export default function FunnelHoldClientsTable({ holdClients, campaignId }) {
                 <td style={{ padding: '0.75rem 0', fontWeight: '500' }}>{client.name}</td>
                 <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                   {client.website ? <a href={client.website} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>{client.website}</a> : '—'}
+                </td>
+                <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                  {client.created_at ? formatDateOnly(client.created_at) : '—'}
                 </td>
                 <td style={{ padding: '0.75rem 0' }}>
                   <select

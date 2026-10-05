@@ -35,7 +35,7 @@ export default async function FunnelPage() {
     // Newly-discovered clients sit here — zero tasks, awaiting a manual decision
     // (see src/lib/funnel.js) — instead of auto-enrolling into the Funnel.
     holdClients = await db.prepare(`
-      SELECT id, name, website, assigned_associate_id
+      SELECT id, name, website, assigned_associate_id, created_at
       FROM clients
       WHERE campaign_id = ? AND tunnel_status = 'hold' AND is_active = 1
       ORDER BY id DESC
