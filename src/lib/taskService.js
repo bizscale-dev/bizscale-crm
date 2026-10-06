@@ -41,7 +41,14 @@ function staggeredSplit(total, count, offset = 0) {
   return sizes;
 }
 
-export async function generateSEOTasks(campaignId) {
+// pinThroughDate (optional, 'YYYY-MM-DD'): extends the "never recomputed"
+// boundary past its normal default (yesterday — i.e. everything strictly
+// before today) through this date inclusive. Every normal call omits it,
+// which reproduces the exact default behavior (today is live and still
+// recomputed fresh). Pass e.g. today's own date for a one-off regeneration
+// (a campaign-length change, say) that must leave today's already-synced
+// tasks completely untouched too, not just prior days.
+export async function generateSEOTasks(campaignId, pinThroughDate = null) {
   const db = await getDb();
   const campaign = await db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
   if (!campaign) throw new Error('Campaign not found');
@@ -105,8 +112,12 @@ export async function generateSEOTasks(campaignId) {
   }
 
   const todayStr = moment().format('YYYY-MM-DD');
+  // See the pinThroughDate param doc above — defaults to yesterday, so
+  // `task_date <= pinBoundary` below is exactly equivalent to the old
+  // unconditional `task_date < todayStr` when no override is passed.
+  const pinBoundary = pinThroughDate || moment(todayStr).subtract(1, 'day').format('YYYY-MM-DD');
 
-  // Every past-dated row (task_date < today), for every client regardless of
+  // Every past-dated row (task_date <= pinBoundary), for every client regardless of
   // current status — snapshotted verbatim before the wipe below and restored
   // unchanged afterward. This is the single source of truth for "what
   // already happened", and the second pass further down never recomputes a
@@ -132,8 +143,8 @@ export async function generateSEOTasks(campaignId) {
   //      structurally unable to touch a day that's already happened, for
   //      any client, active or not.
   const pastRows = await db.prepare(`
-    SELECT * FROM seo_tasks WHERE campaign_id = ? AND task_date < ?
-  `).all(campaignId, todayStr);
+    SELECT * FROM seo_tasks WHERE campaign_id = ? AND task_date <= ?
+  `).all(campaignId, pinBoundary);
   const clientsWithPastHistory = new Set(pastRows.map(r => r.client_id));
 
   // Already-used target per (client, link type) from the preserved past rows
@@ -308,7 +319,7 @@ export async function generateSEOTasks(campaignId) {
     // weeks clamp onto the same day; regular/M2/M3 occurrences have no
     // `week` field, so plain dayNumber dedup applies to them.
     const sortedWorkingDaysForClamp = [...workingDays].sort((a, b) => a.dayNumber - b.dayNumber);
-    const firstFutureWorkingDay = sortedWorkingDaysForClamp.find(d => d.dateStr >= todayStr)
+    const firstFutureWorkingDay = sortedWorkingDaysForClamp.find(d => d.dateStr > pinBoundary)
       || sortedWorkingDaysForClamp[sortedWorkingDaysForClamp.length - 1];
 
     for (const client of assignedClients) {
@@ -334,7 +345,7 @@ export async function generateSEOTasks(campaignId) {
         const coveredUpTo = startWeek + pastDates.size; // first week NOT yet covered
         const m1 = occurrences
           .filter(o => o.week >= coveredUpTo)
-          .map(o => o.dateStr < todayStr
+          .map(o => o.dateStr <= pinBoundary
             ? { ...o, dayNumber: firstFutureWorkingDay.dayNumber, dateStr: firstFutureWorkingDay.dateStr }
             : o);
         const seenM1 = new Set();
@@ -348,9 +359,9 @@ export async function generateSEOTasks(campaignId) {
       }
 
       const adjusted = hasHistory
-        ? occurrences.filter(o => o.dateStr >= todayStr)
+        ? occurrences.filter(o => o.dateStr > pinBoundary)
         : (firstFutureWorkingDay
-          ? occurrences.map(o => o.dateStr < todayStr
+          ? occurrences.map(o => o.dateStr <= pinBoundary
             ? { ...o, dayNumber: firstFutureWorkingDay.dayNumber, dateStr: firstFutureWorkingDay.dateStr }
             : o)
           : occurrences);
