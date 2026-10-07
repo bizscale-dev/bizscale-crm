@@ -9,6 +9,29 @@ export const revalidate = 0; // Disable caching for real-time data
 
 const BRAND_COLOR = 'var(--primary)';
 
+// Small inline badge so an associate can tell at a glance that a client is a
+// Funnel client (and which month/week) rather than a normal rotation client.
+function FunnelBadge({ client }) {
+  if (client.tunnel_status !== 'active' || !client.funnel_month) return null;
+  const label = client.funnel_month === 1
+    ? `Funnel · Month 1 (Week ${client.funnel_month1_current_week || client.funnel_month1_start_week || 1})`
+    : `Funnel · Month ${client.funnel_month}`;
+  return (
+    <span style={{
+      marginLeft: '0.5rem',
+      padding: '0.1rem 0.5rem',
+      borderRadius: '1rem',
+      fontSize: '0.7rem',
+      fontWeight: '600',
+      color: '#f59e0b',
+      backgroundColor: 'rgba(245, 158, 11, 0.12)',
+      verticalAlign: 'middle',
+    }}>
+      {label}
+    </span>
+  );
+}
+
 export default async function AssociateDashboard() {
   const db = await getDb();
   const session = await verifySession();
@@ -42,7 +65,8 @@ export default async function AssociateDashboard() {
     dailyTarget = Math.round(totalExpectedLinks / 16);
 
     todayTasks = await db.prepare(`
-      SELECT st.*, c.name as client_name, c.website
+      SELECT st.*, c.name as client_name, c.website, c.tunnel_status, c.funnel_month,
+        c.funnel_month1_start_week, c.funnel_month1_current_week
       FROM seo_tasks st
       JOIN clients c ON c.id = st.client_id
       WHERE st.associate_id = ? AND st.campaign_id = ? AND st.task_date = ? AND c.is_active = 1
@@ -126,7 +150,16 @@ export default async function AssociateDashboard() {
   const tasksByClient = {};
   todayTasks.forEach(t => {
     if (!tasksByClient[t.client_id]) {
-      tasksByClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, website: t.website, tasks: [] };
+      tasksByClient[t.client_id] = {
+        client_id: t.client_id,
+        client_name: t.client_name,
+        website: t.website,
+        tunnel_status: t.tunnel_status,
+        funnel_month: t.funnel_month,
+        funnel_month1_current_week: t.funnel_month1_current_week,
+        funnel_month1_start_week: t.funnel_month1_start_week,
+        tasks: [],
+      };
     }
     tasksByClient[t.client_id].tasks.push(t);
   });
@@ -204,7 +237,10 @@ export default async function AssociateDashboard() {
                   <div key={client.client_id} style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                       <div>
-                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>{client.client_name}</h3>
+                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>
+                          {client.client_name}
+                          <FunnelBadge client={client} />
+                        </h3>
                         {client.website && (
                           <a href={client.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.875rem', color: 'var(--primary)', textDecoration: 'none' }}>
                             {client.website}
