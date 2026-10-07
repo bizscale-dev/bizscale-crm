@@ -41,13 +41,15 @@ function staggeredSplit(total, count, offset = 0) {
   return sizes;
 }
 
-// pinThroughDate (optional, 'YYYY-MM-DD'): extends the "never recomputed"
-// boundary past its normal default (yesterday — i.e. everything strictly
-// before today) through this date inclusive. Every normal call omits it,
-// which reproduces the exact default behavior (today is live and still
-// recomputed fresh). Pass e.g. today's own date for a one-off regeneration
-// (a campaign-length change, say) that must leave today's already-synced
-// tasks completely untouched too, not just prior days.
+// pinThroughDate (optional, 'YYYY-MM-DD'): forces the "never recomputed"
+// boundary through this date inclusive, overriding the default entirely. The
+// default (every normal call omits this) is: yesterday and earlier, PLUS
+// today itself once today has already been generated at least once this
+// calendar day — see the pinBoundary computation below for why. Pass this
+// explicitly only to force a specific boundary regardless of that default
+// (e.g. a campaign-length change still mid-generation for the very first
+// time today, where the default's "already generated" check wouldn't yet
+// apply the protection you want).
 export async function generateSEOTasks(campaignId, pinThroughDate = null) {
   const db = await getDb();
   const campaign = await db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
@@ -112,10 +114,26 @@ export async function generateSEOTasks(campaignId, pinThroughDate = null) {
   }
 
   const todayStr = moment().format('YYYY-MM-DD');
-  // See the pinThroughDate param doc above — defaults to yesterday, so
-  // `task_date <= pinBoundary` below is exactly equivalent to the old
-  // unconditional `task_date < todayStr` when no override is passed.
-  const pinBoundary = pinThroughDate || moment(todayStr).subtract(1, 'day').format('YYYY-MM-DD');
+  // See the pinThroughDate param doc above. Without an explicit override, the
+  // default boundary is yesterday — UNLESS today has already been generated
+  // at least once (any row already exists for it), in which case the default
+  // extends through today too. Without this, every regeneration that happens
+  // later the SAME day (the nightly daily-sync cron unconditionally calls
+  // generateSEOTasks every evening regardless of whether anything actually
+  // changed — see sync-assign-new-clients/route.js's "Fourth pass") freely
+  // reshuffles "today" again: a client's rotation slot/target can shift from
+  // whatever it was that morning, discarding or relabeling the real progress
+  // an associate already synced earlier that same day — they come back the
+  // next day to find yesterday's finished work showing as newly pending.
+  // Once today has real rows, it's settled for the rest of that day exactly
+  // like a past day is; only tomorrow-and-later still gets recomputed freely.
+  let pinBoundary = pinThroughDate;
+  if (!pinBoundary) {
+    const todayAlreadyGenerated = await db.prepare(
+      'SELECT 1 as x FROM seo_tasks WHERE campaign_id = ? AND task_date = ? LIMIT 1'
+    ).get(campaignId, todayStr);
+    pinBoundary = todayAlreadyGenerated ? todayStr : moment(todayStr).subtract(1, 'day').format('YYYY-MM-DD');
+  }
 
   // Every past-dated row (task_date <= pinBoundary), for every client regardless of
   // current status — snapshotted verbatim before the wipe below and restored
