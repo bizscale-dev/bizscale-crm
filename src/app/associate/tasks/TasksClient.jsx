@@ -35,9 +35,12 @@ export default function TasksClient({ tasksByClient, pendingByClient = [], avail
         </div>
       ) : (
         tasksByClient.map(client => (
-          <div key={client.client_id} className="card">
+          <div key={client.client_id} className="card" style={client.is_month1_funnel ? { border: '1px solid #3b82f6' } : undefined}>
             <div style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>{client.client_name}</h3>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>
+                {client.client_name}
+                {client.is_month1_funnel && <Month1FunnelTag week={client.funnel_week} />}
+              </h3>
               {client.website && (
                 <a href={client.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.875rem', color: 'var(--primary)', textDecoration: 'none' }}>
                   {client.website}
@@ -102,9 +105,12 @@ function PendingSection({ pendingByClient, linkTypeLabels }) {
       </div>
 
       {pendingByClient.map(client => (
-        <div key={client.client_id} className="card" style={{ border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+        <div key={client.client_id} className="card" style={{ border: client.is_month1_funnel ? '1px solid #3b82f6' : '1px solid rgba(245, 158, 11, 0.4)' }}>
           <div style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
-            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>{client.client_name}</h3>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>
+              {client.client_name}
+              {client.is_month1_funnel && <Month1FunnelTag week={client.funnel_week} />}
+            </h3>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
             {client.tasks.map(task => (
@@ -126,6 +132,25 @@ function PendingSection({ pendingByClient, linkTypeLabels }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// Small inline tag marking a client as Funnel Month 1 — a different weekly-target
+// schedule than the regular rotation shown alongside it, so it needs to stand out.
+function Month1FunnelTag({ week }) {
+  return (
+    <span style={{
+      marginLeft: '0.5rem',
+      padding: '0.1rem 0.5rem',
+      borderRadius: '1rem',
+      fontSize: '0.7rem',
+      fontWeight: '600',
+      color: '#3b82f6',
+      backgroundColor: 'rgba(59, 130, 246, 0.12)',
+      verticalAlign: 'middle',
+    }}>
+      1st Month Funnel Task{week ? ` · Week ${week}` : ''}
+    </span>
   );
 }
 

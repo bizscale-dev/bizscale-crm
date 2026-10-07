@@ -9,7 +9,14 @@ function groupByClient(tasks) {
   const byClient = {};
   tasks.forEach(t => {
     if (!byClient[t.client_id]) {
-      byClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, website: t.website, tasks: [] };
+      byClient[t.client_id] = {
+        client_id: t.client_id,
+        client_name: t.client_name,
+        website: t.website,
+        is_month1_funnel: t.tunnel_status === 'active' && t.funnel_month === 1,
+        funnel_week: t.funnel_month1_current_week || t.funnel_month1_start_week || 1,
+        tasks: [],
+      };
     }
     byClient[t.client_id].tasks.push(t);
   });
@@ -30,7 +37,8 @@ export default async function AssociateTasksPage({ searchParams }) {
   if (campaign) {
     // Only show tasks for active clients
     tasks = await db.prepare(`
-      SELECT st.*, c.name as client_name, c.website,
+      SELECT st.*, c.name as client_name, c.website, c.tunnel_status, c.funnel_month,
+        c.funnel_month1_start_week, c.funnel_month1_current_week,
         (SELECT COUNT(*) FROM link_logs WHERE task_id = st.id) as log_count
       FROM seo_tasks st
       JOIN clients c ON c.id = st.client_id
@@ -50,7 +58,8 @@ export default async function AssociateTasksPage({ searchParams }) {
     // Pending — the task's scheduled day has already passed (relative to today, not
     // whichever date is currently selected) but it's still not fully done.
     pendingTasks = await db.prepare(`
-      SELECT st.*, c.name as client_name, c.website
+      SELECT st.*, c.name as client_name, c.website, c.tunnel_status, c.funnel_month,
+        c.funnel_month1_start_week, c.funnel_month1_current_week
       FROM seo_tasks st
       JOIN clients c ON c.id = st.client_id
       WHERE st.associate_id = ? AND st.campaign_id = ?

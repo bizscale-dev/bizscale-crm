@@ -11,7 +11,14 @@ function groupByClient(tasks) {
   const byClient = {};
   tasks.forEach(t => {
     if (!byClient[t.client_id]) {
-      byClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, website: t.website, tasks: [] };
+      byClient[t.client_id] = {
+        client_id: t.client_id,
+        client_name: t.client_name,
+        website: t.website,
+        is_month1_funnel: t.tunnel_status === 'active' && t.funnel_month === 1,
+        funnel_week: t.funnel_month1_current_week || t.funnel_month1_start_week || 1,
+        tasks: [],
+      };
     }
     byClient[t.client_id].tasks.push(t);
   });
@@ -43,7 +50,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     );
   }
 
-  let todayTasks = [], recentLogs = [], upcomingDays = [], dailySummary = [], pendingTasks = [], weeklySummary = [], funnelClients = [];
+  let todayTasks = [], recentLogs = [], upcomingDays = [], dailySummary = [], pendingTasks = [], month1PendingTasks = [], weeklySummary = [], funnelClients = [];
   let dateTasks = [], availableDates = [];
   let totalExpectedLinks = 0;
   let cumulativeByClientType = {};
@@ -108,13 +115,16 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     // Single-day (not cumulative) tasks for whichever date is selected in the "My
     // Tasks" view below — the exact same shape/query the associate sees on their own
     // /associate/tasks page, so this shows identically for admin/seo_manager viewers.
+    // Includes Month 1 Funnel clients too (tagged via groupByClient's is_month1_funnel)
+    // — this is display-only and isn't used by any of the quota stats above, unlike
+    // todayTasks/cumulativeRows/pendingTasks below which stay Month-1-excluded.
     dateTasks = await db.prepare(`
-      SELECT st.*, c.name as client_name, c.website,
+      SELECT st.*, c.name as client_name, c.website, c.tunnel_status, c.funnel_month,
+        c.funnel_month1_start_week, c.funnel_month1_current_week,
         (SELECT COUNT(*) FROM link_logs WHERE task_id = st.id) as log_count
       FROM seo_tasks st
       JOIN clients c ON c.id = st.client_id
       WHERE st.associate_id = ? AND st.campaign_id = ? AND st.task_date = ? AND c.is_active = 1
-        AND NOT (c.tunnel_status = 'active' AND c.funnel_month = 1)
       ORDER BY c.sort_order, st.link_type
     `).all(associateId, campaign.id, date);
 
@@ -161,7 +171,8 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     upcomingDays = dailySummary.filter(d => d.task_date >= today);
 
     // Pending — the task's scheduled day has already passed but it's still not
-    // fully done.
+    // fully done. Stays Month-1-excluded, same as everything else feeding the
+    // Pending Tasks stat card and the legacy view.
     pendingTasks = await db.prepare(`
       SELECT st.*, c.name as client_name, c.website
       FROM seo_tasks st
@@ -169,6 +180,20 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
       WHERE st.associate_id = ? AND st.campaign_id = ?
         AND st.task_date < ? AND st.completed_count < st.target_count AND c.is_active = 1
         AND NOT (c.tunnel_status = 'active' AND c.funnel_month = 1)
+      ORDER BY st.task_date DESC, c.sort_order, st.link_type
+    `).all(associateId, campaign.id, today);
+
+    // Same pending shape, but Month 1 Funnel clients only — display-only, merged
+    // into the "My Tasks" pending section below without affecting the Pending
+    // Tasks stat card above (which intentionally excludes Month 1).
+    month1PendingTasks = await db.prepare(`
+      SELECT st.*, c.name as client_name, c.website, c.tunnel_status, c.funnel_month,
+        c.funnel_month1_start_week, c.funnel_month1_current_week
+      FROM seo_tasks st
+      JOIN clients c ON c.id = st.client_id
+      WHERE st.associate_id = ? AND st.campaign_id = ?
+        AND st.task_date < ? AND st.completed_count < st.target_count AND c.is_active = 1
+        AND c.tunnel_status = 'active' AND c.funnel_month = 1
       ORDER BY st.task_date DESC, c.sort_order, st.link_type
     `).all(associateId, campaign.id, today);
 
@@ -375,7 +400,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
             </h2>
             <TasksClient
               tasksByClient={groupByClient(dateTasks)}
-              pendingByClient={groupByClient(pendingTasks)}
+              pendingByClient={[...groupByClient(pendingTasks), ...groupByClient(month1PendingTasks)]}
               availableDates={availableDates}
               selectedDate={date}
               today={today}
