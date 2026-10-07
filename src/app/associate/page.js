@@ -103,7 +103,8 @@ export default async function AssociateDashboard() {
     // Pending — the task's scheduled day has already passed but it's still not
     // fully done (writer/associate hasn't logged enough links to hit the target yet).
     pendingTasks = await db.prepare(`
-      SELECT st.*, c.name as client_name, c.website
+      SELECT st.*, c.name as client_name, c.website, c.tunnel_status, c.funnel_month,
+        c.funnel_month1_start_week, c.funnel_month1_current_week
       FROM seo_tasks st
       JOIN clients c ON c.id = st.client_id
       WHERE st.associate_id = ? AND st.campaign_id = ?
@@ -167,7 +168,15 @@ export default async function AssociateDashboard() {
   const pendingByClient = {};
   pendingTasks.forEach(t => {
     if (!pendingByClient[t.client_id]) {
-      pendingByClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, tasks: [] };
+      pendingByClient[t.client_id] = {
+        client_id: t.client_id,
+        client_name: t.client_name,
+        tunnel_status: t.tunnel_status,
+        funnel_month: t.funnel_month,
+        funnel_month1_current_week: t.funnel_month1_current_week,
+        funnel_month1_start_week: t.funnel_month1_start_week,
+        tasks: [],
+      };
     }
     pendingByClient[t.client_id].tasks.push(t);
   });
@@ -208,7 +217,10 @@ export default async function AssociateDashboard() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 {Object.values(pendingByClient).map(client => (
                   <div key={client.client_id} style={{ padding: '1rem', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '0.5rem', backgroundColor: 'rgba(245, 158, 11, 0.03)' }}>
-                    <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600' }}>{client.client_name}</h3>
+                    <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600' }}>
+                      {client.client_name}
+                      <FunnelBadge client={client} />
+                    </h3>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                       {client.tasks.map(task => (
                         <div key={task.id} style={{ padding: '0.5rem 0.75rem', backgroundColor: 'var(--background)', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '0.5rem', fontSize: '0.875rem' }}>
