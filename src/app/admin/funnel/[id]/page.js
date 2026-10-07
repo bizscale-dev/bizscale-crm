@@ -86,10 +86,13 @@ export default async function FunnelDetailPage({ params }) {
       }
       weekBreakdown = [...weekMap.values()].sort((a, b) => a.week - b.week);
 
-      const today = new Date().toISOString().split('T')[0];
-      currentWeek = weekBreakdown
-        .filter(w => w.dueDate <= today)
-        .reduce((max, w) => Math.max(max, w.week), 1);
+      // The client's current week is whatever the admin has it set to
+      // (funnel_month1_current_week, driven by the Advance/Back buttons on the
+      // funnel list) — not re-derived from due dates here, which used to disagree
+      // with that field whenever a client was advanced ahead of its natural
+      // schedule (e.g. enrolled at week 1 then manually advanced to week 3): the
+      // list badge would say "Week 3 of 4" while this page showed "Week 1 (current)".
+      currentWeek = client.funnel_month1_current_week || client.funnel_month1_start_week || 1;
 
       const currentWeekStatsMap = new Map();
       for (const row of rows) {
