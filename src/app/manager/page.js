@@ -11,6 +11,7 @@ export default async function ManagerDashboard() {
   const today = new Date().toISOString().split('T')[0];
 
   let associateProgress = [], writerProgress = [], seoTotals = null, writingTotals = null, todayActivity = null;
+  let month1FunnelTasks = [];
 
   if (campaign) {
     associateProgress = await db.prepare(`
@@ -44,6 +45,19 @@ export default async function ManagerDashboard() {
       SELECT SUM(target_count) as target, SUM(completed_count) as completed
       FROM writing_tasks WHERE campaign_id = ?
     `).get(campaign.id);
+
+    // Same Month 1 Funnel breakdown shown on the admin dashboard — these
+    // clients have a different weekly-target schedule than the associate
+    // progress totals above, so they're shown separately here too.
+    month1FunnelTasks = await db.prepare(`
+      SELECT st.*, c.name as client_name, u.name as associate_name, u.id as associate_id,
+        c.funnel_month1_current_week, c.funnel_month1_start_week
+      FROM seo_tasks st
+      JOIN clients c ON c.id = st.client_id
+      JOIN users u ON u.id = st.associate_id
+      WHERE st.campaign_id = ? AND st.task_date = ? AND c.tunnel_status = 'active' AND c.funnel_month = 1 AND c.is_active = 1
+      ORDER BY u.name, c.sort_order, st.link_type
+    `).all(campaign.id, today);
 
     todayActivity = {
       seoLinks: (await db.prepare(`
@@ -149,8 +163,71 @@ export default async function ManagerDashboard() {
               )}
             </div>
           </div>
+
+          <Month1FunnelTasksCard tasks={month1FunnelTasks} />
         </>
       )}
+    </div>
+  );
+}
+
+// Groups by associate, then by client — same shape as the associate's own
+// "Today's Tasks" list, so the manager sees exactly what the associate sees.
+function Month1FunnelTasksCard({ tasks }) {
+  if (tasks.length === 0) return null;
+
+  const byAssociate = new Map();
+  for (const t of tasks) {
+    if (!byAssociate.has(t.associate_id)) byAssociate.set(t.associate_id, { name: t.associate_name, clients: new Map() });
+    const assoc = byAssociate.get(t.associate_id);
+    if (!assoc.clients.has(t.client_id)) {
+      assoc.clients.set(t.client_id, {
+        name: t.client_name,
+        week: t.funnel_month1_current_week || t.funnel_month1_start_week || 1,
+        tasks: [],
+      });
+    }
+    assoc.clients.get(t.client_id).tasks.push(t);
+  }
+
+  return (
+    <div className="card" style={{ border: '1px solid #3b82f6' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+        <h2 style={{ fontSize: '1.25rem', margin: 0, color: '#3b82f6' }}>Month 1 Funnel Tasks — Today</h2>
+        <span style={{
+          fontSize: '0.7rem', fontWeight: '600', color: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.12)', padding: '0.15rem 0.5rem', borderRadius: '1rem',
+        }}>
+          1st Month Funnel Task
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        {[...byAssociate.values()].map(assoc => (
+          <div key={assoc.name}>
+            <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{assoc.name}</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {[...assoc.clients.values()].map(client => (
+                <div key={client.name} style={{ padding: '0.75rem 1rem', border: '1px solid #3b82f6', borderRadius: '0.5rem', backgroundColor: 'rgba(59, 130, 246, 0.04)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span style={{ fontWeight: '600', fontSize: '0.875rem' }}>{client.name}</span>
+                    <span style={{ fontSize: '0.7rem', color: '#3b82f6' }}>Week {client.week}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {client.tasks.map(task => (
+                      <div key={task.id} style={{ padding: '0.4rem 0.65rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '0.5rem', fontSize: '0.8rem' }}>
+                        <span style={{ fontWeight: '500' }}>{LINK_TYPE_LABELS[task.link_type] || task.link_type}</span>
+                        <span style={{ marginLeft: '0.5rem', color: task.completed_count >= task.target_count ? 'var(--success)' : 'var(--text-muted)' }}>
+                          {task.completed_count}/{task.target_count}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
