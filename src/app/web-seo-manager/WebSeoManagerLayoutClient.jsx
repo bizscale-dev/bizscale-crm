@@ -22,6 +22,7 @@ export default function WebSeoManagerLayoutClient({ children }) {
     { href: '/web-seo-manager', label: 'Web SEO Associates' },
     { href: '/web-seo-manager/eod', label: 'EOD Report' },
     { href: '/web-seo-manager/tasks', label: 'Tasks', badgeCount: pendingTaskCount },
+    { href: '/web-seo-manager/associate-tasks', label: 'Associate Tasks' },
   ];
 
   return (

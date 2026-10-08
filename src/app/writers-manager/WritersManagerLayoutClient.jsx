@@ -22,6 +22,7 @@ export default function WritersManagerLayoutClient({ children }) {
     { href: '/writers-manager', label: 'Writers' },
     { href: '/writers-manager/eod', label: 'EOD Report' },
     { href: '/writers-manager/tasks', label: 'Tasks', badgeCount: pendingTaskCount },
+    { href: '/writers-manager/associate-tasks', label: 'Associate Tasks' },
   ];
 
   return (

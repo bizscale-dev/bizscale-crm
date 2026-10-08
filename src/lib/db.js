@@ -589,6 +589,63 @@ async function runMigrations(raw) {
     // call from several places/concurrently (INSERT OR IGNORE).
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_manager_tasks_template_day
       ON manager_tasks(template_id, due_date) WHERE template_id IS NOT NULL`,
+    // Manager-to-Associate Tasks: one tier down from manager_tasks above — a
+    // manager (seo_manager/web_seo_manager/writers_manager) assigns these to
+    // their own role's associates (seo_associate/web_seo_associate/writer).
+    // Separate tables from manager_tasks so the two tiers' queries never mix;
+    // no `role` column needed anywhere here — scoping is always by joining to
+    // users.role at query time, same as every other manager-facing query in
+    // this app (no manager "owns" a subset of associates; every manager of a
+    // role shares full visibility into that role's Associate Tasks).
+    `CREATE TABLE IF NOT EXISTS associate_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_text TEXT NOT NULL,
+      due_date DATE NOT NULL,
+      due_time TEXT NOT NULL,
+      created_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      template_id INTEGER,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS associate_task_assignees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      submission_description TEXT,
+      proof_image_base64 TEXT,
+      submitted_at DATETIME,
+      is_late INTEGER NOT NULL DEFAULT 0,
+      late_reason TEXT,
+      approval_status TEXT,
+      reviewed_by INTEGER,
+      reviewed_at DATETIME,
+      review_seen INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(task_id, user_id),
+      FOREIGN KEY (task_id) REFERENCES associate_tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS associate_task_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_text TEXT NOT NULL,
+      weekdays TEXT NOT NULL,
+      duration_days INTEGER NOT NULL DEFAULT 1,
+      due_time TEXT NOT NULL DEFAULT '23:59',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS associate_task_template_assignees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      UNIQUE(template_id, user_id),
+      FOREIGN KEY (template_id) REFERENCES associate_task_templates(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_associate_tasks_template_day
+      ON associate_tasks(template_id, due_date) WHERE template_id IS NOT NULL`,
   ];
 
   for (const sql of createTableStatements) {

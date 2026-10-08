@@ -22,6 +22,7 @@ export default function SeoManagerLayoutClient({ children }) {
     { href: '/seo-manager', label: 'SEO Associates' },
     { href: '/seo-manager/eod', label: 'EOD Report' },
     { href: '/seo-manager/tasks', label: 'Tasks', badgeCount: pendingTaskCount },
+    { href: '/seo-manager/associate-tasks', label: 'Associate Tasks' },
   ];
 
   return (
