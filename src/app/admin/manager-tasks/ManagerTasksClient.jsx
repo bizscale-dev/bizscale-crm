@@ -325,7 +325,102 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
   );
 }
 
-export default function ManagerTasksClient({ managers, tasks, roleLabels, templates = [] }) {
+// Admin's "check & balance" view: pick one manager, see both directions at
+// once — what admin assigned THEM (filtered down from `tasks`, showing only
+// this manager's own AssigneeStatus card per task, not everyone else's), and
+// what THEY in turn assigned to their own associates (`associateTasks`,
+// filtered by manager_id). Reuses AssigneeStatus for both sides since the
+// shape (name, submitted_at, approval_status, ...) matches either direction.
+function ManagerCheckBalance({ managers, tasks, associateTasks }) {
+  const [selectedId, setSelectedId] = useState('');
+  const selectedManagerId = selectedId === '' ? null : parseInt(selectedId, 10);
+  const selectedManager = managers.find((m) => m.id === selectedManagerId);
+
+  const tasksAssignedToManager = selectedManagerId
+    ? tasks
+      .filter((t) => t.assignees.some((a) => a.user_id === selectedManagerId))
+      .map((t) => ({ ...t, assignees: t.assignees.filter((a) => a.user_id === selectedManagerId) }))
+    : [];
+
+  const tasksManagerAssignedDown = selectedManagerId
+    ? associateTasks.filter((t) => t.manager_id === selectedManagerId)
+    : [];
+
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.1rem' }}>🔍 Manager Check & Balance</h2>
+      <p style={{ margin: '0 0 1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+        Pick a manager to see both what admin assigned them and what they in turn assigned to their own associates.
+      </p>
+
+      <div style={{ marginBottom: '1.5rem' }}>
+        <label style={labelStyle}>Manager</label>
+        <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} style={inputStyle}>
+          <option value="">Select a manager…</option>
+          {[...groupManagersByRole(managers).entries()].map(([role, roleManagers]) => (
+            <optgroup key={role} label={roleManagers[0]?.roleLabel || role}>
+              {roleManagers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
+      {selectedManager && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div>
+            <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>
+              Admin → {selectedManager.name} ({tasksAssignedToManager.length} task{tasksAssignedToManager.length === 1 ? '' : 's'})
+            </h3>
+            {tasksAssignedToManager.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Nothing assigned to them yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {tasksAssignedToManager.map((task) => (
+                  <div key={task.id} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.9rem 1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.6rem' }}>
+                      <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>{task.template_id ? '🔁 ' : ''}{task.task_text}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        Due {task.due_date} {task.template_id ? '(12 AM)' : task.due_time}
+                      </div>
+                    </div>
+                    {task.assignees.map((a) => <AssigneeStatus key={a.id} assignee={a} />)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>
+              {selectedManager.name} → their associates ({tasksManagerAssignedDown.length} task{tasksManagerAssignedDown.length === 1 ? '' : 's'})
+            </h3>
+            {tasksManagerAssignedDown.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>They haven&apos;t assigned anything to their associates yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {tasksManagerAssignedDown.map((task) => (
+                  <div key={task.id} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.9rem 1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.6rem' }}>
+                      <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>{task.template_id ? '🔁 ' : ''}{task.task_text}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        Due {task.due_date} {task.template_id ? '(12 AM)' : task.due_time}
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.6rem' }}>
+                      {task.assignees.map((a) => <AssigneeStatus key={a.id} assignee={a} />)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ManagerTasksClient({ managers, tasks, roleLabels, templates = [], associateTasks = [] }) {
   const router = useRouter();
   const [taskText, setTaskText] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -369,6 +464,8 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      <ManagerCheckBalance managers={managers} tasks={tasks} associateTasks={associateTasks} />
+
       <div style={cardStyle}>
         <h2 style={{ margin: '0 0 1.25rem', fontSize: '1.1rem' }}>Assign a New Task</h2>
 

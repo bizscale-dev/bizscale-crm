@@ -67,11 +67,57 @@ export default async function ManagerTasksPage() {
     FROM manager_task_templates t ORDER BY t.created_at DESC
   `).all();
 
+  // Every task any manager has assigned to their own associates, across all 3
+  // portals — shared tables (see src/lib/db.js's associate_tasks family), no
+  // per-portal filter needed here since role-scoping only matters at
+  // create/write time. This feeds the "check & balance" filter below: pick a
+  // manager, see both what admin assigned THEM and what THEY assigned down.
+  const associateTaskRows = await db.prepare(`
+    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id,
+      t.created_by as manager_id,
+      a.id as assignee_row_id, a.user_id, u.name as associate_name, u.role as associate_role,
+      a.submitted_at, a.submission_description, a.proof_image_base64,
+      a.is_late, a.late_reason, a.approval_status
+    FROM associate_tasks t
+    JOIN associate_task_assignees a ON a.task_id = t.id
+    JOIN users u ON u.id = a.user_id
+    ORDER BY t.created_at DESC, u.name ASC
+  `).all();
+
+  const byAssociateTask = new Map();
+  for (const row of associateTaskRows) {
+    if (!byAssociateTask.has(row.task_id)) {
+      byAssociateTask.set(row.task_id, {
+        id: row.task_id,
+        task_text: row.task_text,
+        due_date: row.due_date,
+        due_time: row.due_time,
+        created_at: row.created_at,
+        template_id: row.template_id,
+        manager_id: row.manager_id,
+        assignees: [],
+      });
+    }
+    byAssociateTask.get(row.task_id).assignees.push({
+      id: row.assignee_row_id,
+      user_id: row.user_id,
+      name: row.associate_name,
+      role: row.associate_role,
+      submitted_at: row.submitted_at,
+      submission_description: row.submission_description,
+      proof_image_base64: row.proof_image_base64,
+      is_late: row.is_late,
+      late_reason: row.late_reason,
+      approval_status: row.approval_status,
+    });
+  }
+
   return (
     <ManagerTasksClient
       templates={templateRows}
       managers={managers.map((m) => ({ ...m, roleLabel: ROLE_LABELS[m.role] || m.role }))}
       tasks={[...byTask.values()]}
+      associateTasks={[...byAssociateTask.values()]}
       roleLabels={ROLE_LABELS}
     />
   );
