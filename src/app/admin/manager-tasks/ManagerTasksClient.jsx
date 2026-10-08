@@ -172,17 +172,24 @@ function AssigneeStatus({ assignee }) {
   );
 }
 
-// Separate "Default Tasks" portion: a task tied to ONE weekday (no date), which
-// repeats every week — it appears on that day and is due by 12 AM (end of that
-// day). Distinct from the one-off form below, which takes a specific date/time.
+// Separate "Default Tasks" portion: a task tied to one or more weekdays (no
+// date), which repeats every week — it appears on each chosen day and is due
+// by 12 AM (end of that day). A task spanning multiple days (e.g. something
+// that takes 2 days) just picks 2+ days here — each still spawns as its own
+// one-day occurrence, due that same day, rather than one task with a longer
+// window. Distinct from the one-off form below, which takes a specific date/time.
 function DefaultTasksSection({ managers, roleLabels, templates }) {
   const router = useRouter();
   const [taskText, setTaskText] = useState('');
-  const [weekday, setWeekday] = useState('');
+  const [weekdays, setWeekdays] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
   const managersByRole = groupManagersByRole(managers);
+
+  const toggleWeekday = (d) => {
+    setWeekdays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort());
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -190,7 +197,7 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
     setMessage(null);
     const formData = new FormData();
     formData.set('task_text', taskText);
-    if (weekday !== '') formData.append('weekdays', weekday);
+    weekdays.forEach((d) => formData.append('weekdays', d));
     selectedIds.forEach((id) => formData.append('assignee_ids', id));
     const result = await createRecurringTemplate(formData);
     setSubmitting(false);
@@ -198,9 +205,10 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
       setMessage({ type: 'error', text: result.error });
       return;
     }
-    setMessage({ type: 'success', text: `Default task created — repeats every ${WEEKDAY_NAMES[parseInt(weekday, 10)]} for ${result.assignedCount} manager(s).` });
+    const dayNames = weekdays.map((d) => WEEKDAY_NAMES[d]).join(', ');
+    setMessage({ type: 'success', text: `Default task created — repeats every ${dayNames} for ${result.assignedCount} manager(s).` });
     setTaskText('');
-    setWeekday('');
+    setWeekdays([]);
     setSelectedIds([]);
     router.refresh();
   };
@@ -209,7 +217,7 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
     <div style={cardStyle}>
       <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.1rem' }}>🔁 Default Tasks (weekly)</h2>
       <p style={{ margin: '0 0 1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-        Pick one day of the week — no date needed. The task appears for the managers every week on that day and is due by 12 AM (end of that day).
+        Pick one or more days of the week — no date needed. The task appears for the managers every week on each chosen day and is due by 12 AM (end of that day). A task that takes 2 days can just pick 2 days here.
       </p>
 
       {message && (
@@ -229,11 +237,15 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
             style={{ ...inputStyle, resize: 'vertical' }} placeholder="Describe the recurring task..." />
         </div>
         <div>
-          <label style={labelStyle}>Day of the week</label>
-          <select value={weekday} onChange={(e) => setWeekday(e.target.value)} style={inputStyle}>
-            <option value="">Select a day…</option>
-            {WEEKDAY_NAMES.map((name, d) => <option key={d} value={d}>{name}</option>)}
-          </select>
+          <label style={labelStyle}>Day(s) of the week</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+            {WEEKDAY_NAMES.map((name, d) => (
+              <label key={d} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={weekdays.includes(d)} onChange={() => toggleWeekday(d)} />
+                {name}
+              </label>
+            ))}
+          </div>
         </div>
         <div>
           <label style={labelStyle}>Assign To</label>

@@ -111,7 +111,7 @@ export async function createRecurringTemplate(formData) {
     .filter((n) => !Number.isNaN(n));
 
   if (!taskText) return { error: 'Task description is required' };
-  if (weekdays.length !== 1) return { error: 'Pick the one day of the week this task repeats on' };
+  if (weekdays.length === 0) return { error: 'Pick at least one day of the week this task repeats on' };
   if (assigneeIds.length === 0) return { error: 'Select at least one manager to assign this task to' };
 
   try {
