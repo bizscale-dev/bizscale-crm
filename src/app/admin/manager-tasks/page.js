@@ -61,7 +61,7 @@ export default async function ManagerTasksPage() {
   }
 
   const templateRows = await db.prepare(`
-    SELECT t.id, t.task_text, t.weekdays, t.due_time, t.is_active,
+    SELECT t.id, t.task_text, t.weekdays, t.duration_days, t.due_time, t.is_active,
       (SELECT GROUP_CONCAT(u.name, ', ') FROM manager_task_template_assignees ta
         JOIN users u ON u.id = ta.user_id WHERE ta.template_id = t.id) as assignee_names
     FROM manager_task_templates t ORDER BY t.created_at DESC

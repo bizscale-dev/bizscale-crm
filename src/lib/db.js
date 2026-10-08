@@ -212,6 +212,13 @@ async function runMigrations(raw) {
     // different date format, so the admin UI always matches the sheet. NULL for
     // a client added before this column existed, or whose sheet row had no date.
     "ALTER TABLE clients ADD COLUMN joining_date TEXT",
+    // How many days a recurring Default Task's occurrence spans, starting from
+    // the weekday stored in manager_task_templates.weekdays (now a single start
+    // day, not a list) — e.g. start=Friday, duration=4 spawns one task due the
+    // following Monday at 12 AM, covering Fri/Sat/Sun/Mon. 1 (the old default
+    // behavior — due the same day it appears) for every template created before
+    // this column existed.
+    "ALTER TABLE manager_task_templates ADD COLUMN duration_days INTEGER NOT NULL DEFAULT 1",
   ];
 
   for (const sql of alterStatements) {
@@ -554,13 +561,16 @@ async function runMigrations(raw) {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
     // Recurring ("default") Manager Tasks: a template that spawns one normal
-    // manager_tasks row per matching weekday, due that same day — see
-    // src/lib/recurringManagerTasks.js. weekdays is a comma-separated list of
-    // JS getDay() numbers (0 = Sunday ... 6 = Saturday).
+    // manager_tasks row every week, starting on `weekdays` (a single JS
+    // getDay() number, 0 = Sunday ... 6 = Saturday — a single value despite the
+    // plural column name, kept for compatibility with existing rows) and
+    // spanning `duration_days` days, due at 12 AM on the last of those days —
+    // see src/lib/recurringManagerTasks.js.
     `CREATE TABLE IF NOT EXISTS manager_task_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       task_text TEXT NOT NULL,
       weekdays TEXT NOT NULL,
+      duration_days INTEGER NOT NULL DEFAULT 1,
       due_time TEXT NOT NULL DEFAULT '23:59',
       is_active INTEGER NOT NULL DEFAULT 1,
       created_by INTEGER NOT NULL,

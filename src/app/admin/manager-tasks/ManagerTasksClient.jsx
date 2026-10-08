@@ -9,6 +9,16 @@ import {
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// weekdays is a single start-day number (stored as a string, plural name kept
+// for DB compatibility with rows from before duration_days existed).
+function formatTemplateSchedule(weekdays, durationDays) {
+  const startDay = parseInt(String(weekdays).split(',')[0], 10);
+  const startName = WEEKDAY_NAMES[startDay];
+  if (!durationDays || durationDays <= 1) return `${startName} · due 12 AM`;
+  const endName = WEEKDAY_NAMES[(startDay + durationDays - 1) % 7];
+  return `${startName} through ${endName} · due 12 AM ${endName}`;
+}
+
 const BRAND_COLOR = 'var(--primary)';
 
 const labelStyle = {
@@ -172,24 +182,26 @@ function AssigneeStatus({ assignee }) {
   );
 }
 
-// Separate "Default Tasks" portion: a task tied to one or more weekdays (no
-// date), which repeats every week — it appears on each chosen day and is due
-// by 12 AM (end of that day). A task spanning multiple days (e.g. something
-// that takes 2 days) just picks 2+ days here — each still spawns as its own
-// one-day occurrence, due that same day, rather than one task with a longer
-// window. Distinct from the one-off form below, which takes a specific date/time.
+// Separate "Default Tasks" portion: a task tied to a start weekday (no date),
+// which repeats every week — it appears on that day and is due by 12 AM at
+// the end of its duration (1 day = due that same day, same as before). A task
+// that takes multiple days (e.g. Friday through Monday) picks Friday as the
+// start day and 4 as the duration — one task, due Monday at 12 AM, not 4
+// separate daily tasks. Distinct from the one-off form below, which takes a
+// specific date/time.
 function DefaultTasksSection({ managers, roleLabels, templates }) {
   const router = useRouter();
   const [taskText, setTaskText] = useState('');
-  const [weekdays, setWeekdays] = useState([]);
+  const [startWeekday, setStartWeekday] = useState('');
+  const [durationDays, setDurationDays] = useState(1);
   const [selectedIds, setSelectedIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
   const managersByRole = groupManagersByRole(managers);
 
-  const toggleWeekday = (d) => {
-    setWeekdays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort());
-  };
+  const endDayLabel = startWeekday !== '' && durationDays > 1
+    ? WEEKDAY_NAMES[(parseInt(startWeekday, 10) + durationDays - 1) % 7]
+    : null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -197,7 +209,8 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
     setMessage(null);
     const formData = new FormData();
     formData.set('task_text', taskText);
-    weekdays.forEach((d) => formData.append('weekdays', d));
+    formData.set('start_weekday', startWeekday);
+    formData.set('duration_days', durationDays);
     selectedIds.forEach((id) => formData.append('assignee_ids', id));
     const result = await createRecurringTemplate(formData);
     setSubmitting(false);
@@ -205,10 +218,12 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
       setMessage({ type: 'error', text: result.error });
       return;
     }
-    const dayNames = weekdays.map((d) => WEEKDAY_NAMES[d]).join(', ');
-    setMessage({ type: 'success', text: `Default task created — repeats every ${dayNames} for ${result.assignedCount} manager(s).` });
+    const startName = WEEKDAY_NAMES[parseInt(startWeekday, 10)];
+    const span = durationDays > 1 ? ` through ${endDayLabel}` : '';
+    setMessage({ type: 'success', text: `Default task created — repeats every ${startName}${span} for ${result.assignedCount} manager(s).` });
     setTaskText('');
-    setWeekdays([]);
+    setStartWeekday('');
+    setDurationDays(1);
     setSelectedIds([]);
     router.refresh();
   };
@@ -217,7 +232,7 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
     <div style={cardStyle}>
       <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.1rem' }}>🔁 Default Tasks (weekly)</h2>
       <p style={{ margin: '0 0 1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-        Pick one or more days of the week — no date needed. The task appears for the managers every week on each chosen day and is due by 12 AM (end of that day). A task that takes 2 days can just pick 2 days here.
+        Pick a start day — no date needed. The task appears every week on that day. For a task that takes more than one day, set the duration too; it stays due until 12 AM on the last of those days.
       </p>
 
       {message && (
@@ -236,15 +251,24 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
           <textarea value={taskText} onChange={(e) => setTaskText(e.target.value)} rows={2}
             style={{ ...inputStyle, resize: 'vertical' }} placeholder="Describe the recurring task..." />
         </div>
-        <div>
-          <label style={labelStyle}>Day(s) of the week</label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-            {WEEKDAY_NAMES.map((name, d) => (
-              <label key={d} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={weekdays.includes(d)} onChange={() => toggleWeekday(d)} />
-                {name}
-              </label>
-            ))}
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1', minWidth: '160px' }}>
+            <label style={labelStyle}>Start day</label>
+            <select value={startWeekday} onChange={(e) => setStartWeekday(e.target.value)} style={inputStyle}>
+              <option value="">Select a day…</option>
+              {WEEKDAY_NAMES.map((name, d) => <option key={d} value={d}>{name}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: '1', minWidth: '160px' }}>
+            <label style={labelStyle}>Duration (days)</label>
+            <input type="number" min={1} max={7} value={durationDays}
+              onChange={(e) => setDurationDays(Math.min(7, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+              style={inputStyle} />
+            {endDayLabel && (
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                Due {endDayLabel} at 12 AM
+              </div>
+            )}
           </div>
         </div>
         <div>
@@ -280,7 +304,7 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
               <div>
                 <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{t.task_text}</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                  Every {String(t.weekdays).split(',').map((d) => WEEKDAY_NAMES[parseInt(d, 10)]).join(', ')} · due 12 AM · {t.assignee_names || 'no managers'}{t.is_active ? '' : ' · paused'}
+                  Every {formatTemplateSchedule(t.weekdays, t.duration_days)} · {t.assignee_names || 'no managers'}{t.is_active ? '' : ' · paused'}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>

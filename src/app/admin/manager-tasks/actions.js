@@ -90,10 +90,13 @@ export async function createManagerTask(formData) {
 }
 
 /**
- * Creates a recurring ("default") task: repeats on the chosen weekdays, and
- * each occurrence is due that same day at due_time (default end of day), so
- * every occurrence has exactly one day to be completed. Occurrences are
- * spawned by ensureRecurringManagerTasks (src/lib/recurringManagerTasks.js).
+ * Creates a recurring ("default") task: repeats every week starting on the
+ * chosen start day, and each occurrence spans duration_days days — due at
+ * due_time (default end of day) on the LAST of those days. duration_days=1
+ * (the normal case) is due that same start day, same as before; a task that
+ * takes e.g. 4 days (Fri/Sat/Sun/Mon) picks Friday as the start day and 4 as
+ * the duration, and is due Monday at 12 AM. Occurrences are spawned by
+ * ensureRecurringManagerTasks (src/lib/recurringManagerTasks.js).
  */
 export async function createRecurringTemplate(formData) {
   const { session, error: authError } = await requireAdmin();
@@ -103,15 +106,17 @@ export async function createRecurringTemplate(formData) {
   // Default tasks are always due at 12 AM (end of their day) — stored as 23:59 so
   // the same-day lateness check (due_date + due_time) stays valid.
   const dueTime = '23:59';
-  const weekdays = [...new Set(formData.getAll('weekdays')
-    .map((v) => parseInt(v, 10))
-    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort();
+  const startWeekday = parseInt(formData.get('start_weekday'), 10);
+  const durationDays = parseInt(formData.get('duration_days'), 10) || 1;
   const assigneeIds = formData.getAll('assignee_ids')
     .map((v) => parseInt(v, 10))
     .filter((n) => !Number.isNaN(n));
 
   if (!taskText) return { error: 'Task description is required' };
-  if (weekdays.length === 0) return { error: 'Pick at least one day of the week this task repeats on' };
+  if (!Number.isInteger(startWeekday) || startWeekday < 0 || startWeekday > 6) {
+    return { error: 'Pick the day of the week this task starts on' };
+  }
+  if (durationDays < 1 || durationDays > 7) return { error: 'Duration must be between 1 and 7 days' };
   if (assigneeIds.length === 0) return { error: 'Select at least one manager to assign this task to' };
 
   try {
@@ -126,9 +131,9 @@ export async function createRecurringTemplate(formData) {
 
     const create = db.transaction(async (tx) => {
       const result = await tx.prepare(`
-        INSERT INTO manager_task_templates (task_text, weekdays, due_time, created_by)
-        VALUES (?, ?, ?, ?)
-      `).run(taskText, weekdays.join(','), dueTime, session.userId);
+        INSERT INTO manager_task_templates (task_text, weekdays, duration_days, due_time, created_by)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(taskText, String(startWeekday), durationDays, dueTime, session.userId);
       for (const m of valid) {
         await tx.prepare(`
           INSERT INTO manager_task_template_assignees (template_id, user_id) VALUES (?, ?)
