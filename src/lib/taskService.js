@@ -339,12 +339,54 @@ export async function generateSEOTasks(campaignId, pinThroughDate = null) {
     const sortedWorkingDaysForClamp = [...workingDays].sort((a, b) => a.dayNumber - b.dayNumber);
     const firstFutureWorkingDay = sortedWorkingDaysForClamp.find(d => d.dateStr > pinBoundary)
       || sortedWorkingDaysForClamp[sortedWorkingDaysForClamp.length - 1];
+    const availableWorkingDaysForClamp = firstFutureWorkingDay
+      ? sortedWorkingDaysForClamp.filter(d => d.dateStr >= firstFutureWorkingDay.dateStr)
+      : [];
+    // Staggers which available day each "started ahead of schedule" Month 1
+    // client's catch-up run begins on (see below) — so several such clients
+    // don't all pile onto the exact same first slot.
+    let movedAheadM1Index = 0;
 
     for (const client of assignedClients) {
       const occurrences = clientOccurrenceDays.get(client.id);
       if (!occurrences) continue;
 
       const hasHistory = clientsWithPastHistory.has(client.id);
+      const month1StartWeek = client.funnel_month1_start_week || 1;
+
+      // Month 1 client manually started at week 2+ with no real work yet
+      // (enrolled or moved straight to a later week — see enrollClientInFunnel/
+      // moveMonth1WeekBack in src/lib/funnel.js) — their eligible weeks'
+      // occurrences would otherwise sit at each week's own natural calendar
+      // bucket date below, which can be well in the future even while an
+      // earlier week is still the one actually in progress right now. Pull
+      // every eligible week's occurrence forward to the earliest available
+      // working days instead, in week order, so they start immediately
+      // rather than waiting for their "natural" slot — each still carries
+      // its own week's task content (FUNNEL_MONTH1_WEEK_TARGETS[week])
+      // unchanged, only the date moves. Normal week-1-start clients are
+      // untouched by this — they fall through to the existing bucket-date
+      // behavior below exactly as before.
+      if (isMonth1FunnelClient(client) && !hasHistory && month1StartWeek > 1 && availableWorkingDaysForClamp.length > 0) {
+        const currentWeek = client.funnel_month1_current_week || month1StartWeek;
+        const eligible = occurrences
+          .filter(o => o.week >= month1StartWeek && o.week <= currentWeek)
+          .sort((a, b) => a.week - b.week);
+        const offset = movedAheadM1Index % availableWorkingDaysForClamp.length;
+        movedAheadM1Index++;
+        const pulled = eligible.map((o, idx) => {
+          const day = availableWorkingDaysForClamp[(offset + idx) % availableWorkingDaysForClamp.length];
+          return { ...o, dayNumber: day.dayNumber, dateStr: day.dateStr };
+        });
+        const seenM1c = new Set();
+        clientOccurrenceDays.set(client.id, pulled.filter(o => {
+          const key = `${o.dayNumber}|${o.week}`;
+          if (seenM1c.has(key)) return false;
+          seenM1c.add(key);
+          return true;
+        }));
+        continue;
+      }
 
       // Month 1 (manually advanced week by week): a week the admin has just
       // advanced to has NO preserved row yet, even though the client has
