@@ -8,7 +8,7 @@ export async function encrypt(payload) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('1d')
+    .setExpirationTime('30d')
     .sign(encodedKey);
 }
 
@@ -24,7 +24,10 @@ export async function decrypt(session) {
 }
 
 export async function createSession(userId, role) {
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  // 30 days instead of 1 — people were getting logged out mid-day/overnight
+  // despite never logging out themselves. Someone stays signed in for this
+  // whole window unless they actually hit Logout.
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   const session = await encrypt({ userId, role, expiresAt });
   
   const cookieStore = await cookies();

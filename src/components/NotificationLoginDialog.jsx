@@ -1,28 +1,41 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getUndismissedDialogNotifications, markNotificationsDialogShown } from '@/app/notifications/actions';
 
 const BRAND_COLOR = 'var(--primary)';
+const RECHECK_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
-// Shown once per batch of "new since last time this portal loaded" task
-// assignments — covers both a genuine login and a plain page refresh, since
-// this app has no presence/last-seen tracking to tell those apart more
-// precisely. Dismissed (closed or "View Tasks" clicked) marks every fetched
-// row's dialog_shown_at so it won't reopen on the next navigation; a truly
-// new assignment arriving later still opens it again on the next fresh load.
+// Shown once per batch of "new since last check" task assignments — on the
+// initial portal load (login or a plain refresh), and then re-checked every
+// 10 minutes after that so an assignment made while someone is already
+// sitting on the page still surfaces the popup, not just a bell update,
+// without needing them to reload the page themselves. Dismissed (closed or
+// "View Tasks" clicked) marks every fetched row's dialog_shown_at so it
+// won't reopen for the same batch; a genuinely new assignment arriving
+// later still opens it again on the next check.
 export default function NotificationLoginDialog() {
   const router = useRouter();
   const [pending, setPending] = useState([]);
+  const pendingRef = useRef(pending);
+
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const check = async () => {
+      // Don't fetch/replace while the dialog is already up for an earlier
+      // batch — let the user act on what they're looking at first.
+      if (pendingRef.current.length > 0) return;
       const rows = await getUndismissedDialogNotifications();
       if (!cancelled && rows.length > 0) setPending(rows);
-    })();
-    return () => { cancelled = true; };
+    };
+    check();
+    const interval = setInterval(check, RECHECK_INTERVAL_MS);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   if (pending.length === 0) return null;
