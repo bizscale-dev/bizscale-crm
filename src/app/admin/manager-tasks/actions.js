@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { ensureRecurringManagerTasks } from '@/lib/recurringManagerTasks';
+import { createNotificationsForUsers, getTasksLinkForRole } from '@/lib/notifications';
 
 const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
 
@@ -54,7 +55,7 @@ export async function createManagerTask(formData) {
     const placeholders = assigneeIds.map(() => '?').join(',');
     const rolePlaceholders = MANAGER_ROLES.map(() => '?').join(',');
     const validManagers = await db.prepare(`
-      SELECT id FROM users
+      SELECT id, role FROM users
       WHERE id IN (${placeholders}) AND role IN (${rolePlaceholders}) AND is_active = 1
     `).all(...assigneeIds, ...MANAGER_ROLES);
 
@@ -79,6 +80,22 @@ export async function createManagerTask(formData) {
     });
 
     await createTask({ taskText, dueDate, dueTime, createdBy: session.userId, validIds });
+
+    // Notify each assignee — grouped by role since the link (and each
+    // recipient's own Tasks page) differs per manager role.
+    const byRole = new Map();
+    for (const m of validManagers) {
+      if (!byRole.has(m.role)) byRole.set(m.role, []);
+      byRole.get(m.role).push(m.id);
+    }
+    const dueLabel = `${dueDate} ${dueTime}`;
+    for (const [role, ids] of byRole.entries()) {
+      await createNotificationsForUsers(db, ids, {
+        title: 'New Task from Admin',
+        message: `${taskText.slice(0, 140)} — due ${dueLabel}`,
+        link: getTasksLinkForRole(role),
+      });
+    }
 
     revalidatePath('/admin/manager-tasks');
 

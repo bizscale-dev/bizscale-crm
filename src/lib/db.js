@@ -646,6 +646,21 @@ async function runMigrations(raw) {
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_associate_tasks_template_day
       ON associate_tasks(template_id, due_date) WHERE template_id IS NOT NULL`,
+    // One row per recipient per assignment event, across BOTH manager_tasks
+    // (admin -> manager) and associate_tasks (manager -> associate) — see
+    // src/lib/notifications.js. No role/portal split needed: every
+    // notification is read identically, scoped only by user_id.
+    `CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      link TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      read_at DATETIME,
+      dialog_shown_at DATETIME,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
   ];
 
   for (const sql of createTableStatements) {

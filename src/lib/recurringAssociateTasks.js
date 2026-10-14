@@ -1,4 +1,5 @@
 import { getDb } from './db';
+import { createNotificationsForUsers, getTasksLinkForRole } from './notifications';
 
 /**
  * Spawns today's occurrence of every active recurring Associate Task template
@@ -40,14 +41,24 @@ export async function ensureRecurringAssociateTasks() {
 
     const taskId = result.lastInsertRowid;
     const assignees = await db.prepare(`
-      SELECT ta.user_id FROM associate_task_template_assignees ta
+      SELECT ta.user_id, u.role FROM associate_task_template_assignees ta
       JOIN users u ON u.id = ta.user_id
       WHERE ta.template_id = ? AND u.is_active = 1
     `).all(t.id);
+    const byRole = new Map();
     for (const a of assignees) {
       await db.prepare(`
         INSERT OR IGNORE INTO associate_task_assignees (task_id, user_id) VALUES (?, ?)
       `).run(taskId, a.user_id);
+      if (!byRole.has(a.role)) byRole.set(a.role, []);
+      byRole.get(a.role).push(a.user_id);
+    }
+    for (const [role, userIds] of byRole.entries()) {
+      await createNotificationsForUsers(db, userIds, {
+        title: 'New Task from Manager',
+        message: `${t.task_text.slice(0, 140)} — due ${dueDateStr} ${t.due_time}`,
+        link: getTasksLinkForRole(role),
+      });
     }
     spawned++;
   }

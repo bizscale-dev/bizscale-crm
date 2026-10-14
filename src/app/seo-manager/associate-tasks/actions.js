@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
+import { createNotificationsForUsers, getTasksLinkForRole } from '@/lib/notifications';
 
 const ASSOCIATE_ROLE = 'seo_associate';
 const BASE_PATH = '/seo-manager/associate-tasks';
@@ -59,6 +60,12 @@ export async function createAssociateTask(formData) {
       }
     });
     await create();
+
+    await createNotificationsForUsers(db, valid.map((u) => u.id), {
+      title: 'New Task from Manager',
+      message: `${taskText.slice(0, 140)} — due ${dueDate} ${dueTime}`,
+      link: getTasksLinkForRole(ASSOCIATE_ROLE),
+    });
 
     revalidatePath(BASE_PATH);
     return { success: true, assignedCount: valid.length };

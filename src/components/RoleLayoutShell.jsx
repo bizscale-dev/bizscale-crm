@@ -5,6 +5,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { logout } from '@/app/login/actions';
 import Logo from '@/components/Logo';
+import NotificationBell from '@/components/NotificationBell';
+import NotificationLoginDialog from '@/components/NotificationLoginDialog';
 
 const BRAND_COLOR = 'var(--primary)';
 
@@ -21,6 +23,8 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
   };
 
   return (
+    <>
+    <NotificationLoginDialog />
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--background)' }}>
       <aside style={{
         width: sidebarOpen ? '260px' : '80px',
@@ -265,16 +269,20 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
           alignItems: 'center'
         }}>
           <h1 style={{ fontSize: '1.25rem', margin: 0, color: BRAND_COLOR, fontWeight: 'bold' }}>{headerTitle}</h1>
-          {headerExtra !== undefined ? headerExtra : (
-            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-              {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {headerExtra !== undefined ? headerExtra : (
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              </div>
+            )}
+            <NotificationBell />
+          </div>
         </header>
         <div style={{ padding: '2rem', flex: 1 }}>
           {children}
         </div>
       </main>
     </div>
+    </>
   );
 }
