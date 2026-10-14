@@ -8,11 +8,14 @@ import {
 
 const BRAND_COLOR = 'var(--primary)';
 
-// One shared AudioContext per page, created lazily and resumed on the
-// user's first click anywhere — browsers block audio until a user gesture,
-// so there is no audio file to pre-load, just a synthesized tone.
+// One shared AudioContext per page, created lazily on the user's first
+// interaction anywhere — browsers refuse to let audio play until a user
+// gesture has happened on the page at least once, so there is no audio
+// file to pre-load, just a synthesized tone. Rather than trusting a
+// manually tracked "unlocked" flag (which can drift out of sync with the
+// browser's actual state), every play attempt re-checks/re-resumes the
+// real AudioContext state directly.
 let sharedAudioContext = null;
-let audioUnlocked = false;
 
 function getAudioContext() {
   if (typeof window === 'undefined') return null;
@@ -25,29 +28,39 @@ function getAudioContext() {
 }
 
 if (typeof document !== 'undefined') {
+  // Not { once: true } — keeps nudging resume() on every interaction so an
+  // earlier gesture that happened before the context existed, or a context
+  // that got suspended again (some browsers do this on tab backgrounding),
+  // still gets unlocked on the next click/tap/keypress.
   const unlock = () => {
     const ctx = getAudioContext();
-    if (ctx && ctx.state === 'suspended') ctx.resume();
-    audioUnlocked = true;
+    if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
   };
-  document.addEventListener('click', unlock, { once: true });
+  ['click', 'pointerdown', 'keydown', 'touchstart'].forEach((evt) =>
+    document.addEventListener(evt, unlock, { passive: true })
+  );
 }
 
 function playNotificationTone() {
-  if (!audioUnlocked) return;
   const ctx = getAudioContext();
   if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    // Will only actually resume if a user gesture has occurred somewhere on
+    // this page — if none has, this (and the tone below) silently no-ops,
+    // which is the one unavoidable browser restriction here.
+    ctx.resume().catch(() => {});
+  }
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = 'sine';
   osc.frequency.setValueAtTime(880, ctx.currentTime);
   osc.frequency.setValueAtTime(1175, ctx.currentTime + 0.12);
-  gain.gain.setValueAtTime(0.15, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+  gain.gain.setValueAtTime(0.3, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
   osc.connect(gain);
   gain.connect(ctx.destination);
   osc.start();
-  osc.stop(ctx.currentTime + 0.35);
+  osc.stop(ctx.currentTime + 0.4);
 }
 
 function timeAgo(dateStr) {
