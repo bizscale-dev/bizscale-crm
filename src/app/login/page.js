@@ -232,6 +232,85 @@ export default function LoginPage() {
           border-radius: 50%;
           animation: spin 0.7s linear infinite;
         }
+
+        /* Looping "logo builds up, then types its tagline" animation —
+           chevrons rise in bottom-to-top (matching the real 3-chevron
+           mark), hold as the complete logo, then "Bizzzing Up!" types
+           itself out beneath it, before the whole thing fades and the
+           6s cycle restarts. One shared 6s timeline drives every piece so
+           they stay in sync without any JS timers. */
+        @keyframes sceneCycle {
+          0%, 90% { opacity: 1; }
+          98%, 100% { opacity: 0; }
+        }
+        @keyframes typeReveal {
+          0%, 40% { width: 0; }
+          64%, 100% { width: 12ch; }
+        }
+        @keyframes caretBlink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+
+        .logo-loop {
+          margin-top: 2.5rem;
+          animation: sceneCycle 6s ease infinite;
+        }
+        .logo-loop-chevrons {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          width: 140px;
+        }
+        .logo-loop-chevron {
+          width: 140px;
+          height: 54px;
+          margin-top: -20px;
+          opacity: 0;
+          animation-duration: 6s;
+          animation-iteration-count: infinite;
+          animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        .logo-loop-chevron:first-child { margin-top: 0; }
+        .logo-loop-chevron.c1 { animation-name: chevRise1; }
+        .logo-loop-chevron.c2 { animation-name: chevRise2; }
+        .logo-loop-chevron.c3 { animation-name: chevRise3; }
+        @keyframes chevRise1 {
+          0% { opacity: 0; transform: translateY(22px); }
+          5%, 100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes chevRise2 {
+          0%, 7% { opacity: 0; transform: translateY(22px); }
+          13%, 100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes chevRise3 {
+          0%, 15% { opacity: 0; transform: translateY(22px); }
+          21%, 100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo-loop-type {
+          margin-top: 1.1rem;
+          display: flex;
+          justify-content: center;
+        }
+        .logo-loop-type-text {
+          display: inline-block;
+          overflow: hidden;
+          white-space: nowrap;
+          font-size: 1.5rem;
+          font-weight: 800;
+          color: white;
+          letter-spacing: 0.01em;
+          width: 0;
+          animation: typeReveal 6s steps(12, jump-end) infinite;
+        }
+        .logo-loop-caret {
+          display: inline-block;
+          width: 3px;
+          margin-left: 2px;
+          background: white;
+          animation: caretBlink 0.8s steps(1) infinite;
+        }
       `}</style>
 
       {/* Left: branding panel */}
@@ -254,6 +333,29 @@ export default function LoginPage() {
                 <span>{f.text}</span>
               </div>
             ))}
+          </div>
+
+          {/* Looping brand moment: the logo's 3 chevrons climb into place
+              bottom-to-top, then "Bizzzing Up!" types itself out beneath —
+              rendered in white to read against this green panel, rather
+              than the logo's own green (which would vanish on a green
+              background). */}
+          <div className="logo-loop">
+            <div className="logo-loop-chevrons">
+              <svg viewBox="0 0 140 54" className="logo-loop-chevron c3">
+                <polyline points="10,50 70,6 130,50" fill="none" stroke="white" strokeWidth="26" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <svg viewBox="0 0 140 54" className="logo-loop-chevron c2">
+                <polyline points="10,50 70,6 130,50" fill="none" stroke="white" strokeWidth="26" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <svg viewBox="0 0 140 54" className="logo-loop-chevron c1">
+                <polyline points="10,50 70,6 130,50" fill="none" stroke="white" strokeWidth="26" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div className="logo-loop-type">
+              <span className="logo-loop-type-text">Bizzzing Up!</span>
+              <span className="logo-loop-caret" />
+            </div>
           </div>
         </div>
       </div>
