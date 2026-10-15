@@ -951,6 +951,15 @@ async function runMigrations(raw) {
   // inspecting the current schema so the rename+recreate only runs when a role is
   // actually missing.
   //
+  // `users_new`'s column list below must stay in sync with every column ever
+  // added to `users` via an alterStatement above (e.g. mirrors_web_associate_id)
+  // — `INSERT INTO users_new SELECT * FROM users` fails on a column-count
+  // mismatch otherwise. This silently no-ops (caught below, just a console
+  // warning) rather than crashing, which is exactly how a role added after
+  // alterStatements drifted out of sync with this list went unnoticed —
+  // check this list against `PRAGMA table_info(users)` if a future role
+  // addition logs this migration being skipped.
+  //
   // Other tables (web_clients, seo_tasks, etc.) have FOREIGN KEY ... REFERENCES
   // users(id). Renaming `users` itself would make SQLite auto-rewrite those other
   // tables' FK references to follow the rename (e.g. to "users_old"), which then
@@ -962,7 +971,7 @@ async function runMigrations(raw) {
   // for SQLite to rewrite, and every other table's existing "REFERENCES users(id)"
   // text (never touched) resolves correctly once `users` exists again.
   try {
-    const REQUIRED_ROLES = ['admin', 'seo_associate', 'writer', 'manager', 'web_seo_associate', 'writers_manager', 'seo_manager', 'web_seo_manager'];
+    const REQUIRED_ROLES = ['admin', 'seo_associate', 'writer', 'manager', 'web_seo_associate', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr'];
     const currentSchema = await raw.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'");
     const currentSql = currentSchema.rows[0]?.sql || '';
     const missingRole = REQUIRED_ROLES.some(role => !currentSql.includes(`'${role}'`));
@@ -979,7 +988,8 @@ async function runMigrations(raw) {
           role TEXT NOT NULL CHECK(role IN (${REQUIRED_ROLES.map(r => `'${r}'`).join(',')})),
           is_active INTEGER DEFAULT 1,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          lifetime_completed_links INTEGER DEFAULT 0
+          lifetime_completed_links INTEGER DEFAULT 0,
+          mirrors_web_associate_id INTEGER
         )
       `);
       await raw.execute('INSERT INTO users_new SELECT * FROM users');
