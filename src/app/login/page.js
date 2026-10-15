@@ -244,9 +244,9 @@ export default function LoginPage() {
 
         .bc-loader {
           --duration: 3s;
-          --primary: var(--primary-hover);
-          --primary-light: #ffffff;
-          --primary-rgba: rgba(255, 255, 255, 0);
+          --primary: #0f172a;
+          --primary-light: #334155;
+          --primary-rgba: rgba(15, 23, 42, 0);
           width: 200px;
           height: 320px;
           position: relative;
@@ -264,7 +264,7 @@ export default function LoginPage() {
           position: absolute;
           right: 32%;
           bottom: -11px;
-          background: var(--primary-hover);
+          background: #0f172a;
           transform: translateZ(200px) rotate(var(--r));
           animation: bc-mask var(--duration) linear forwards infinite;
         }
