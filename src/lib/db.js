@@ -661,6 +661,29 @@ async function runMigrations(raw) {
       dialog_shown_at DATETIME,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
+    // A QA person's flag on one EOD entry ("I checked this link and I'm not
+    // satisfied") with a note. report_date/web_client_name/page_url/work_done
+    // are denormalized on purpose, same precedent as eod_report_entries
+    // itself: a QA report is a permanent record and must keep reading
+    // correctly after the underlying EOD or client is edited/renamed.
+    // `status` is reserved for the resolution workflow still to come — every
+    // report is 'open' for now.
+    `CREATE TABLE IF NOT EXISTS qa_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      qa_user_id INTEGER NOT NULL,
+      manager_id INTEGER NOT NULL,
+      eod_report_id INTEGER NOT NULL,
+      eod_entry_id INTEGER NOT NULL,
+      report_date DATE NOT NULL,
+      web_client_name TEXT NOT NULL,
+      page_url TEXT,
+      work_done TEXT,
+      note TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (qa_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
   ];
 
   for (const sql of createTableStatements) {
@@ -971,7 +994,7 @@ async function runMigrations(raw) {
   // for SQLite to rewrite, and every other table's existing "REFERENCES users(id)"
   // text (never touched) resolves correctly once `users` exists again.
   try {
-    const REQUIRED_ROLES = ['admin', 'seo_associate', 'writer', 'manager', 'web_seo_associate', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr'];
+    const REQUIRED_ROLES = ['admin', 'seo_associate', 'writer', 'manager', 'web_seo_associate', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa'];
     const currentSchema = await raw.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'");
     const currentSql = currentSchema.rows[0]?.sql || '';
     const missingRole = REQUIRED_ROLES.some(role => !currentSql.includes(`'${role}'`));

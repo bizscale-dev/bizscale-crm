@@ -75,7 +75,7 @@ export default function UserList({ users, assignedAssociates, assignedWriters, h
                 <td style={{ padding: '1rem 0' }}>
                   {!hasActiveCampaign && <span style={{ color: 'var(--text-muted)' }}>No Active Campaign</span>}
                   {hasActiveCampaign && u.role === 'admin' && <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                  {hasActiveCampaign && ['manager', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr'].includes(u.role) && <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  {hasActiveCampaign && ['manager', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa'].includes(u.role) && <span style={{ color: 'var(--text-muted)' }}>—</span>}
                   
                   {hasActiveCampaign && (u.role === 'seo_associate' || u.role === 'writer') && (
                     isAssigned ? (
@@ -154,6 +154,7 @@ function RoleBadge({ role }) {
     web_seo_associate: { label: 'Web SEO Associate', tone: 'neutral' },
     writer: { label: 'Writer', tone: 'success' },
     hr: { label: 'HR', tone: 'neutral' },
+    qa: { label: 'QA', tone: 'neutral' },
   };
   const config = map[role] || { label: role, tone: 'neutral' };
 
