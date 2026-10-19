@@ -1,3 +1,5 @@
+import { createNotificationsForUsers } from '@/lib/notifications';
+
 // How long a manager has to resolve a QA report before it counts as overdue.
 export const QA_RESOLVE_DAYS = 5;
 
@@ -20,6 +22,60 @@ export function qaDueAt(createdAt) {
     if (dow !== 0 && dow !== 6) left -= 1;
   }
   return fmtUtc(ms);
+}
+
+// QA re-checks a report this many working days after filing.
+export const QA_FOLLOWUP_DAYS = 2;
+
+const pktDate = (ms) => new Date(ms + PKT_OFFSET_MS).toISOString().slice(0, 10);
+
+// Pakistan-time calendar date ('YYYY-MM-DD') on which QA should follow up.
+export function qaFollowUpDate(createdAt) {
+  let ms = toUtcMs(createdAt);
+  let left = QA_FOLLOWUP_DAYS;
+  while (left > 0) {
+    ms += DAY_MS;
+    const dow = new Date(ms + PKT_OFFSET_MS).getUTCDay();
+    if (dow !== 0 && dow !== 6) left -= 1;
+  }
+  return pktDate(ms);
+}
+
+// Unchecked reports whose follow-up date has arrived, oldest first.
+export async function fetchDueFollowUps(db) {
+  const rows = await db.prepare(`
+    SELECT q.id, q.source, q.title, q.web_client_name, q.work_done, q.note, q.page_url, q.report_date,
+      q.severity, q.status, q.created_at, q.resolved_at, q.resolution_note, q.followup_notified_at,
+      q.manager_id, m.name as manager_name, f.name as filed_by
+    FROM qa_reports q
+    JOIN users m ON m.id = q.manager_id
+    JOIN users f ON f.id = q.qa_user_id
+    WHERE q.followup_checked_at IS NULL
+    ORDER BY q.created_at ASC
+  `).all();
+  const today = pktDate(Date.now());
+  return rows
+    .map((r) => ({ ...r, followup_date: qaFollowUpDate(r.created_at) }))
+    .filter((r) => r.followup_date <= today);
+}
+
+// Notifies every QA user (once per report) about follow-ups that just came
+// due. QA works as a team, so one check by anybody clears it for everyone.
+export async function syncQaFollowUps(db) {
+  const fresh = (await fetchDueFollowUps(db)).filter((r) => !r.followup_notified_at);
+  if (fresh.length === 0) return;
+  const qaUsers = await db.prepare(`SELECT id FROM users WHERE role = 'qa'`).all();
+  const first = fresh[0];
+  const label = first.web_client_name || first.title || 'a report';
+  await createNotificationsForUsers(db, qaUsers.map((u) => u.id), {
+    title: 'QA follow-up due',
+    message: fresh.length === 1
+      ? `${label} (${first.manager_name}) was reported ${QA_FOLLOWUP_DAYS} working days ago - check whether it's fixed`
+      : `${fresh.length} reports were filed ${QA_FOLLOWUP_DAYS}+ working days ago - check whether they're fixed`,
+    link: '/qa/follow-ups',
+  });
+  const ph = fresh.map(() => '?').join(',');
+  await db.prepare(`UPDATE qa_reports SET followup_notified_at = CURRENT_TIMESTAMP WHERE id IN (${ph})`).run(...fresh.map((r) => r.id));
 }
 
 // Adds due_at (and is_overdue for open reports) to rows from qa_reports.

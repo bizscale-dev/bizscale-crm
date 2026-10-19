@@ -2,6 +2,7 @@
 
 import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
+import { syncQaFollowUps } from '@/lib/qaReports';
 
 // Shared across every portal (admin, all 3 managers, all 3 associates) — a
 // deliberate exception to this codebase's usual per-portal actions.js
@@ -12,6 +13,7 @@ export async function getNotifications() {
   const session = await verifySession();
   if (!session) return [];
   const db = await getDb();
+  if (session.role === 'qa') await syncQaFollowUps(db);
   return db.prepare(`
     SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 30
   `).all(session.userId);
@@ -32,6 +34,7 @@ export async function getUndismissedDialogNotifications() {
   const session = await verifySession();
   if (!session) return [];
   const db = await getDb();
+  if (session.role === 'qa') await syncQaFollowUps(db);
   return db.prepare(`
     SELECT * FROM notifications WHERE user_id = ? AND dialog_shown_at IS NULL ORDER BY created_at ASC
   `).all(session.userId);

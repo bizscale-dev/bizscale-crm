@@ -39,6 +39,7 @@ export default function NotificationLoginDialog() {
   }, []);
 
   if (pending.length === 0) return null;
+  const isQa = pending.every((n) => n.link?.startsWith('/qa/'));
 
   const dismiss = async () => {
     const ids = pending.map((n) => n.id);
@@ -69,10 +70,12 @@ export default function NotificationLoginDialog() {
       }}>
         <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔔</div>
         <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem' }}>
-          You have {pending.length} new task{pending.length === 1 ? '' : 's'}
+          {isQa
+            ? (pending.length === 1 ? pending[0].title : `You have ${pending.length} new notifications`)
+            : `You have ${pending.length} new task${pending.length === 1 ? '' : 's'}`}
         </h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0 0 1.5rem' }}>
-          Please view your tasks.
+          {isQa ? pending[0].message : 'Please view your tasks.'}
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
           <button
@@ -104,7 +107,7 @@ export default function NotificationLoginDialog() {
               fontSize: '0.875rem',
             }}
           >
-            View Tasks
+            {isQa ? 'View' : 'View Tasks'}
           </button>
         </div>
       </div>

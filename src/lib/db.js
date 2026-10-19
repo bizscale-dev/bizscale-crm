@@ -241,6 +241,10 @@ async function runMigrations(raw) {
     "ALTER TABLE qa_reports ADD COLUMN department TEXT",
     "ALTER TABLE qa_reports ADD COLUMN severity TEXT",
     "ALTER TABLE qa_reports ADD COLUMN screenshot_base64 TEXT",
+    // QA follow-up: re-check a report 2 working days after filing.
+    "ALTER TABLE qa_reports ADD COLUMN followup_checked_at DATETIME",
+    "ALTER TABLE qa_reports ADD COLUMN followup_checked_by INTEGER",
+    "ALTER TABLE qa_reports ADD COLUMN followup_notified_at DATETIME",
   ];
 
   for (const sql of alterStatements) {
@@ -714,6 +718,9 @@ async function runMigrations(raw) {
       department TEXT,
       severity TEXT,
       screenshot_base64 TEXT,
+      followup_checked_at DATETIME,
+      followup_checked_by INTEGER,
+      followup_notified_at DATETIME,
       FOREIGN KEY (qa_user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
