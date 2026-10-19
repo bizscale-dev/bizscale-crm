@@ -3,6 +3,8 @@
 import RoleLayoutShell from '@/components/RoleLayoutShell';
 
 const navItems = [
+  { href: '/qa/stats', label: 'Stats' },
+  { href: '/qa/clients-stats', label: 'Clients Stats' },
   { href: '/qa/eod', label: 'EOD' },
   { href: '/qa/manager-tasks', label: 'Managers Tasks' },
   { href: '/qa/executives', label: 'Executives' },
