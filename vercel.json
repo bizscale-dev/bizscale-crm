@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/capture-daily-activity",
       "schedule": "25 19 * * *"
+    },
+    {
+      "path": "/api/cron/backup-db",
+      "schedule": "40 19 * * *"
     }
   ]
 }
