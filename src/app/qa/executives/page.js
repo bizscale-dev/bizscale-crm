@@ -32,7 +32,7 @@ export default async function QaExecutivesPage() {
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>Executives</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
           File a report against a manager by hand — pick the manager and the client it concerns. It shows up on that manager&apos;s Reports page (with a
-          5-day deadline to resolve it) and in your Reports page, like the ones flagged from EODs and tasks.
+          5 working-day deadline to resolve it) and in your Reports page, like the ones flagged from EODs and tasks.
         </p>
       </div>
 

@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { qaDueSql } from '@/lib/qaReports';
+import { withQaDue } from '@/lib/qaReports';
 import QaStatsClient from './QaStatsClient';
 
 export const revalidate = 0;
@@ -16,8 +16,8 @@ export default async function QaStatsPage() {
   // Every report ever filed (screenshots deliberately left out — they're big
   // and the stats view never shows them). The view filters by manager and
   // date range in the browser, so switching filters is instant.
-  const reports = await db.prepare(`
-    SELECT q.id, q.source, q.status, q.created_at, ${qaDueSql('q')} as due_at, q.resolved_at,
+  const rows = await db.prepare(`
+    SELECT q.id, q.source, q.status, q.created_at, q.resolved_at,
       q.severity, q.title, q.web_client_name, q.work_done, q.note,
       q.manager_id, m.name as manager_name, m.role as manager_role
     FROM qa_reports q
@@ -27,5 +27,5 @@ export default async function QaStatsPage() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  return <QaStatsClient reports={reports} managers={managers} today={today} />;
+  return <QaStatsClient reports={withQaDue(rows)} managers={managers} today={today} />;
 }

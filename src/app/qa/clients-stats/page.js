@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { qaDueSql } from '@/lib/qaReports';
+import { withQaDue } from '@/lib/qaReports';
 import ClientsStatsClient from './ClientsStatsClient';
 
 export const revalidate = 0;
@@ -20,8 +20,8 @@ export default async function QaClientsStatsPage() {
   // manual (Executives) reports, which now name a client. Older manual
   // reports were filed under a free-text title instead (title IS NOT NULL) —
   // those aren't tied to a client, so they're left out. Task reports never are.
-  const reports = await db.prepare(`
-    SELECT q.id, q.source, q.severity, q.status, q.created_at, ${qaDueSql('q')} as due_at, q.resolved_at, q.resolution_note,
+  const rows = await db.prepare(`
+    SELECT q.id, q.source, q.severity, q.status, q.created_at, q.resolved_at, q.resolution_note,
       q.report_date, q.web_client_name, q.page_url, q.work_done, q.note,
       q.location, q.issue, q.department,
       q.manager_id, m.name as manager_name, f.name as filed_by
@@ -34,5 +34,5 @@ export default async function QaClientsStatsPage() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  return <ClientsStatsClient reports={reports} clients={clientRows.map((c) => c.name)} today={today} />;
+  return <ClientsStatsClient reports={withQaDue(rows)} clients={clientRows.map((c) => c.name)} today={today} />;
 }

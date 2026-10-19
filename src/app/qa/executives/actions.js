@@ -91,7 +91,7 @@ export async function submitExecutiveReport(input) {
 
   await createNotificationsForUsers(db, [manager.id], {
     title: `New ${severity} severity QA report`,
-    message: `${clientName}: ${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} days`,
+    message: `${clientName}: ${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
     link: getReportsLinkForRole(manager.role),
   });
 

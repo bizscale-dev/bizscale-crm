@@ -73,7 +73,7 @@ export async function reportEodEntry(entryId, note) {
   // resolve it.
   await createNotificationsForUsers(db, [entry.manager_id], {
     title: 'New QA Report on your EOD',
-    message: `${entry.web_client_name} (EOD ${entry.report_date}): ${cleanNote.slice(0, 120)} — resolve within ${QA_RESOLVE_DAYS} days`,
+    message: `${entry.web_client_name} (EOD ${entry.report_date}): ${cleanNote.slice(0, 120)} — resolve within ${QA_RESOLVE_DAYS} working days`,
     link: getReportsLinkForRole(entry.manager_role),
   });
 

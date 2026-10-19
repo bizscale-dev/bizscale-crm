@@ -98,7 +98,7 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
       setMessage({ type: 'error', text: result.error });
       return;
     }
-    setMessage({ type: 'success', text: `Report filed against ${selectedManager?.name}. They've been notified and have 5 days to resolve it.` });
+    setMessage({ type: 'success', text: `Report filed against ${selectedManager?.name}. They've been notified and have 5 working days (Mon-Fri) to resolve it.` });
     setForm(EMPTY);
     setScreenshot(null);
     setFileKey((k) => k + 1);

@@ -36,7 +36,7 @@ function parseUtc(dateStr) {
   return new Date(dateStr.replace(' ', 'T') + 'Z');
 }
 
-// Deadline = created_at + 5 days (computed server-side as due_at). Returns
+// Deadline = created_at + 5 working days (computed server-side as due_at). Returns
 // the label/colour for an open report: green with time to spare, amber in
 // the last 2 days, red once overdue.
 function deadlineInfo(dueAt) {
@@ -189,7 +189,7 @@ export default function ManagerQaReports({ reports, resolveAction, resolveDays }
       <div>
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>Reports</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-          Issues QA has flagged on your EODs. You have {resolveDays} days from when a report is filed to
+          Issues QA has flagged on your EODs. You have {resolveDays} working days (Sat/Sun excluded) from when a report is filed to
           resolve it — the dot on this tab keeps blinking until every report is resolved.
         </p>
       </div>

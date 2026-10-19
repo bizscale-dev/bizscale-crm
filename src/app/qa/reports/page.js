@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Linkify from '../Linkify';
 import QaManualDetails, { SeverityBadge } from '@/components/QaManualDetails';
 import { cardStyle, StatPill } from '../qaStyles';
-import { QA_RESOLVE_DAYS, qaDueSql } from '@/lib/qaReports';
+import { QA_RESOLVE_DAYS, withQaDue } from '@/lib/qaReports';
 
 export const revalidate = 0;
 
@@ -26,9 +26,8 @@ export default async function QaReportsPage() {
 
   // Every report the QA team has filed (not just the signed-in person's) —
   // QA works as a team, and this is the shared record of what's been flagged.
-  const reports = await db.prepare(`
+  const rows = await db.prepare(`
     SELECT q.id, q.source, q.title, q.location, q.issue, q.department, q.severity, q.screenshot_base64, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at,
-      ${qaDueSql('q')} as due_at, (q.status = 'open' AND ${qaDueSql('q')} < datetime('now')) as is_overdue,
       q.resolved_at, q.resolution_note,
       m.id as manager_id, m.name as manager_name, m.role as manager_role,
       f.name as filed_by
@@ -38,6 +37,7 @@ export default async function QaReportsPage() {
     ORDER BY q.created_at DESC, q.id DESC
   `).all();
 
+  const reports = withQaDue(rows);
   const isOverdue = (r) => !!r.is_overdue;
   const openCount = reports.filter((r) => r.status === 'open').length;
   const overdueCount = reports.filter(isOverdue).length;
@@ -49,7 +49,7 @@ export default async function QaReportsPage() {
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>Reports</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
           EOD entries QA has flagged, with the note explaining what didn&apos;t check out. Each manager
-          has {QA_RESOLVE_DAYS} days to resolve a report. Flag new ones from the EOD page.
+          has {QA_RESOLVE_DAYS} working days (Sat/Sun excluded) to resolve a report. Flag new ones from the EOD page.
         </p>
       </div>
 

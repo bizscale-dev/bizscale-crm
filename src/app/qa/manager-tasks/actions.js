@@ -58,7 +58,7 @@ export async function reportManagerTask(assigneeId, note) {
 
   await createNotificationsForUsers(db, [row.manager_id], {
     title: 'New QA Report on your task',
-    message: `${row.task_text.slice(0, 70)}${row.task_text.length > 70 ? '…' : ''}: ${cleanNote.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} days`,
+    message: `${row.task_text.slice(0, 70)}${row.task_text.length > 70 ? '…' : ''}: ${cleanNote.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
     link: getReportsLinkForRole(row.manager_role),
   });
 
