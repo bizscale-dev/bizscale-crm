@@ -4,6 +4,8 @@ import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { fetchManagerEodReports, EOD_MANAGER_ROLES } from '@/lib/qaEod';
+import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifications';
+import { QA_RESOLVE_DAYS } from '@/lib/qaReports';
 
 async function requireQa() {
   const session = await verifySession();
@@ -49,9 +51,10 @@ export async function reportEodEntry(entryId, note) {
   const db = await getDb();
   const entry = await db.prepare(`
     SELECT e.id, e.report_id, e.web_client_name, e.page_url, e.work_done,
-      r.report_date, r.user_id as manager_id
+      r.report_date, r.user_id as manager_id, m.role as manager_role
     FROM eod_report_entries e
     JOIN eod_reports r ON r.id = e.report_id
+    JOIN users m ON m.id = r.user_id
     WHERE e.id = ?
   `).get(id);
   if (!entry) return { error: 'EOD entry not found' };
@@ -64,6 +67,15 @@ export async function reportEodEntry(entryId, note) {
     session.userId, entry.manager_id, entry.report_id, entry.id,
     entry.report_date, entry.web_client_name, entry.page_url || null, entry.work_done || null, cleanNote
   );
+
+  // Tell the manager — shows up in their bell (with the desktop toast/sound)
+  // and the login dialog; their Reports nav dot keeps blinking until they
+  // resolve it.
+  await createNotificationsForUsers(db, [entry.manager_id], {
+    title: 'New QA Report on your EOD',
+    message: `${entry.web_client_name} (EOD ${entry.report_date}): ${cleanNote.slice(0, 120)} — resolve within ${QA_RESOLVE_DAYS} days`,
+    link: getReportsLinkForRole(entry.manager_role),
+  });
 
   revalidatePath('/qa/reports');
   return { success: true };

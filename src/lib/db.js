@@ -219,6 +219,11 @@ async function runMigrations(raw) {
     // behavior — due the same day it appears) for every template created before
     // this column existed.
     "ALTER TABLE manager_task_templates ADD COLUMN duration_days INTEGER NOT NULL DEFAULT 1",
+    // Resolution tracking for qa_reports (managers have 5 days to resolve a
+    // QA flag on their EOD) — also in the CREATE TABLE below for fresh DBs.
+    "ALTER TABLE qa_reports ADD COLUMN resolved_at DATETIME",
+    "ALTER TABLE qa_reports ADD COLUMN resolution_note TEXT",
+    "ALTER TABLE qa_reports ADD COLUMN resolved_by INTEGER",
   ];
 
   for (const sql of alterStatements) {
@@ -666,8 +671,8 @@ async function runMigrations(raw) {
     // are denormalized on purpose, same precedent as eod_report_entries
     // itself: a QA report is a permanent record and must keep reading
     // correctly after the underlying EOD or client is edited/renamed.
-    // `status` is reserved for the resolution workflow still to come — every
-    // report is 'open' for now.
+    // `status` is 'open' until the manager resolves it (resolved_at/note/by),
+    // and the manager has 5 days from created_at to do so.
     `CREATE TABLE IF NOT EXISTS qa_reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       qa_user_id INTEGER NOT NULL,
@@ -681,6 +686,9 @@ async function runMigrations(raw) {
       note TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'open',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      resolved_at DATETIME,
+      resolution_note TEXT,
+      resolved_by INTEGER,
       FOREIGN KEY (qa_user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
@@ -999,7 +1007,22 @@ async function runMigrations(raw) {
     const currentSql = currentSchema.rows[0]?.sql || '';
     const missingRole = REQUIRED_ROLES.some(role => !currentSql.includes(`'${role}'`));
 
-    if (missingRole) {
+    // DISABLED BY DEFAULT: DROP TABLE users cascades ON DELETE CASCADE into
+    // every child table (eod_reports, manager_tasks, associate_tasks,
+    // notifications, qa_reports, ...) unless foreign keys are really off for
+    // that statement — and the PRAGMA below is not reliable over Turso's
+    // remote protocol (it's per-connection, a no-op inside a transaction, and
+    // `next build` runs this from several parallel workers). On 2026-10-19
+    // it wiped those tables' rows while adding the 'qa' role. Never run this
+    // automatically again: take a Turso backup / point-in-time branch first,
+    // then opt in explicitly with ALLOW_USERS_TABLE_REBUILD=true for ONE
+    // process, and verify the child tables' row counts afterwards.
+    if (missingRole && process.env.ALLOW_USERS_TABLE_REBUILD !== 'true') {
+      console.error(
+        '[db] users.role CHECK is missing a role, but the automatic users-table rebuild is disabled ' +
+        '(it cascade-deletes child tables). Back up first, then run once with ALLOW_USERS_TABLE_REBUILD=true.'
+      );
+    } else if (missingRole) {
       await raw.execute('PRAGMA foreign_keys = OFF');
       await raw.execute('DROP TABLE IF EXISTS users_new');
       await raw.execute(`

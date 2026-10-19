@@ -14,6 +14,17 @@ export function getTasksLinkForRole(role) {
   return TASKS_LINK_BY_ROLE[role] || '/';
 }
 
+// Where a manager's QA Reports page lives, by role.
+const REPORTS_LINK_BY_ROLE = {
+  seo_manager: '/seo-manager/reports',
+  web_seo_manager: '/web-seo-manager/reports',
+  writers_manager: '/writers-manager/reports',
+};
+
+export function getReportsLinkForRole(role) {
+  return REPORTS_LINK_BY_ROLE[role] || '/';
+}
+
 /**
  * Bulk-inserts one notification row per recipient — called right after a
  * task's assignee rows are created (one-off assignment or a recurring
