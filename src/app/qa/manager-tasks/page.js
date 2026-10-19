@@ -17,5 +17,12 @@ export default async function QaManagerTasksPage() {
     ORDER BY t.due_date DESC, u.name ASC
   `).all();
 
-  return <ManagerTasksView rows={rows} />;
+  const counts = await db.prepare(`
+    SELECT task_assignee_id, COUNT(*) as c FROM qa_reports
+    WHERE source = 'manager_task' GROUP BY task_assignee_id
+  `).all();
+  const reportCounts = {};
+  for (const c of counts) reportCounts[c.task_assignee_id] = c.c;
+
+  return <ManagerTasksView rows={rows} initialReportCounts={reportCounts} />;
 }

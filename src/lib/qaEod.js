@@ -59,7 +59,7 @@ export async function fetchManagerEodReports(db, managerId, filters = {}) {
   }
 
   const counts = await db.prepare(`
-    SELECT eod_entry_id, COUNT(*) as c FROM qa_reports WHERE manager_id = ? GROUP BY eod_entry_id
+    SELECT eod_entry_id, COUNT(*) as c FROM qa_reports WHERE manager_id = ? AND source = 'eod' GROUP BY eod_entry_id
   `).all(managerId);
   const reportCounts = {};
   for (const c of counts) reportCounts[c.eod_entry_id] = c.c;

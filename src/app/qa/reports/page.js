@@ -26,7 +26,7 @@ export default async function QaReportsPage() {
   // Every report the QA team has filed (not just the signed-in person's) —
   // QA works as a team, and this is the shared record of what's been flagged.
   const reports = await db.prepare(`
-    SELECT q.id, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at,
+    SELECT q.id, q.source, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at,
       ${qaDueSql('q')} as due_at, (q.status = 'open' AND ${qaDueSql('q')} < datetime('now')) as is_overdue,
       q.resolved_at, q.resolution_note,
       m.id as manager_id, m.name as manager_name, m.role as manager_role,
@@ -82,7 +82,7 @@ export default async function QaReportsPage() {
                       </span>
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      EOD of {r.report_date} · {r.web_client_name} · due {r.due_at.slice(0, 10)}
+                      {r.source === 'manager_task' ? `📋 Task due ${r.report_date}` : `EOD of ${r.report_date} · ${r.web_client_name}`} · resolve by {r.due_at.slice(0, 10)}
                     </div>
                   </div>
                   <span style={{ fontSize: '0.72rem', fontWeight: '600', color: status.color, backgroundColor: status.bg, padding: '0.2rem 0.6rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>

@@ -224,6 +224,13 @@ async function runMigrations(raw) {
     "ALTER TABLE qa_reports ADD COLUMN resolved_at DATETIME",
     "ALTER TABLE qa_reports ADD COLUMN resolution_note TEXT",
     "ALTER TABLE qa_reports ADD COLUMN resolved_by INTEGER",
+    // A QA report can now also target an admin->manager task submission, not
+    // just an EOD entry: source says which, task_assignee_id points at the
+    // manager_task_assignees row. (For source='manager_task' the NOT NULL
+    // eod_report_id/eod_entry_id columns hold 0, report_date is the task's
+    // due date and web_client_name is the label 'Manager Task'.)
+    "ALTER TABLE qa_reports ADD COLUMN source TEXT NOT NULL DEFAULT 'eod'",
+    "ALTER TABLE qa_reports ADD COLUMN task_assignee_id INTEGER",
   ];
 
   for (const sql of alterStatements) {
@@ -689,6 +696,8 @@ async function runMigrations(raw) {
       resolved_at DATETIME,
       resolution_note TEXT,
       resolved_by INTEGER,
+      source TEXT NOT NULL DEFAULT 'eod',
+      task_assignee_id INTEGER,
       FOREIGN KEY (qa_user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE CASCADE
     )`,

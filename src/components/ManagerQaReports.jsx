@@ -63,6 +63,7 @@ function StatPill({ label, value, color }) {
 function ReportCard({ report, resolveAction }) {
   const router = useRouter();
   const isOpen = report.status === 'open';
+  const isTask = report.source === 'manager_task';
   const deadline = isOpen ? deadlineInfo(report.due_at) : null;
   const [resolving, setResolving] = useState(false);
   const [note, setNote] = useState('');
@@ -88,9 +89,11 @@ function ReportCard({ report, resolveAction }) {
     <div style={{ ...cardStyle, borderColor: isOpen && deadline.overdue ? 'var(--danger)' : 'var(--border)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
         <div>
-          <div style={{ fontWeight: '600', marginBottom: '0.25rem' }}>{report.web_client_name}</div>
+          <div style={{ fontWeight: '600', marginBottom: '0.25rem' }}>
+            {isTask ? '📋 Task' : report.web_client_name}
+          </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            EOD of {report.report_date} · flagged by {report.filed_by} · due {report.due_at.slice(0, 10)}
+            {isTask ? `Task due ${report.report_date}` : `EOD of ${report.report_date}`} · flagged by {report.filed_by} · resolve by {report.due_at.slice(0, 10)}
           </div>
         </div>
         {isOpen ? (

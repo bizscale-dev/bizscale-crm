@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { cardStyle, selectStyle, formatMonth, StatPill, BRAND_COLOR } from '../qaStyles';
 import Linkify from '../Linkify';
+import { reportManagerTask } from './actions';
 
 const ROLE_LABELS = {
   seo_manager: 'SEO Manager',
@@ -26,7 +27,8 @@ function statusFor(row) {
   return STATUS_STYLES.late_pending;
 }
 
-export default function ManagerTasksView({ rows }) {
+export default function ManagerTasksView({ rows, initialReportCounts }) {
+  const [reportCounts, setReportCounts] = useState(initialReportCounts);
   const people = useMemo(() => {
     const seen = new Map();
     for (const r of rows) seen.set(r.manager_id, r.manager_name);
@@ -85,15 +87,41 @@ export default function ManagerTasksView({ rows }) {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {filtered.map((r) => <TaskCard key={r.assignee_id} row={r} />)}
+          {filtered.map((r) => (
+            <TaskCard
+              key={r.assignee_id}
+              row={r}
+              flagCount={reportCounts[r.assignee_id] || 0}
+              onReported={() => setReportCounts((prev) => ({ ...prev, [r.assignee_id]: (prev[r.assignee_id] || 0) + 1 }))}
+            />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function TaskCard({ row }) {
+function TaskCard({ row, flagCount, onReported }) {
   const [expanded, setExpanded] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submitReport = async () => {
+    setSubmitting(true);
+    setError(null);
+    const result = await reportManagerTask(row.assignee_id, note);
+    setSubmitting(false);
+    if (result?.error) {
+      setError(result.error);
+      return;
+    }
+    onReported();
+    setReporting(false);
+    setNote('');
+  };
+
   const status = statusFor(row);
   const canExpand = !!row.submitted_at;
 
@@ -114,8 +142,46 @@ function TaskCard({ row }) {
             Assigned by Admin · Due {row.due_date} {row.template_id ? '(12 AM)' : row.due_time}
           </div>
         </div>
-        <span style={{ fontSize: '0.8rem', fontWeight: '600', color: status.color, whiteSpace: 'nowrap' }}>{status.text}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {flagCount > 0 && (
+            <span style={{ fontSize: '0.68rem', fontWeight: '600', color: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.12)', padding: '0.1rem 0.45rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>
+              ⚑ Flagged{flagCount > 1 ? ` ×${flagCount}` : ''}
+            </span>
+          )}
+          <span style={{ fontSize: '0.8rem', fontWeight: '600', color: status.color, whiteSpace: 'nowrap' }}>{status.text}</span>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setReporting(true); setError(null); }}
+            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.4rem', padding: '0.2rem 0.55rem', fontSize: '0.7rem', fontWeight: '600', color: 'var(--foreground)', cursor: 'pointer' }}
+          >
+            Report
+          </button>
+        </div>
       </div>
+
+      {reporting && (
+        <div style={{ marginTop: '0.75rem', padding: '0.75rem', border: '1px solid rgba(245, 158, 11, 0.45)', borderRadius: '0.5rem', backgroundColor: 'rgba(245, 158, 11, 0.05)' }}>
+          <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+            What’s wrong with this task?
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            placeholder="Add a note — e.g. submission doesn't match the task, proof is missing or unclear..."
+            style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--foreground)', fontSize: '0.9rem', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
+          />
+          {error && <div style={{ fontSize: '0.78rem', color: 'var(--danger)', marginTop: '0.4rem' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
+            <button type="button" onClick={submitReport} disabled={submitting} style={{ padding: '0.45rem 1rem', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '0.4rem', fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer', opacity: submitting ? 0.6 : 1 }}>
+              {submitting ? 'Submitting...' : 'Submit report'}
+            </button>
+            <button type="button" onClick={() => setReporting(false)} style={{ padding: '0.45rem 1rem', backgroundColor: 'transparent', color: 'var(--foreground)', border: '1px solid var(--border)', borderRadius: '0.4rem', fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>
         {row.template_id ? '🔁 ' : ''}<Linkify text={row.task_text} />
