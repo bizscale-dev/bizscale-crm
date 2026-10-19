@@ -5,6 +5,7 @@ import RoleLayoutShell from '@/components/RoleLayoutShell';
 const navItems = [
   { href: '/qa/eod', label: 'EOD' },
   { href: '/qa/manager-tasks', label: 'Managers Tasks' },
+  { href: '/qa/executives', label: 'Executives' },
   { href: '/qa/reports', label: 'Reports' },
 ];
 

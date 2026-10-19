@@ -13,7 +13,8 @@ export default async function SeoManagerReportsPage() {
   // Open reports first (soonest deadline on top), then resolved, newest first.
   const reports = await db.prepare(`
     SELECT q.id, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note,
-      q.source, q.status, q.created_at, ${qaDueSql('q')} as due_at, q.resolved_at, q.resolution_note,
+      q.source, q.title, q.location, q.issue, q.department, q.severity, q.screenshot_base64,
+      q.status, q.created_at, ${qaDueSql('q')} as due_at, q.resolved_at, q.resolution_note,
       f.name as filed_by
     FROM qa_reports q
     JOIN users f ON f.id = q.qa_user_id

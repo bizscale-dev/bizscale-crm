@@ -231,6 +231,16 @@ async function runMigrations(raw) {
     // due date and web_client_name is the label 'Manager Task'.)
     "ALTER TABLE qa_reports ADD COLUMN source TEXT NOT NULL DEFAULT 'eod'",
     "ALTER TABLE qa_reports ADD COLUMN task_assignee_id INTEGER",
+    // source='manual' reports (QA's Executives page): a hand-filed report
+    // against a manager with structured fields. The free-text description is
+    // stored in `note`, the url in page_url; web_client_name holds the title
+    // and the NOT NULL eod ids are 0 (same convention as manager_task).
+    "ALTER TABLE qa_reports ADD COLUMN title TEXT",
+    "ALTER TABLE qa_reports ADD COLUMN location TEXT",
+    "ALTER TABLE qa_reports ADD COLUMN issue TEXT",
+    "ALTER TABLE qa_reports ADD COLUMN department TEXT",
+    "ALTER TABLE qa_reports ADD COLUMN severity TEXT",
+    "ALTER TABLE qa_reports ADD COLUMN screenshot_base64 TEXT",
   ];
 
   for (const sql of alterStatements) {
@@ -698,6 +708,12 @@ async function runMigrations(raw) {
       resolved_by INTEGER,
       source TEXT NOT NULL DEFAULT 'eod',
       task_assignee_id INTEGER,
+      title TEXT,
+      location TEXT,
+      issue TEXT,
+      department TEXT,
+      severity TEXT,
+      screenshot_base64 TEXT,
       FOREIGN KEY (qa_user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE CASCADE
     )`,

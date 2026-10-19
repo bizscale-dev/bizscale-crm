@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/db';
 import Link from 'next/link';
 import Linkify from '../Linkify';
+import QaManualDetails, { SeverityBadge } from '@/components/QaManualDetails';
 import { cardStyle, StatPill } from '../qaStyles';
 import { QA_RESOLVE_DAYS, qaDueSql } from '@/lib/qaReports';
 
@@ -26,7 +27,7 @@ export default async function QaReportsPage() {
   // Every report the QA team has filed (not just the signed-in person's) —
   // QA works as a team, and this is the shared record of what's been flagged.
   const reports = await db.prepare(`
-    SELECT q.id, q.source, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at,
+    SELECT q.id, q.source, q.title, q.location, q.issue, q.department, q.severity, q.screenshot_base64, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at,
       ${qaDueSql('q')} as due_at, (q.status = 'open' AND ${qaDueSql('q')} < datetime('now')) as is_overdue,
       q.resolved_at, q.resolution_note,
       m.id as manager_id, m.name as manager_name, m.role as manager_role,
@@ -82,12 +83,19 @@ export default async function QaReportsPage() {
                       </span>
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      {r.source === 'manager_task' ? `📋 Task due ${r.report_date}` : `EOD of ${r.report_date} · ${r.web_client_name}`} · resolve by {r.due_at.slice(0, 10)}
+                      {r.source === 'manual'
+                        ? `Manual report · ${r.title} · filed ${r.report_date}`
+                        : r.source === 'manager_task'
+                          ? `📋 Task due ${r.report_date}`
+                          : `EOD of ${r.report_date} · ${r.web_client_name}`} · resolve by {r.due_at.slice(0, 10)}
                     </div>
                   </div>
-                  <span style={{ fontSize: '0.72rem', fontWeight: '600', color: status.color, backgroundColor: status.bg, padding: '0.2rem 0.6rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>
-                    {status.label}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {r.source === 'manual' && <SeverityBadge severity={r.severity} />}
+                    <span style={{ fontSize: '0.72rem', fontWeight: '600', color: status.color, backgroundColor: status.bg, padding: '0.2rem 0.6rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>
+                      {status.label}
+                    </span>
+                  </div>
                 </div>
 
                 {r.page_url && (
@@ -100,6 +108,8 @@ export default async function QaReportsPage() {
                     <Linkify text={r.work_done} />
                   </div>
                 )}
+
+                {r.source === 'manual' && <QaManualDetails report={r} />}
 
                 <div style={{ padding: '0.75rem 1rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderLeft: '3px solid #f59e0b', borderRadius: '0.5rem', fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>
                   <Linkify text={r.note} />

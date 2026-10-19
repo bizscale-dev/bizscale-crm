@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import QaManualDetails, { SeverityBadge } from '@/components/QaManualDetails';
+
 const BRAND_COLOR = 'var(--primary)';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -64,6 +66,7 @@ function ReportCard({ report, resolveAction }) {
   const router = useRouter();
   const isOpen = report.status === 'open';
   const isTask = report.source === 'manager_task';
+  const isManual = report.source === 'manual';
   const deadline = isOpen ? deadlineInfo(report.due_at) : null;
   const [resolving, setResolving] = useState(false);
   const [note, setNote] = useState('');
@@ -90,12 +93,14 @@ function ReportCard({ report, resolveAction }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
         <div>
           <div style={{ fontWeight: '600', marginBottom: '0.25rem' }}>
-            {isTask ? '📋 Task' : report.web_client_name}
+            {isManual ? report.title : isTask ? '📋 Task' : report.web_client_name}
           </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            {isTask ? `Task due ${report.report_date}` : `EOD of ${report.report_date}`} · flagged by {report.filed_by} · resolve by {report.due_at.slice(0, 10)}
+            {isManual ? `Reported ${report.report_date}` : isTask ? `Task due ${report.report_date}` : `EOD of ${report.report_date}`} · flagged by {report.filed_by} · resolve by {report.due_at.slice(0, 10)}
           </div>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {isManual && <SeverityBadge severity={report.severity} />}
         {isOpen ? (
           // suppressHydrationWarning: the label depends on the current time,
           // which differs by a few ms between the server render and hydration.
@@ -107,6 +112,7 @@ function ReportCard({ report, resolveAction }) {
             ✅ Resolved{resolvedLate ? ' (late)' : ''}
           </span>
         )}
+        </div>
       </div>
 
       {report.page_url && (
@@ -120,8 +126,10 @@ function ReportCard({ report, resolveAction }) {
         </div>
       )}
 
+      {isManual && <QaManualDetails report={report} />}
+
       <div style={{ padding: '0.75rem 1rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderLeft: '3px solid #f59e0b', borderRadius: '0.5rem', fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>
-        <div style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>QA note</div>
+        <div style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>{isManual ? 'Description' : 'QA note'}</div>
         <Linkify text={report.note} />
       </div>
 
