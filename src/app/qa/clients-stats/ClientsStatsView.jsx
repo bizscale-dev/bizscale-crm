@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { cardStyle, StatPill } from '../qaStyles';
 import QaBarChart from '../QaBarChart';
 import Linkify from '../Linkify';
+import QaManualDetails, { SeverityBadge } from '@/components/QaManualDetails';
 import { DateRangeControls, StatusChip, formatResolveTime, labelStyle, inputStyle, th, td } from '../QaStatsShared';
 import { bucketize, filedDate, formatDay, inRange, parseUtc, statusOf, summarize } from '../statsUtils';
 
@@ -191,9 +192,12 @@ export default function ClientsStatsView({ reports, clients, today }) {
                   <div key={r.id} style={{ padding: '0.9rem 1rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '0.6rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.5rem' }}>
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                        Filed {formatDay(filedDate(r))} · EOD of {r.report_date} · <strong style={{ color: 'var(--foreground)' }}>{r.manager_name}</strong> · by {r.filed_by}
+                        Filed {formatDay(filedDate(r))} · {r.source === 'manual' ? 'Manual report' : `EOD of ${r.report_date}`} · <strong style={{ color: 'var(--foreground)' }}>{r.manager_name}</strong> · by {r.filed_by}
                       </div>
-                      <StatusChip status={statusOf(r, nowMs)} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {r.source === 'manual' && <SeverityBadge severity={r.severity} />}
+                        <StatusChip status={statusOf(r, nowMs)} />
+                      </div>
                     </div>
                     {r.page_url && (
                       <a href={r.page_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontSize: '0.78rem', color: 'var(--primary)', wordBreak: 'break-all', textDecoration: 'none', marginBottom: '0.4rem' }}>
@@ -203,6 +207,7 @@ export default function ClientsStatsView({ reports, clients, today }) {
                     {r.work_done && (
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem', whiteSpace: 'pre-wrap' }}><Linkify text={r.work_done} /></div>
                     )}
+                    {r.source === 'manual' && <QaManualDetails report={r} />}
                     <div style={{ padding: '0.6rem 0.85rem', backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)', borderLeft: '3px solid #f59e0b', borderRadius: '0.4rem', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
                       <Linkify text={r.note} />
                     </div>

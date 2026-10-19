@@ -42,9 +42,9 @@ const inputStyle = {
   fontFamily: 'inherit',
 };
 
-const EMPTY = { title: '', description: '', location: '', url: '', issue: '', department: '', severity: '' };
+const EMPTY = { client: '', description: '', location: '', url: '', issue: '', department: '', severity: '' };
 
-export default function ExecutiveReportForm({ managers, roleLabels }) {
+export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
   const [managerId, setManagerId] = useState('');
   const [form, setForm] = useState(EMPTY);
   const [screenshot, setScreenshot] = useState(null);
@@ -55,6 +55,14 @@ export default function ExecutiveReportForm({ managers, roleLabels }) {
 
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
   const selectedManager = managers.find((m) => String(m.id) === managerId);
+
+  // The report has to point at a real client from the roster — same list the
+  // Clients Stats page uses — so only an exact (case-insensitive) pick counts.
+  const typed = form.client.trim().toLowerCase();
+  const clientMatch = clients.find((c) => c.toLowerCase() === typed) || null;
+  const clientSuggestions = !clientMatch && typed
+    ? clients.filter((c) => c.toLowerCase().includes(typed)).slice(0, 8)
+    : [];
 
   const byRole = new Map();
   for (const m of managers) {
@@ -130,8 +138,31 @@ export default function ExecutiveReportForm({ managers, roleLabels }) {
               </div>
 
               <div>
-                <label style={labelStyle}>Title</label>
-                <input type="text" value={form.title} onChange={set('title')} maxLength={200} required style={inputStyle} placeholder="Short summary of the problem" />
+                <label style={labelStyle}>Client</label>
+                <input
+                  list="qa-exec-clients"
+                  value={form.client}
+                  onChange={set('client')}
+                  maxLength={300}
+                  required
+                  style={{ ...inputStyle, borderColor: clientMatch ? BRAND_COLOR : 'var(--border)' }}
+                  placeholder="Search or pick the client this is about…"
+                />
+                <datalist id="qa-exec-clients">
+                  {clients.map((c) => <option key={c} value={c} />)}
+                </datalist>
+                {clientSuggestions.length > 0 && (
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
+                    {clientSuggestions.map((c) => (
+                      <button key={c} type="button" onClick={() => setForm((prev) => ({ ...prev, client: c }))} style={{ padding: '0.3rem 0.7rem', borderRadius: '2rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--foreground)', fontSize: '0.75rem', cursor: 'pointer' }}>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!clientMatch && typed && clientSuggestions.length === 0 && (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>No client matches “{form.client}”.</div>
+                )}
               </div>
 
               <div>
@@ -196,12 +227,12 @@ export default function ExecutiveReportForm({ managers, roleLabels }) {
             <div>
               <button
                 type="submit"
-                disabled={submitting || !form.severity}
-                style={{ padding: '0.7rem 1.6rem', backgroundColor: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', opacity: submitting || !form.severity ? 0.6 : 1 }}
+                disabled={submitting || !form.severity || !clientMatch}
+                style={{ padding: '0.7rem 1.6rem', backgroundColor: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', opacity: submitting || !form.severity || !clientMatch ? 0.6 : 1 }}
               >
                 {submitting ? 'Submitting...' : 'Submit report'}
               </button>
-              {!form.severity && <span style={{ marginLeft: '0.75rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>Pick a severity to submit</span>}
+              {(!form.severity || !clientMatch) && <span style={{ marginLeft: '0.75rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{!clientMatch ? 'Pick a client from the list' : 'Pick a severity'} to submit</span>}
             </div>
           </>
         )}

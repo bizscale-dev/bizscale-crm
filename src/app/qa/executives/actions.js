@@ -20,7 +20,7 @@ const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
 /**
  * QA files a report by hand against one manager (the Executives page) —
- * title, description, location, url, issue, department, severity and an
+ * the client it concerns, description, location, url, issue, department, severity and an
  * optional screenshot. Lands in the same qa_reports pipeline as the EOD and
  * task reports, so the manager is notified, has QA_RESOLVE_DAYS to resolve
  * it, and their Reports tab blinks until then. Everything is re-validated
@@ -31,7 +31,7 @@ export async function submitExecutiveReport(input) {
   if (error) return { error };
 
   const managerId = parseInt(input?.managerId, 10);
-  const title = clean(input?.title, 200);
+  const clientInput = clean(input?.client, 300);
   const description = clean(input?.description, 3000);
   const location = clean(input?.location, 300);
   const issue = clean(input?.issue, 500);
@@ -41,7 +41,7 @@ export async function submitExecutiveReport(input) {
   const screenshot = input?.screenshot || null;
 
   if (!managerId) return { error: 'Select a manager' };
-  if (!title) return { error: 'Title is required' };
+  if (!clientInput) return { error: 'Select the client this report is about' };
   if (!description) return { error: 'Description is required' };
   if (!QA_SEVERITIES.includes(severity)) return { error: 'Pick a severity (high, medium or low)' };
 
@@ -70,20 +70,28 @@ export async function submitExecutiveReport(input) {
   ).get(managerId, ...MANAGER_ROLES);
   if (!manager) return { error: 'Manager not found' };
 
+  // The client must be one from the SEO roster (the list the form offers),
+  // matched case-insensitively; the roster's own spelling is what's stored.
+  const roster = await db.prepare(
+    "SELECT DISTINCT TRIM(name) as name FROM clients WHERE name IS NOT NULL AND TRIM(name) != ''"
+  ).all();
+  const clientName = roster.map((r) => r.name).find((n) => n.toLowerCase() === clientInput.toLowerCase());
+  if (!clientName) return { error: 'Pick a client from the list' };
+
   const today = new Date().toISOString().split('T')[0];
   await db.prepare(`
     INSERT INTO qa_reports
       (qa_user_id, manager_id, eod_report_id, eod_entry_id, report_date, web_client_name, page_url, work_done, note,
        source, title, location, issue, department, severity, screenshot_base64)
-    VALUES (?, ?, 0, 0, ?, ?, ?, NULL, ?, 'manual', ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, 0, 0, ?, ?, ?, NULL, ?, 'manual', NULL, ?, ?, ?, ?, ?)
   `).run(
-    session.userId, manager.id, today, title, url || null, description,
-    title, location || null, issue || null, department || null, severity, screenshot
+    session.userId, manager.id, today, clientName, url || null, description,
+    location || null, issue || null, department || null, severity, screenshot
   );
 
   await createNotificationsForUsers(db, [manager.id], {
     title: `New ${severity} severity QA report`,
-    message: `${title}: ${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} days`,
+    message: `${clientName}: ${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} days`,
     link: getReportsLinkForRole(manager.role),
   });
 

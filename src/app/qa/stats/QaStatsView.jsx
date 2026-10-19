@@ -15,7 +15,7 @@ const SEVERITY_COLORS = { high: 'var(--danger)', medium: '#f59e0b', low: 'var(--
 const LIST_CAP = 100;
 
 function subjectOf(r) {
-  if (r.source === 'manual') return r.title || 'Manual report';
+  if (r.source === 'manual') return r.title || r.web_client_name || 'Manual report';
   if (r.source === 'manager_task') return `Task: ${(r.work_done || '').slice(0, 80)}`;
   return r.web_client_name;
 }
