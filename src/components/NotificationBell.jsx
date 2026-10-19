@@ -63,6 +63,36 @@ function playNotificationTone() {
   osc.stop(ctx.currentTime + 0.4);
 }
 
+const POLL_INTERVAL_MS = 20 * 1000;
+// A toast for something that arrived over 15 minutes ago is just noise —
+// the login dialog and the bell already cover older unread items.
+const MAX_TOAST_AGE_MS = 15 * 60 * 1000;
+const WATERMARK_KEY = 'bizscale-last-toast-id';
+
+// Notification ids are global and monotonic, so one per-browser watermark
+// is enough: toast anything unread with a higher id than the last one this
+// browser already toasted (or silently baselined on first ever run).
+function readToastWatermark() {
+  try {
+    const v = window.localStorage.getItem(WATERMARK_KEY);
+    return v === null ? null : parseInt(v, 10);
+  } catch {
+    return null;
+  }
+}
+
+function writeToastWatermark(id) {
+  try {
+    window.localStorage.setItem(WATERMARK_KEY, String(id));
+  } catch {
+    // localStorage unavailable — worst case the next load re-baselines.
+  }
+}
+
+function ageMs(createdAt) {
+  return Date.now() - new Date(createdAt.replace(' ', 'T') + 'Z').getTime();
+}
+
 function getNotificationPermission() {
   if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
   return Notification.permission;
@@ -110,9 +140,9 @@ export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [permission, setPermission] = useState(getNotificationPermission);
+  const [testResult, setTestResult] = useState(null);
   const prevUnreadRef = useRef(0);
   const firstPollRef = useRef(true);
-  const lastSeenIdRef = useRef(0);
 
   // Browsers only allow the permission prompt in response to a user
   // gesture, so ask on the first click anywhere in the app (same unlock
@@ -141,29 +171,35 @@ export default function NotificationBell() {
       const count = await getUnreadNotificationCount();
       if (cancelled) return;
 
-      if (firstPollRef.current) {
-        // Remember the newest existing notification so only genuinely new
-        // ones (arriving after this page loaded) ever trigger a toast.
+      // Look at the full list on the first poll of a page load (so a
+      // notification that arrived while the page was reloading/closed still
+      // toasts) and whenever the unread count rises. "Already toasted" is
+      // tracked by a watermark id in localStorage, not by page-load state —
+      // a reload right after an assignment used to swallow its toast.
+      if (firstPollRef.current || count > prevUnreadRef.current) {
         const rows = await getNotifications();
         if (cancelled) return;
-        lastSeenIdRef.current = rows.reduce((max, r) => Math.max(max, r.id), 0);
-      } else if (count > prevUnreadRef.current) {
-        // Unread count went UP since the last poll — fetch what's new and
-        // show a native desktop toast for each (cap 3 so a burst doesn't
-        // flood the screen); fall back to just our in-page tone if the
-        // user hasn't granted desktop-notification permission.
-        const rows = await getNotifications();
-        if (cancelled) return;
-        const fresh = rows
-          .filter((r) => !r.read_at && r.id > lastSeenIdRef.current)
-          .sort((a, b) => a.id - b.id);
-        lastSeenIdRef.current = rows.reduce((max, r) => Math.max(max, r.id), lastSeenIdRef.current);
+        const maxId = rows.reduce((max, r) => Math.max(max, r.id), 0);
+        const watermark = readToastWatermark();
 
-        let toastShown = false;
-        for (const r of fresh.slice(-3)) {
-          if (showDesktopNotification(r, openFromToast)) toastShown = true;
+        if (watermark === null) {
+          // First time on this browser: everything that already exists
+          // counts as seen; only notifications after this toast.
+          writeToastWatermark(maxId);
+        } else {
+          const fresh = rows
+            .filter((r) => !r.read_at && r.id > watermark && ageMs(r.created_at) < MAX_TOAST_AGE_MS)
+            .sort((a, b) => a.id - b.id);
+          writeToastWatermark(Math.max(watermark, maxId));
+
+          if (fresh.length > 0) {
+            let toastShown = false;
+            for (const r of fresh.slice(-3)) {
+              if (showDesktopNotification(r, openFromToast)) toastShown = true;
+            }
+            if (!toastShown || document.visibilityState === 'visible') playNotificationTone();
+          }
         }
-        if (!toastShown || document.visibilityState === 'visible') playNotificationTone();
       }
 
       firstPollRef.current = false;
@@ -171,9 +207,18 @@ export default function NotificationBell() {
       setUnreadCount(count);
     };
     poll();
-    const interval = setInterval(poll, 60000);
+    const interval = setInterval(poll, POLL_INTERVAL_MS);
     return () => { cancelled = true; clearInterval(interval); };
   }, [router]);
+
+  const handleTestAlert = () => {
+    const shown = showDesktopNotification(
+      { id: `test-${Date.now()}`, title: 'Test notification', message: 'Desktop alerts are working.', link: '' },
+      () => {}
+    );
+    setTestResult(shown ? 'sent' : 'failed');
+    if (shown && document.visibilityState === 'visible') playNotificationTone();
+  };
 
   const handleToggle = async () => {
     const next = !open;
@@ -274,6 +319,20 @@ export default function NotificationBell() {
               >
                 🔔 Turn on desktop alerts — get a popup + sound even when this tab is in the background
               </button>
+            )}
+            {permission === 'granted' && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', borderBottom: '1px solid var(--border)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                <span>
+                  {testResult === 'failed'
+                    ? "Couldn't show a popup — check Windows notification / Focus Assist settings."
+                    : testResult === 'sent'
+                      ? 'Test sent — did a popup appear?'
+                      : '✓ Desktop alerts are on'}
+                </span>
+                <button type="button" onClick={handleTestAlert} style={{ background: 'none', border: 'none', color: BRAND_COLOR, fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
+                  Send test
+                </button>
+              </div>
             )}
             {permission === 'denied' && (
               <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid var(--border)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
