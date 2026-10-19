@@ -63,6 +63,37 @@ function playNotificationTone() {
   osc.stop(ctx.currentTime + 0.4);
 }
 
+function getNotificationPermission() {
+  if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
+  return Notification.permission;
+}
+
+// Native OS toast (the Windows/macOS banner Chrome shows for e.g. Google
+// Chat) — works while the tab is open but in the background or minimized.
+// When the tab is visible we mute the toast's own sound and play our
+// synthesized tone instead (one ding, not two); when it's hidden the OS
+// plays its notification sound, since a backgrounded tab's Web Audio is
+// unreliable. Returns whether a toast was actually shown.
+function showDesktopNotification(n, onClick) {
+  if (getNotificationPermission() !== 'granted') return false;
+  try {
+    const toast = new Notification(n.title, {
+      body: n.message,
+      icon: '/logo.png',
+      tag: `bizscale-notification-${n.id}`,
+      silent: document.visibilityState === 'visible',
+    });
+    toast.onclick = () => {
+      window.focus();
+      toast.close();
+      onClick(n);
+    };
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function timeAgo(dateStr) {
   const diffMs = Date.now() - new Date(dateStr.replace(' ', 'T') + 'Z').getTime();
   const mins = Math.floor(diffMs / 60000);
@@ -78,19 +109,63 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
+  const [permission, setPermission] = useState(getNotificationPermission);
   const prevUnreadRef = useRef(0);
   const firstPollRef = useRef(true);
+  const lastSeenIdRef = useRef(0);
+
+  // Browsers only allow the permission prompt in response to a user
+  // gesture, so ask on the first click anywhere in the app (same unlock
+  // pattern as the audio context) rather than on page load.
+  useEffect(() => {
+    if (getNotificationPermission() !== 'default') return;
+    const ask = () => {
+      Notification.requestPermission()
+        .then((result) => setPermission(result))
+        .catch(() => {});
+    };
+    document.addEventListener('click', ask, { once: true });
+    return () => document.removeEventListener('click', ask);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
+
+    const openFromToast = async (n) => {
+      await markNotificationRead(n.id);
+      setUnreadCount((c) => Math.max(0, c - 1));
+      router.push(n.link);
+    };
+
     const poll = async () => {
       const count = await getUnreadNotificationCount();
       if (cancelled) return;
-      // Only beep when the unread count goes UP compared to the last poll —
-      // never on first mount, never when it drops from reading something.
-      if (!firstPollRef.current && count > prevUnreadRef.current) {
-        playNotificationTone();
+
+      if (firstPollRef.current) {
+        // Remember the newest existing notification so only genuinely new
+        // ones (arriving after this page loaded) ever trigger a toast.
+        const rows = await getNotifications();
+        if (cancelled) return;
+        lastSeenIdRef.current = rows.reduce((max, r) => Math.max(max, r.id), 0);
+      } else if (count > prevUnreadRef.current) {
+        // Unread count went UP since the last poll — fetch what's new and
+        // show a native desktop toast for each (cap 3 so a burst doesn't
+        // flood the screen); fall back to just our in-page tone if the
+        // user hasn't granted desktop-notification permission.
+        const rows = await getNotifications();
+        if (cancelled) return;
+        const fresh = rows
+          .filter((r) => !r.read_at && r.id > lastSeenIdRef.current)
+          .sort((a, b) => a.id - b.id);
+        lastSeenIdRef.current = rows.reduce((max, r) => Math.max(max, r.id), lastSeenIdRef.current);
+
+        let toastShown = false;
+        for (const r of fresh.slice(-3)) {
+          if (showDesktopNotification(r, openFromToast)) toastShown = true;
+        }
+        if (!toastShown || document.visibilityState === 'visible') playNotificationTone();
       }
+
       firstPollRef.current = false;
       prevUnreadRef.current = count;
       setUnreadCount(count);
@@ -98,7 +173,7 @@ export default function NotificationBell() {
     poll();
     const interval = setInterval(poll, 60000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+  }, [router]);
 
   const handleToggle = async () => {
     const next = !open;
@@ -191,6 +266,20 @@ export default function NotificationBell() {
                 </button>
               )}
             </div>
+            {permission === 'default' && (
+              <button
+                type="button"
+                onClick={() => Notification.requestPermission().then(setPermission).catch(() => {})}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 1rem', border: 'none', borderBottom: '1px solid var(--border)', background: 'rgba(22, 178, 147, 0.08)', color: BRAND_COLOR, fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer' }}
+              >
+                🔔 Turn on desktop alerts — get a popup + sound even when this tab is in the background
+              </button>
+            )}
+            {permission === 'denied' && (
+              <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid var(--border)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                Desktop alerts are blocked — allow notifications for this site in your browser&apos;s site settings to get popups.
+              </div>
+            )}
             {notifications.length === 0 ? (
               <p style={{ padding: '1.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>
                 No notifications yet.
