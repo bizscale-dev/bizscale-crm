@@ -36,7 +36,7 @@ export default function LinkList({ text, style }) {
 
   // Break onto one link per line: split before every URL, drop empty bits.
   const lines = value
-    .split(/\s+(?=(?:https?:\/\/|www\.))|\n+/)
+    .split(/[\s,;]+(?=(?:https?:\/\/|www\.))|\n+/)
     .map((l) => l.trim().replace(/[,;]+$/, ''))
     .filter(Boolean);
 
