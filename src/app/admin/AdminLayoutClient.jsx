@@ -18,6 +18,7 @@ const navItems = [
   { href: '/admin/writers', label: 'Writers' },
   { href: '/admin/reports', label: 'Reports' },
   { href: '/admin/eods', label: 'EODs' },
+  { href: '/admin/qa', label: 'QA' },
   { href: '/admin/settings', label: 'Settings' },
 ];
 

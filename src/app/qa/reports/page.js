@@ -23,7 +23,9 @@ const STATUS_STYLES = {
 
 const toDate = (dateStr) => new Date(dateStr.replace(' ', 'T') + 'Z');
 
-export default async function QaReportsPage() {
+// readOnly is passed by the admin QA page, which shows this same list without
+// the QA-only controls (delete, links into the QA portal).
+export default async function QaReportsPage({ readOnly = false } = {}) {
   const db = await getDb();
 
   // Every report the QA team has filed (not just the signed-in person's) —
@@ -77,9 +79,13 @@ export default async function QaReportsPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.3rem' }}>
-                      <Link href={`/qa/eod/${r.manager_id}`} style={{ fontWeight: '600', color: 'inherit', textDecoration: 'none' }}>
-                        {r.manager_name}
-                      </Link>
+                      {readOnly ? (
+                        <span style={{ fontWeight: '600' }}>{r.manager_name}</span>
+                      ) : (
+                        <Link href={`/qa/eod/${r.manager_id}`} style={{ fontWeight: '600', color: 'inherit', textDecoration: 'none' }}>
+                          {r.manager_name}
+                        </Link>
+                      )}
                       <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '1rem', backgroundColor: 'rgba(22, 178, 147, 0.1)', color: 'var(--primary)', fontWeight: '600' }}>
                         {ROLE_LABELS[r.manager_role] || r.manager_role}
                       </span>
@@ -120,7 +126,7 @@ export default async function QaReportsPage() {
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.6rem' }}>
                   Flagged by {r.filed_by} · {new Date(r.created_at.replace(' ', 'T') + 'Z').toLocaleString()}
                 </div>
-                <DeleteReportButton reportId={r.id} />
+                {!readOnly && <DeleteReportButton reportId={r.id} />}
               </div>
             );
           })}
