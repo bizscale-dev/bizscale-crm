@@ -25,6 +25,7 @@ export default function QaLayout({ children }) {
     { href: '/qa/manager-tasks', label: 'Managers Tasks' },
     { href: '/qa/executives', label: 'Executives' },
     { href: '/qa/reports', label: 'Reports' },
+    { href: '/qa/resolved', label: 'Resolved' },
     { href: '/qa/follow-ups', label: 'Follow-ups', badgeCount: followUpCount },
   ];
 

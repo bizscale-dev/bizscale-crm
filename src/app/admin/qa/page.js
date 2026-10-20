@@ -9,6 +9,7 @@ const TABS = [
   { key: 'stats', label: 'Stats' },
   { key: 'clients-stats', label: 'Clients Stats' },
   { key: 'reports', label: 'Reports' },
+  { key: 'resolved', label: 'Resolved' },
 ];
 
 // Read-only window into the QA portal: the same Stats, Clients Stats and
@@ -46,6 +47,7 @@ export default async function AdminQaPage({ searchParams }) {
       {active === 'stats' && <QaStatsPage />}
       {active === 'clients-stats' && <QaClientsStatsPage />}
       {active === 'reports' && <QaReportsPage readOnly />}
+      {active === 'resolved' && <QaReportsPage readOnly onlyResolved />}
     </div>
   );
 }

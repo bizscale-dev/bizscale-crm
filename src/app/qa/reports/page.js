@@ -25,7 +25,8 @@ const toDate = (dateStr) => new Date(dateStr.replace(' ', 'T') + 'Z');
 
 // readOnly is passed by the admin QA page, which shows this same list without
 // the QA-only controls (delete, links into the QA portal).
-export default async function QaReportsPage({ readOnly = false } = {}) {
+// onlyResolved is passed by the Resolved page (QA portal and admin tab).
+export default async function QaReportsPage({ readOnly = false, onlyResolved = false } = {}) {
   const db = await getDb();
 
   // Every report the QA team has filed (not just the signed-in person's) —
@@ -38,7 +39,8 @@ export default async function QaReportsPage({ readOnly = false } = {}) {
     FROM qa_reports q
     JOIN users m ON m.id = q.manager_id
     JOIN users f ON f.id = q.qa_user_id
-    ORDER BY q.created_at DESC, q.id DESC
+    ${onlyResolved ? "WHERE q.status = 'resolved'" : ''}
+    ORDER BY ${onlyResolved ? 'q.resolved_at DESC' : 'q.created_at DESC'}, q.id DESC
   `).all();
 
   const reports = withQaDue(rows);
@@ -46,28 +48,39 @@ export default async function QaReportsPage({ readOnly = false } = {}) {
   const openCount = reports.filter((r) => r.status === 'open').length;
   const overdueCount = reports.filter(isOverdue).length;
   const resolvedCount = reports.length - openCount;
+  const lateCount = reports.filter((r) => r.status === 'resolved' && r.resolved_at > r.due_at).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div>
-        <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>Reports</h1>
+        <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>{onlyResolved ? 'Resolved' : 'Reports'}</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-          EOD entries QA has flagged, with the note explaining what didn&apos;t check out. Each manager
-          has {QA_RESOLVE_DAYS} working days (Sat/Sun excluded) to resolve a report. Flag new ones from the EOD page.
+          {onlyResolved ? 'Issues the managers have resolved, newest resolution first, with their resolution notes.' : <>EOD entries QA has flagged, with the note explaining what didn&apos;t check out. Each manager
+          has {QA_RESOLVE_DAYS} working days (Sat/Sun excluded) to resolve a report. Flag new ones from the EOD page.</>}
         </p>
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        <StatPill label="Total Reports" value={reports.length} color="var(--primary)" />
-        <StatPill label="Open" value={openCount} color="#f59e0b" />
-        <StatPill label="Overdue" value={overdueCount} color="var(--danger)" />
-        <StatPill label="Resolved" value={resolvedCount} color="var(--success)" />
+        {onlyResolved ? (
+          <>
+            <StatPill label="Resolved" value={resolvedCount} color="var(--success)" />
+            <StatPill label="On time" value={resolvedCount - lateCount} color="var(--primary)" />
+            <StatPill label="Resolved late" value={lateCount} color="#f59e0b" />
+          </>
+        ) : (
+          <>
+            <StatPill label="Total Reports" value={reports.length} color="var(--primary)" />
+            <StatPill label="Open" value={openCount} color="#f59e0b" />
+            <StatPill label="Overdue" value={overdueCount} color="var(--danger)" />
+            <StatPill label="Resolved" value={resolvedCount} color="var(--success)" />
+          </>
+        )}
       </div>
 
       {reports.length === 0 ? (
         <div style={cardStyle}>
           <p style={{ color: 'var(--text-muted)', margin: 0, textAlign: 'center' }}>
-            Nothing flagged yet. Use the Report button next to a link on the EOD page.
+            {onlyResolved ? 'No resolved issues yet.' : 'Nothing flagged yet. Use the Report button next to a link on the EOD page.'}
           </p>
         </div>
       ) : (
