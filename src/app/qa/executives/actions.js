@@ -7,6 +7,7 @@ import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifi
 import { notifyAdminOnGoogleChat } from '@/lib/googleChat';
 import { QA_RESOLVE_DAYS, QA_SEVERITIES, QA_MAX_SCREENSHOT_BASE64 } from '@/lib/qaReports';
 
+const MAX_CLIENTS = 10;
 const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
 
 async function requireQa() {
@@ -32,7 +33,7 @@ export async function submitExecutiveReport(input) {
   if (error) return { error };
 
   const managerIds = [...new Set((Array.isArray(input?.managerIds) ? input.managerIds : []).map((id) => parseInt(id, 10)).filter(Boolean))];
-  const clientInput = clean(input?.client, 300);
+  const clientInputs = [...new Set((Array.isArray(input?.clients) ? input.clients : []).map((c) => clean(c, 300).toLowerCase()).filter(Boolean))];
   const description = clean(input?.description, 3000);
   const location = clean(input?.location, 300);
   const issue = clean(input?.issue, 500);
@@ -78,18 +79,26 @@ export async function submitExecutiveReport(input) {
   // The client must be one from the SEO roster (the list the form offers),
   // matched case-insensitively; the roster's own spelling is what's stored.
   // The client is optional; when given it must be on the roster.
-  let clientName = '';
-  if (clientInput) {
+  if (clientInputs.length > MAX_CLIENTS) return { error: `Pick at most ${MAX_CLIENTS} clients per report` };
+  const clientNames = [];
+  if (clientInputs.length > 0) {
     const roster = await db.prepare(
       "SELECT DISTINCT TRIM(name) as name FROM clients WHERE name IS NOT NULL AND TRIM(name) != ''"
     ).all();
-    clientName = roster.map((r) => r.name).find((n) => n.toLowerCase() === clientInput.toLowerCase());
-    if (!clientName) return { error: 'Pick a client from the list' };
+    for (const wanted of clientInputs) {
+      const match = roster.map((r) => r.name).find((n) => n.toLowerCase() === wanted);
+      if (!match) return { error: 'Pick the clients from the list' };
+      clientNames.push(match);
+    }
   }
+  // No client = one report with a blank client; otherwise one per client so
+  // each shows up under its own client in Clients Stats.
+  const clientTargets = clientNames.length > 0 ? clientNames : [''];
 
   const today = new Date().toISOString().split('T')[0];
-  // One report per manager — each has its own deadline, resolution and follow-up.
+  // One report per manager and client — each has its own deadline, resolution and follow-up.
   for (const manager of managers) {
+  for (const clientName of clientTargets) {
   await db.prepare(`
     INSERT INTO qa_reports
       (qa_user_id, manager_id, eod_report_id, eod_entry_id, report_date, web_client_name, page_url, work_done, note,
@@ -99,10 +108,11 @@ export async function submitExecutiveReport(input) {
     session.userId, manager.id, today, clientName, url || null, description,
     location || null, issue || null, department || null, severity, screenshot
   );
+  }
 
   await createNotificationsForUsers(db, [manager.id], {
     title: `New ${severity} severity QA report`,
-    message: `${clientName ? `${clientName}: ` : ''}${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
+    message: `${clientNames.length ? `${clientNames.join(', ')}: ` : ''}${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
     link: getReportsLinkForRole(manager.role),
   });
   }
@@ -120,7 +130,7 @@ export async function submitExecutiveReport(input) {
     const lines = [
       `*New ${severity} severity QA report* (filed by ${filer?.name || 'QA'})`,
       `Manager${names.length === 1 ? '' : 's'}: ${names.join(', ')}`,
-      clientName && `Client: ${clientName}`,
+      clientNames.length > 0 && `Client${clientNames.length === 1 ? '' : 's'}: ${clientNames.join(', ')}`,
       `Description: ${description.slice(0, 500)}`,
       location && `Location: ${location}`,
       issue && `Issue: ${issue}`,
@@ -130,5 +140,5 @@ export async function submitExecutiveReport(input) {
     if (!chat.ok) chatError = chat.error;
   }
 
-  return { success: true, count: managers.length, chatError };
+  return { success: true, count: managers.length * clientTargets.length, chatError };
 }

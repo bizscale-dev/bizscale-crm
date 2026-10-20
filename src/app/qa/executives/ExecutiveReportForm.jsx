@@ -50,6 +50,7 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
   const [screenshot, setScreenshot] = useState(null);
   const [fileKey, setFileKey] = useState(0);
   const [imageError, setImageError] = useState(null);
+  const [selectedClients, setSelectedClients] = useState([]);
   const [notifyAdmin, setNotifyAdmin] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
@@ -66,9 +67,20 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
   // Clients Stats page uses — so only an exact (case-insensitive) pick counts.
   const typed = form.client.trim().toLowerCase();
   const clientMatch = clients.find((c) => c.toLowerCase() === typed) || null;
+  const addClient = (name) => {
+    setSelectedClients((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    setForm((prev) => ({ ...prev, client: '' }));
+  };
+  const removeClient = (name) => setSelectedClients((prev) => prev.filter((c) => c !== name));
+  const onClientInput = (e) => {
+    const value = e.target.value;
+    const exact = clients.find((c) => c.toLowerCase() === value.trim().toLowerCase());
+    if (exact) addClient(exact);
+    else setForm((prev) => ({ ...prev, client: value }));
+  };
   const clientInvalid = !!typed && !clientMatch;
   const clientSuggestions = !clientMatch && typed
-    ? clients.filter((c) => c.toLowerCase().includes(typed)).slice(0, 8)
+    ? clients.filter((c) => c.toLowerCase().includes(typed) && !selectedClients.includes(c)).slice(0, 8)
     : [];
 
   const byRole = new Map();
@@ -99,18 +111,19 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
     e.preventDefault();
     setSubmitting(true);
     setMessage(null);
-    const result = await submitExecutiveReport({ managerIds, ...form, screenshot, notifyAdmin });
+    const result = await submitExecutiveReport({ managerIds, ...form, clients: selectedClients, screenshot, notifyAdmin });
     setSubmitting(false);
     if (result?.error) {
       setMessage({ type: 'error', text: result.error });
       return;
     }
     const chatNote = notifyAdmin ? (result.chatError ? ` (Google Chat message failed: ${result.chatError})` : ' Admin was notified on Google Chat.') : '';
-    setMessage({ type: 'success', text: `Report filed against ${selectedManagers.map((m) => m.name).join(', ')}. ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.${chatNote}` });
+    setMessage({ type: 'success', text: `${result.count} report${result.count === 1 ? '' : 's'} filed against ${selectedManagers.map((m) => m.name).join(', ')}${selectedClients.length > 1 ? ` (one per client)` : ''}. ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.${chatNote}` });
     setForm(EMPTY);
     setScreenshot(null);
     setFileKey((k) => k + 1);
     setManagerIds([]);
+    setSelectedClients([]);
     setNotifyAdmin(false);
   };
 
@@ -165,14 +178,24 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
               </div>
 
               <div>
-                <label style={labelStyle}>Client (optional)</label>
+                <label style={labelStyle}>Clients (optional — pick one or more)</label>
+                {selectedClients.length > 0 && (
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+                    {selectedClients.map((c) => (
+                      <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.3rem 0.4rem 0.3rem 0.8rem', borderRadius: '2rem', border: `1.5px solid ${BRAND_COLOR}`, backgroundColor: 'rgba(22, 178, 147, 0.1)', fontSize: '0.8rem' }}>
+                        {c}
+                        <button type="button" onClick={() => removeClient(c)} aria-label={`Remove ${c}`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1rem', lineHeight: 1, padding: '0 0.25rem' }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <input
                   list="qa-exec-clients"
                   value={form.client}
-                  onChange={set('client')}
+                  onChange={onClientInput}
                   maxLength={300}
-                  style={{ ...inputStyle, borderColor: clientMatch ? BRAND_COLOR : 'var(--border)' }}
-                  placeholder="Search or pick the client this is about…"
+                  style={inputStyle}
+                  placeholder={selectedClients.length ? 'Add another client…' : 'Search or pick a client…'}
                 />
                 <datalist id="qa-exec-clients">
                   {clients.map((c) => <option key={c} value={c} />)}
@@ -180,7 +203,7 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
                 {clientSuggestions.length > 0 && (
                   <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
                     {clientSuggestions.map((c) => (
-                      <button key={c} type="button" onClick={() => setForm((prev) => ({ ...prev, client: c }))} style={{ padding: '0.3rem 0.7rem', borderRadius: '2rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--foreground)', fontSize: '0.75rem', cursor: 'pointer' }}>
+                      <button key={c} type="button" onClick={() => addClient(c)} style={{ padding: '0.3rem 0.7rem', borderRadius: '2rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--foreground)', fontSize: '0.75rem', cursor: 'pointer' }}>
                         {c}
                       </button>
                     ))}
