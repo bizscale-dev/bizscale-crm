@@ -23,10 +23,21 @@ export default function QaManualDetails({ report }) {
     ['Department', report.department],
   ].filter(([, value]) => value);
 
-  if (fields.length === 0 && !report.screenshot_base64) return null;
+  const clientList = (report.client_names || '').split('\n').filter(Boolean);
+  const showClients = clientList.length > 1;
+
+  if (fields.length === 0 && !report.screenshot_base64 && !showClients) return null;
 
   return (
     <>
+      {showClients && (
+        <details style={{ marginBottom: '0.75rem', padding: '0.55rem 0.75rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: '0.5rem' }}>
+          <summary style={{ cursor: 'pointer', fontSize: '0.82rem', fontWeight: '600' }}>Applies to {clientList.length} clients</summary>
+          <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem', fontSize: '0.82rem', columns: '2 220px' }}>
+            {clientList.map((c) => <li key={c}>{c}</li>)}
+          </ul>
+        </details>
+      )}
       {fields.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem', marginBottom: '0.75rem' }}>
           {fields.map(([label, value]) => (

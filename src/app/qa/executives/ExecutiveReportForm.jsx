@@ -116,7 +116,7 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
       setMessage({ type: 'error', text: result.error });
       return;
     }
-    setMessage({ type: 'success', text: `${result.count} report${result.count === 1 ? '' : 's'} filed against ${selectedManagers.map((m) => m.name).join(', ')}${selectedClients.length > 1 ? ` (one per client)` : ''}. ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.` });
+    setMessage({ type: 'success', text: `Issue filed${selectedClients.length > 1 ? ` across ${selectedClients.length} clients` : ''} against ${selectedManagers.map((m) => m.name).join(', ')}. ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.` });
     setForm(EMPTY);
     setScreenshot(null);
     setFileKey((k) => k + 1);

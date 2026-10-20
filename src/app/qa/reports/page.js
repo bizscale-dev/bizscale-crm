@@ -31,7 +31,7 @@ export default async function QaReportsPage({ readOnly = false } = {}) {
   // Every report the QA team has filed (not just the signed-in person's) —
   // QA works as a team, and this is the shared record of what's been flagged.
   const rows = await db.prepare(`
-    SELECT q.id, q.source, q.title, q.location, q.issue, q.department, q.severity, q.screenshot_base64, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at,
+    SELECT q.id, q.source, q.title, q.location, q.issue, q.department, q.severity, q.screenshot_base64, q.client_names, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at,
       q.resolved_at, q.resolution_note,
       m.id as manager_id, m.name as manager_name, m.role as manager_role,
       f.name as filed_by

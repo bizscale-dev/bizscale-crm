@@ -245,6 +245,11 @@ async function runMigrations(raw) {
     "ALTER TABLE qa_reports ADD COLUMN followup_checked_at DATETIME",
     "ALTER TABLE qa_reports ADD COLUMN followup_checked_by INTEGER",
     "ALTER TABLE qa_reports ADD COLUMN followup_notified_at DATETIME",
+    // One manual issue can cover several clients (client_names, newline-joined) and go to
+    // several managers; the manager rows of one submission share an issue_group so
+    // Clients Stats counts it once per client, not once per manager.
+    "ALTER TABLE qa_reports ADD COLUMN client_names TEXT",
+    "ALTER TABLE qa_reports ADD COLUMN issue_group TEXT",
   ];
 
   for (const sql of alterStatements) {
@@ -721,6 +726,8 @@ async function runMigrations(raw) {
       followup_checked_at DATETIME,
       followup_checked_by INTEGER,
       followup_notified_at DATETIME,
+      client_names TEXT,
+      issue_group TEXT,
       FOREIGN KEY (qa_user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE CASCADE
     )`,

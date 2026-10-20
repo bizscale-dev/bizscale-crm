@@ -54,16 +54,20 @@ export default function ClientsStatsView({ reports, clients, today }) {
   );
   const summary = useMemo(() => summarize(clientReports, nowMs), [clientReports, nowMs]);
   const { buckets, unit } = useMemo(() => bucketize(clientReports, from, to), [clientReports, from, to]);
-  const managersInvolved = new Set(clientReports.map((r) => r.manager_id)).size;
+  const managersInvolved = new Set(clientReports.flatMap((r) => r.manager_ids || [r.manager_id])).size;
   const sorted = [...clientReports].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 
   const byManager = useMemo(() => {
     const map = new Map();
     for (const r of clientReports) {
-      if (!map.has(r.manager_id)) map.set(r.manager_id, { name: r.manager_name, total: 0, open: 0 });
-      const m = map.get(r.manager_id);
-      m.total += 1;
-      if (r.status === 'open') m.open += 1;
+      const ids = r.manager_ids || [r.manager_id];
+      const names = r.manager_names || [r.manager_name];
+      ids.forEach((id, i) => {
+        if (!map.has(id)) map.set(id, { name: names[i], total: 0, open: 0 });
+        const m = map.get(id);
+        m.total += 1;
+        if (r.status === 'open') m.open += 1;
+      });
     }
     return [...map.values()].sort((a, b) => b.total - a.total);
   }, [clientReports]);

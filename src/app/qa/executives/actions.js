@@ -88,45 +88,37 @@ export async function submitExecutiveReport(input) {
       clientNames.push(match);
     }
   }
-  // No client = one report with a blank client; otherwise one per client so
-  // each shows up under its own client in Clients Stats.
-  const clientTargets = clientNames.length > 0 ? clientNames : [''];
-
+  // One report per manager, however many clients it covers. The managers' rows
+  // from one submission share an issue_group so Clients Stats counts the issue
+  // once per client (50 clients = 50 issues, not 50 x managers).
+  const clientLabel = clientNames.length > 1 ? `${clientNames.length} clients` : (clientNames[0] || '');
+  const issueGroup = crypto.randomUUID();
   const today = new Date().toISOString().split('T')[0];
-  // One report per manager and client — each has its own deadline, resolution and follow-up.
   const insertSql = `
     INSERT INTO qa_reports
       (qa_user_id, manager_id, eod_report_id, eod_entry_id, report_date, web_client_name, page_url, work_done, note,
-       source, title, location, issue, department, severity, screenshot_base64)
-    VALUES (?, ?, 0, 0, ?, ?, ?, NULL, ?, 'manual', NULL, ?, ?, ?, ?, ?)
+       source, title, location, issue, department, severity, screenshot_base64, client_names, issue_group)
+    VALUES (?, ?, 0, 0, ?, ?, ?, NULL, ?, 'manual', NULL, ?, ?, ?, ?, ?, ?, ?)
   `;
-  const inserts = [];
-  for (const manager of managers) {
-    for (const clientName of clientTargets) {
-      inserts.push({
-        sql: insertSql,
-        args: [session.userId, manager.id, today, clientName, url || null, description, location || null, issue || null, department || null, severity, screenshot],
-      });
-    }
-  }
-  // Batched (a screenshot makes each row large, so those go in small chunks).
-  const chunkSize = screenshot ? 2 : 200;
-  for (let i = 0; i < inserts.length; i += chunkSize) {
-    await db.batch(inserts.slice(i, i + chunkSize));
-  }
+  await db.batch(managers.map((manager) => ({
+    sql: insertSql,
+    args: [
+      session.userId, manager.id, today, clientLabel, url || null, description, location || null, issue || null,
+      department || null, severity, screenshot, clientNames.length ? clientNames.join('\n') : null, issueGroup,
+    ],
+  })));
 
-  const clientLabel = clientNames.length > 3
-    ? `${clientNames.slice(0, 3).join(', ')} and ${clientNames.length - 3} more`
-    : clientNames.join(', ');
   for (const manager of managers) {
     await createNotificationsForUsers(db, [manager.id], {
       title: `New ${severity} severity QA report`,
-      message: `${clientLabel ? `${clientLabel}: ` : ''}${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
+      message: clientNames.length > 1
+        ? `1 issue across ${clientNames.length} clients: ${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`
+        : `${clientLabel ? `${clientLabel}: ` : ''}${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
       link: getReportsLinkForRole(manager.role),
     });
   }
 
   revalidatePath('/qa/reports');
 
-  return { success: true, count: managers.length * clientTargets.length };
+  return { success: true, count: managers.length };
 }

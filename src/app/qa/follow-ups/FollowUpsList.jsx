@@ -53,6 +53,14 @@ export default function FollowUpsList({ items }) {
               </div>
               <span style={{ fontSize: '0.75rem', fontWeight: '600', color: st.color }}>{st.label}</span>
             </div>
+            {(r.client_names || '').split('\n').filter(Boolean).length > 1 && (
+              <details style={{ marginBottom: '0.5rem', fontSize: '0.82rem' }}>
+                <summary style={{ cursor: 'pointer', fontWeight: '600' }}>Applies to {r.client_names.split('\n').filter(Boolean).length} clients</summary>
+                <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem', columns: '2 220px' }}>
+                  {r.client_names.split('\n').filter(Boolean).map((c) => <li key={c}>{c}</li>)}
+                </ul>
+              </details>
+            )}
             <div style={{ fontSize: '0.875rem', wordBreak: 'break-word', marginBottom: '0.5rem' }}>
               <Linkify text={r.note} />
             </div>

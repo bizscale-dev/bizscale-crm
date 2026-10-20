@@ -31,7 +31,7 @@ export async function markFollowUpChecked(reportId, { notifyAdmin = false, note 
 
   if (notifyAdmin) {
     const r = await db.prepare(`
-      SELECT q.source, q.title, q.web_client_name, q.work_done, q.note, q.page_url, q.report_date, q.severity,
+      SELECT q.source, q.title, q.web_client_name, q.client_names, q.work_done, q.note, q.page_url, q.report_date, q.severity,
         q.status, q.created_at, m.name as manager_name, f.name as filed_by, c.name as checker
       FROM qa_reports q
       JOIN users m ON m.id = q.manager_id
@@ -46,6 +46,7 @@ export async function markFollowUpChecked(reportId, { notifyAdmin = false, note 
       `*QA follow-up: needs attention* (checked by ${r.checker})`,
       `Manager: ${r.manager_name}`,
       `About: ${subject}`,
+      r.client_names && r.client_names.includes('\n') && `Clients: ${r.client_names.split('\n').join(', ').slice(0, 700)}`,
       `Reported ${r.created_at.slice(0, 10)} by ${r.filed_by}${r.severity ? ` (${r.severity} severity)` : ''}`,
       `Issue: ${String(r.note || '').slice(0, 500)}`,
       `Manager's status: ${r.status === 'resolved' ? 'marked resolved, but QA is not satisfied' : 'not resolved yet'}`,

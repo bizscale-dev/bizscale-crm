@@ -44,7 +44,7 @@ export function qaFollowUpDate(createdAt) {
 // Unchecked reports whose follow-up date has arrived, oldest first.
 export async function fetchDueFollowUps(db) {
   const rows = await db.prepare(`
-    SELECT q.id, q.source, q.title, q.web_client_name, q.work_done, q.note, q.page_url, q.report_date,
+    SELECT q.id, q.source, q.title, q.web_client_name, q.client_names, q.work_done, q.note, q.page_url, q.report_date,
       q.severity, q.status, q.created_at, q.resolved_at, q.resolution_note, q.followup_notified_at,
       q.manager_id, m.name as manager_name, f.name as filed_by
     FROM qa_reports q
