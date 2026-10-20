@@ -20,12 +20,13 @@ function subjectOf(r) {
 export default function FollowUpsList({ items }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState(null);
+  const [notes, setNotes] = useState({});
   const [error, setError] = useState(null);
 
-  const check = async (id) => {
+  const check = async (id, notifyAdmin) => {
     setBusyId(id);
     setError(null);
-    const res = await markFollowUpChecked(id);
+    const res = await markFollowUpChecked(id, { notifyAdmin, note: notes[id] || '' });
     setBusyId(null);
     if (res?.error) setError(res.error);
     router.refresh();
@@ -61,14 +62,32 @@ export default function FollowUpsList({ items }) {
                 Manager&apos;s note: {r.resolution_note}
               </div>
             )}
-            <button
-              type="button"
-              disabled={busyId === r.id}
-              onClick={() => check(r.id)}
-              style={{ padding: '0.55rem 1.3rem', backgroundColor: 'var(--primary)', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', opacity: busyId === r.id ? 0.6 : 1 }}
-            >
-              {busyId === r.id ? 'Saving...' : 'Mark checked'}
-            </button>
+            <input
+              type="text"
+              value={notes[r.id] || ''}
+              onChange={(e) => setNotes((prev) => ({ ...prev, [r.id]: e.target.value }))}
+              maxLength={500}
+              placeholder="Note for the admin (optional, only sent with Notify admin)"
+              style={{ width: '100%', boxSizing: 'border-box', padding: '0.5rem 0.75rem', marginBottom: '0.6rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--foreground)', fontSize: '0.82rem' }}
+            />
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                disabled={busyId === r.id}
+                onClick={() => check(r.id, false)}
+                style={{ padding: '0.55rem 1.3rem', backgroundColor: 'var(--primary)', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', opacity: busyId === r.id ? 0.6 : 1 }}
+              >
+                {busyId === r.id ? 'Saving...' : 'Checked — all good'}
+              </button>
+              <button
+                type="button"
+                disabled={busyId === r.id}
+                onClick={() => check(r.id, true)}
+                style={{ padding: '0.55rem 1.3rem', backgroundColor: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', opacity: busyId === r.id ? 0.6 : 1 }}
+              >
+                Checked — notify admin
+              </button>
+            </div>
           </div>
         );
       })}

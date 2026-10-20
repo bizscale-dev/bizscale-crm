@@ -4,7 +4,6 @@ import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifications';
-import { notifyAdminOnGoogleChat } from '@/lib/googleChat';
 import { QA_RESOLVE_DAYS, QA_SEVERITIES, QA_MAX_SCREENSHOT_BASE64 } from '@/lib/qaReports';
 
 const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
@@ -129,26 +128,5 @@ export async function submitExecutiveReport(input) {
 
   revalidatePath('/qa/reports');
 
-  // Optional: ping the admin in the Google Chat space. The report is already
-  // filed, so a chat failure is reported back but doesn't undo anything.
-  let chatError = null;
-  if (input?.notifyAdmin) {
-    const names = (await db.prepare(
-      `SELECT name FROM users WHERE id IN (${idPlaceholders})`
-    ).all(...managerIds)).map((m) => m.name);
-    const filer = await db.prepare('SELECT name FROM users WHERE id = ?').get(session.userId);
-    const lines = [
-      `*New ${severity} severity QA report* (filed by ${filer?.name || 'QA'})`,
-      `Manager${names.length === 1 ? '' : 's'}: ${names.join(', ')}`,
-      clientNames.length > 0 && `Client${clientNames.length === 1 ? '' : 's'}: ${clientNames.join(', ')}`,
-      `Description: ${description.slice(0, 500)}`,
-      location && `Location: ${location}`,
-      issue && `Issue: ${issue}`,
-      url && `Links:\n${url}`,
-    ].filter(Boolean);
-    const chat = await notifyAdminOnGoogleChat(lines.join('\n'));
-    if (!chat.ok) chatError = chat.error;
-  }
-
-  return { success: true, count: managers.length * clientTargets.length, chatError };
+  return { success: true, count: managers.length * clientTargets.length };
 }

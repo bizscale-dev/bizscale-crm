@@ -51,7 +51,6 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
   const [fileKey, setFileKey] = useState(0);
   const [imageError, setImageError] = useState(null);
   const [selectedClients, setSelectedClients] = useState([]);
-  const [notifyAdmin, setNotifyAdmin] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -111,20 +110,18 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
     e.preventDefault();
     setSubmitting(true);
     setMessage(null);
-    const result = await submitExecutiveReport({ managerIds, ...form, clients: selectedClients, screenshot, notifyAdmin });
+    const result = await submitExecutiveReport({ managerIds, ...form, clients: selectedClients, screenshot });
     setSubmitting(false);
     if (result?.error) {
       setMessage({ type: 'error', text: result.error });
       return;
     }
-    const chatNote = notifyAdmin ? (result.chatError ? ` (Google Chat message failed: ${result.chatError})` : ' Admin was notified on Google Chat.') : '';
-    setMessage({ type: 'success', text: `${result.count} report${result.count === 1 ? '' : 's'} filed against ${selectedManagers.map((m) => m.name).join(', ')}${selectedClients.length > 1 ? ` (one per client)` : ''}. ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.${chatNote}` });
+    setMessage({ type: 'success', text: `${result.count} report${result.count === 1 ? '' : 's'} filed against ${selectedManagers.map((m) => m.name).join(', ')}${selectedClients.length > 1 ? ` (one per client)` : ''}. ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.` });
     setForm(EMPTY);
     setScreenshot(null);
     setFileKey((k) => k + 1);
     setManagerIds([]);
     setSelectedClients([]);
-    setNotifyAdmin(false);
   };
 
   return (
@@ -280,10 +277,6 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
 
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.85rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={notifyAdmin} onChange={(e) => setNotifyAdmin(e.target.checked)} style={{ accentColor: 'var(--primary)' }} />
-                  Notify admin
-                </label>
                 <button
                   type="submit"
                   disabled={submitting || !form.severity || clientInvalid}
