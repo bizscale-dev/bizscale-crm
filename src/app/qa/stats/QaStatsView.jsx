@@ -89,10 +89,35 @@ export default function QaStatsView({ reports, managers, today }) {
       </div>
 
       <div style={cardStyle}>
-        <h2 style={{ fontSize: '1.05rem', margin: '0 0 1rem' }}>
-          Issues over time{selected ? ` — ${selected.name}` : ''}
-        </h2>
-        <QaBarChart buckets={buckets} unit={unit} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '1rem' }}>
+          <h2 style={{ fontSize: '1.05rem', margin: 0 }}>Issues in this period</h2>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            {sorted.length > LIST_CAP ? `Latest ${LIST_CAP} of ${sorted.length}` : `${sorted.length} total`}
+          </span>
+        </div>
+        {sorted.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)', margin: 0, textAlign: 'center', padding: '1rem 0' }}>Nothing filed in this period.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>{['Filed', !managerId && 'Manager', 'Type', 'About', 'Note', 'Status'].filter(Boolean).map((h) => <th key={h} style={th}>{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {sorted.slice(0, LIST_CAP).map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{formatDay(filedDate(r))}</td>
+                    {!managerId && <td style={td}>{r.manager_name}</td>}
+                    <td style={td}><TypeTag source={r.source} />{r.severity && <div style={{ fontSize: '0.68rem', color: SEVERITY_COLORS[r.severity], textTransform: 'uppercase', fontWeight: '700', marginTop: '0.15rem' }}>{r.severity}</div>}</td>
+                    <td style={{ ...td, maxWidth: '220px', wordBreak: 'break-word' }}>{subjectOf(r)}</td>
+                    <td style={{ ...td, maxWidth: '320px', color: 'var(--text-muted)', wordBreak: 'break-word' }}>{r.note.length > 140 ? `${r.note.slice(0, 140)}…` : r.note}</td>
+                    <td style={td}><StatusChip status={statusOf(r, nowMs)} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
@@ -156,35 +181,10 @@ export default function QaStatsView({ reports, managers, today }) {
       )}
 
       <div style={cardStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '1rem' }}>
-          <h2 style={{ fontSize: '1.05rem', margin: 0 }}>Issues in this period</h2>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            {sorted.length > LIST_CAP ? `Latest ${LIST_CAP} of ${sorted.length}` : `${sorted.length} total`}
-          </span>
-        </div>
-        {sorted.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', margin: 0, textAlign: 'center', padding: '1rem 0' }}>Nothing filed in this period.</p>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>{['Filed', !managerId && 'Manager', 'Type', 'About', 'Note', 'Status'].filter(Boolean).map((h) => <th key={h} style={th}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {sorted.slice(0, LIST_CAP).map((r) => (
-                  <tr key={r.id}>
-                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{formatDay(filedDate(r))}</td>
-                    {!managerId && <td style={td}>{r.manager_name}</td>}
-                    <td style={td}><TypeTag source={r.source} />{r.severity && <div style={{ fontSize: '0.68rem', color: SEVERITY_COLORS[r.severity], textTransform: 'uppercase', fontWeight: '700', marginTop: '0.15rem' }}>{r.severity}</div>}</td>
-                    <td style={{ ...td, maxWidth: '220px', wordBreak: 'break-word' }}>{subjectOf(r)}</td>
-                    <td style={{ ...td, maxWidth: '320px', color: 'var(--text-muted)', wordBreak: 'break-word' }}>{r.note.length > 140 ? `${r.note.slice(0, 140)}…` : r.note}</td>
-                    <td style={td}><StatusChip status={statusOf(r, nowMs)} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <h2 style={{ fontSize: '1.05rem', margin: '0 0 1rem' }}>
+          Issues over time{selected ? ` — ${selected.name}` : ''}
+        </h2>
+        <QaBarChart buckets={buckets} unit={unit} />
       </div>
     </div>
   );
