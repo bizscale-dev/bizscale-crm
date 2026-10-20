@@ -7,7 +7,6 @@ import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifi
 import { notifyAdminOnGoogleChat } from '@/lib/googleChat';
 import { QA_RESOLVE_DAYS, QA_SEVERITIES, QA_MAX_SCREENSHOT_BASE64 } from '@/lib/qaReports';
 
-const MAX_CLIENTS = 10;
 const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
 
 async function requireQa() {
@@ -79,7 +78,6 @@ export async function submitExecutiveReport(input) {
   // The client must be one from the SEO roster (the list the form offers),
   // matched case-insensitively; the roster's own spelling is what's stored.
   // The client is optional; when given it must be on the roster.
-  if (clientInputs.length > MAX_CLIENTS) return { error: `Pick at most ${MAX_CLIENTS} clients per report` };
   const clientNames = [];
   if (clientInputs.length > 0) {
     const roster = await db.prepare(
@@ -97,24 +95,36 @@ export async function submitExecutiveReport(input) {
 
   const today = new Date().toISOString().split('T')[0];
   // One report per manager and client — each has its own deadline, resolution and follow-up.
-  for (const manager of managers) {
-  for (const clientName of clientTargets) {
-  await db.prepare(`
+  const insertSql = `
     INSERT INTO qa_reports
       (qa_user_id, manager_id, eod_report_id, eod_entry_id, report_date, web_client_name, page_url, work_done, note,
        source, title, location, issue, department, severity, screenshot_base64)
     VALUES (?, ?, 0, 0, ?, ?, ?, NULL, ?, 'manual', NULL, ?, ?, ?, ?, ?)
-  `).run(
-    session.userId, manager.id, today, clientName, url || null, description,
-    location || null, issue || null, department || null, severity, screenshot
-  );
+  `;
+  const inserts = [];
+  for (const manager of managers) {
+    for (const clientName of clientTargets) {
+      inserts.push({
+        sql: insertSql,
+        args: [session.userId, manager.id, today, clientName, url || null, description, location || null, issue || null, department || null, severity, screenshot],
+      });
+    }
+  }
+  // Batched (a screenshot makes each row large, so those go in small chunks).
+  const chunkSize = screenshot ? 2 : 200;
+  for (let i = 0; i < inserts.length; i += chunkSize) {
+    await db.batch(inserts.slice(i, i + chunkSize));
   }
 
-  await createNotificationsForUsers(db, [manager.id], {
-    title: `New ${severity} severity QA report`,
-    message: `${clientNames.length ? `${clientNames.join(', ')}: ` : ''}${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
-    link: getReportsLinkForRole(manager.role),
-  });
+  const clientLabel = clientNames.length > 3
+    ? `${clientNames.slice(0, 3).join(', ')} and ${clientNames.length - 3} more`
+    : clientNames.join(', ');
+  for (const manager of managers) {
+    await createNotificationsForUsers(db, [manager.id], {
+      title: `New ${severity} severity QA report`,
+      message: `${clientLabel ? `${clientLabel}: ` : ''}${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
+      link: getReportsLinkForRole(manager.role),
+    });
   }
 
   revalidatePath('/qa/reports');

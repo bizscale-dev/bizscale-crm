@@ -178,7 +178,12 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
               </div>
 
               <div>
-                <label style={labelStyle}>Clients (optional — pick one or more)</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.4rem' }}>
+                  <label style={{ ...labelStyle, marginBottom: 0 }}>Clients (optional — pick as many as you want)</label>
+                  <button type="button" onClick={() => setSelectedClients(selectedClients.length === clients.length ? [] : [...clients])} style={{ background: 'none', border: 'none', color: BRAND_COLOR, fontSize: '0.75rem', cursor: 'pointer', padding: 0 }}>
+                    {selectedClients.length === clients.length ? 'Clear all' : 'Select all'}
+                  </button>
+                </div>
                 {selectedClients.length > 0 && (
                   <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
                     {selectedClients.map((c) => (
