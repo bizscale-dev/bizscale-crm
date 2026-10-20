@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifications';
+import { notifyAdminOnGoogleChat } from '@/lib/googleChat';
 import { QA_RESOLVE_DAYS, QA_SEVERITIES, QA_MAX_SCREENSHOT_BASE64 } from '@/lib/qaReports';
 
 const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
@@ -41,7 +42,6 @@ export async function submitExecutiveReport(input) {
   const screenshot = input?.screenshot || null;
 
   if (managerIds.length === 0) return { error: 'Select at least one manager' };
-  if (!clientInput) return { error: 'Select the client this report is about' };
   if (!description) return { error: 'Description is required' };
   if (!QA_SEVERITIES.includes(severity)) return { error: 'Pick a severity (high, medium or low)' };
 
@@ -77,11 +77,15 @@ export async function submitExecutiveReport(input) {
 
   // The client must be one from the SEO roster (the list the form offers),
   // matched case-insensitively; the roster's own spelling is what's stored.
-  const roster = await db.prepare(
-    "SELECT DISTINCT TRIM(name) as name FROM clients WHERE name IS NOT NULL AND TRIM(name) != ''"
-  ).all();
-  const clientName = roster.map((r) => r.name).find((n) => n.toLowerCase() === clientInput.toLowerCase());
-  if (!clientName) return { error: 'Pick a client from the list' };
+  // The client is optional; when given it must be on the roster.
+  let clientName = '';
+  if (clientInput) {
+    const roster = await db.prepare(
+      "SELECT DISTINCT TRIM(name) as name FROM clients WHERE name IS NOT NULL AND TRIM(name) != ''"
+    ).all();
+    clientName = roster.map((r) => r.name).find((n) => n.toLowerCase() === clientInput.toLowerCase());
+    if (!clientName) return { error: 'Pick a client from the list' };
+  }
 
   const today = new Date().toISOString().split('T')[0];
   // One report per manager — each has its own deadline, resolution and follow-up.
@@ -98,11 +102,33 @@ export async function submitExecutiveReport(input) {
 
   await createNotificationsForUsers(db, [manager.id], {
     title: `New ${severity} severity QA report`,
-    message: `${clientName}: ${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
+    message: `${clientName ? `${clientName}: ` : ''}${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
     link: getReportsLinkForRole(manager.role),
   });
   }
 
   revalidatePath('/qa/reports');
-  return { success: true, count: managers.length };
+
+  // Optional: ping the admin in the Google Chat space. The report is already
+  // filed, so a chat failure is reported back but doesn't undo anything.
+  let chatError = null;
+  if (input?.notifyAdmin) {
+    const names = (await db.prepare(
+      `SELECT name FROM users WHERE id IN (${idPlaceholders})`
+    ).all(...managerIds)).map((m) => m.name);
+    const filer = await db.prepare('SELECT name FROM users WHERE id = ?').get(session.userId);
+    const lines = [
+      `*New ${severity} severity QA report* (filed by ${filer?.name || 'QA'})`,
+      `Manager${names.length === 1 ? '' : 's'}: ${names.join(', ')}`,
+      clientName && `Client: ${clientName}`,
+      `Description: ${description.slice(0, 500)}`,
+      location && `Location: ${location}`,
+      issue && `Issue: ${issue}`,
+      url && `Links:\n${url}`,
+    ].filter(Boolean);
+    const chat = await notifyAdminOnGoogleChat(lines.join('\n'));
+    if (!chat.ok) chatError = chat.error;
+  }
+
+  return { success: true, count: managers.length, chatError };
 }

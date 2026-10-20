@@ -50,6 +50,7 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
   const [screenshot, setScreenshot] = useState(null);
   const [fileKey, setFileKey] = useState(0);
   const [imageError, setImageError] = useState(null);
+  const [notifyAdmin, setNotifyAdmin] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -65,6 +66,7 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
   // Clients Stats page uses — so only an exact (case-insensitive) pick counts.
   const typed = form.client.trim().toLowerCase();
   const clientMatch = clients.find((c) => c.toLowerCase() === typed) || null;
+  const clientInvalid = !!typed && !clientMatch;
   const clientSuggestions = !clientMatch && typed
     ? clients.filter((c) => c.toLowerCase().includes(typed)).slice(0, 8)
     : [];
@@ -97,17 +99,19 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
     e.preventDefault();
     setSubmitting(true);
     setMessage(null);
-    const result = await submitExecutiveReport({ managerIds, ...form, screenshot });
+    const result = await submitExecutiveReport({ managerIds, ...form, screenshot, notifyAdmin });
     setSubmitting(false);
     if (result?.error) {
       setMessage({ type: 'error', text: result.error });
       return;
     }
-    setMessage({ type: 'success', text: `Report filed against ${selectedManagers.map((m) => m.name).join(', ')}. ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.` });
+    const chatNote = notifyAdmin ? (result.chatError ? ` (Google Chat message failed: ${result.chatError})` : ' Admin was notified on Google Chat.') : '';
+    setMessage({ type: 'success', text: `Report filed against ${selectedManagers.map((m) => m.name).join(', ')}. ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.${chatNote}` });
     setForm(EMPTY);
     setScreenshot(null);
     setFileKey((k) => k + 1);
     setManagerIds([]);
+    setNotifyAdmin(false);
   };
 
   return (
@@ -161,13 +165,12 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
               </div>
 
               <div>
-                <label style={labelStyle}>Client</label>
+                <label style={labelStyle}>Client (optional)</label>
                 <input
                   list="qa-exec-clients"
                   value={form.client}
                   onChange={set('client')}
                   maxLength={300}
-                  required
                   style={{ ...inputStyle, borderColor: clientMatch ? BRAND_COLOR : 'var(--border)' }}
                   placeholder="Search or pick the client this is about…"
                 />
@@ -248,14 +251,20 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
             </div>
 
             <div>
-              <button
-                type="submit"
-                disabled={submitting || !form.severity || !clientMatch}
-                style={{ padding: '0.7rem 1.6rem', backgroundColor: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', opacity: submitting || !form.severity || !clientMatch ? 0.6 : 1 }}
-              >
-                {submitting ? 'Submitting...' : 'Submit report'}
-              </button>
-              {(!form.severity || !clientMatch) && <span style={{ marginLeft: '0.75rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{!clientMatch ? 'Pick a client from the list' : 'Pick a severity'} to submit</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={notifyAdmin} onChange={(e) => setNotifyAdmin(e.target.checked)} style={{ accentColor: 'var(--primary)' }} />
+                  Notify admin
+                </label>
+                <button
+                  type="submit"
+                  disabled={submitting || !form.severity || clientInvalid}
+                  style={{ padding: '0.7rem 1.6rem', backgroundColor: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', opacity: submitting || !form.severity || clientInvalid ? 0.6 : 1 }}
+                >
+                  {submitting ? 'Submitting...' : 'Submit report'}
+                </button>
+              </div>
+              {(!form.severity || clientInvalid) && <span style={{ marginLeft: '0.75rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{clientInvalid ? 'Pick a client from the list (or clear the field)' : 'Pick a severity'} to submit</span>}
             </div>
           </>
         )}

@@ -86,7 +86,7 @@ export default async function QaReportsPage() {
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                       {r.source === 'manual'
-                        ? `Manual report · ${r.title || r.web_client_name} · filed ${r.report_date}`
+                        ? `Manual report · ${r.title || r.web_client_name || 'no client'} · filed ${r.report_date}`
                         : r.source === 'manager_task'
                           ? `📋 Task due ${r.report_date}`
                           : `EOD of ${r.report_date} · ${r.web_client_name}`} · resolve by {r.due_at.slice(0, 10)}

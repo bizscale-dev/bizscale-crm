@@ -28,7 +28,7 @@ export default async function QaClientsStatsPage() {
     FROM qa_reports q
     JOIN users m ON m.id = q.manager_id
     JOIN users f ON f.id = q.qa_user_id
-    WHERE q.source = 'eod' OR (q.source = 'manual' AND q.title IS NULL)
+    WHERE q.source = 'eod' OR (q.source = 'manual' AND q.title IS NULL AND q.web_client_name != '')
     ORDER BY q.created_at DESC
   `).all();
 

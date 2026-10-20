@@ -94,7 +94,7 @@ function ReportCard({ report, resolveAction }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
         <div>
           <div style={{ fontWeight: '600', marginBottom: '0.25rem' }}>
-            {isManual ? (report.title || report.web_client_name) : isTask ? '📋 Task' : report.web_client_name}
+            {isManual ? (report.title || report.web_client_name || 'QA report') : isTask ? '📋 Task' : report.web_client_name}
           </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
             {isManual ? `Manual report · ${report.report_date}` : isTask ? `Task due ${report.report_date}` : `EOD of ${report.report_date}`} · flagged by {report.filed_by} · resolve by {report.due_at.slice(0, 10)}
