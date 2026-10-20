@@ -45,7 +45,7 @@ const inputStyle = {
 const EMPTY = { client: '', description: '', location: '', url: '', issue: '', department: '', severity: '' };
 
 export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
-  const [managerId, setManagerId] = useState('');
+  const [managerIds, setManagerIds] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [screenshot, setScreenshot] = useState(null);
   const [fileKey, setFileKey] = useState(0);
@@ -54,7 +54,12 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
   const [message, setMessage] = useState(null);
 
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
-  const selectedManager = managers.find((m) => String(m.id) === managerId);
+  const selectedManagers = managers.filter((m) => managerIds.includes(m.id));
+  const toggleManager = (id) => setManagerIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleRole = (list) => setManagerIds((prev) => {
+    const ids = list.map((m) => m.id);
+    return ids.every((id) => prev.includes(id)) ? prev.filter((id) => !ids.includes(id)) : [...new Set([...prev, ...ids])];
+  });
 
   // The report has to point at a real client from the roster — same list the
   // Clients Stats page uses — so only an exact (case-insensitive) pick counts.
@@ -92,17 +97,17 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
     e.preventDefault();
     setSubmitting(true);
     setMessage(null);
-    const result = await submitExecutiveReport({ managerId, ...form, screenshot });
+    const result = await submitExecutiveReport({ managerIds, ...form, screenshot });
     setSubmitting(false);
     if (result?.error) {
       setMessage({ type: 'error', text: result.error });
       return;
     }
-    setMessage({ type: 'success', text: `Report filed against ${selectedManager?.name}. They've been notified and have 5 working days (Mon-Fri) to resolve it.` });
+    setMessage({ type: 'success', text: `Report filed against ${selectedManagers.map((m) => m.name).join(', ')}. ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.` });
     setForm(EMPTY);
     setScreenshot(null);
     setFileKey((k) => k + 1);
-    setManagerId('');
+    setManagerIds([]);
   };
 
   return (
@@ -119,22 +124,40 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
         <div>
-          <label style={labelStyle}>Manager</label>
-          <select value={managerId} onChange={(e) => setManagerId(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }} required>
-            <option value="">Select a manager…</option>
-            {[...byRole.entries()].map(([role, list]) => (
-              <optgroup key={role} label={roleLabels[role] || role}>
-                {list.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </optgroup>
-            ))}
-          </select>
+          <label style={labelStyle}>Managers (select one or more)</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+            {[...byRole.entries()].map(([role, list]) => {
+              const allOn = list.every((m) => managerIds.includes(m.id));
+              return (
+                <div key={role}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.4rem' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>{roleLabels[role] || role}</span>
+                    <button type="button" onClick={() => toggleRole(list)} style={{ background: 'none', border: 'none', color: BRAND_COLOR, fontSize: '0.75rem', cursor: 'pointer', padding: 0 }}>
+                      {allOn ? 'Clear all' : 'Select all'}
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {list.map((m) => {
+                      const on = managerIds.includes(m.id);
+                      return (
+                        <label key={m.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.85rem', borderRadius: '2rem', cursor: 'pointer', fontSize: '0.85rem', border: `1.5px solid ${on ? BRAND_COLOR : 'var(--border)'}`, backgroundColor: on ? 'rgba(22, 178, 147, 0.1)' : 'transparent' }}>
+                          <input type="checkbox" checked={on} onChange={() => toggleManager(m.id)} style={{ accentColor: 'var(--primary)' }} />
+                          {m.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {selectedManager && (
+        {selectedManagers.length > 0 && (
           <>
             <div style={{ paddingTop: '1.1rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                Reporting <strong style={{ color: 'var(--foreground)' }}>{selectedManager.name}</strong>
+                Reporting <strong style={{ color: 'var(--foreground)' }}>{selectedManagers.map((m) => m.name).join(', ')}</strong>
               </div>
 
               <div>

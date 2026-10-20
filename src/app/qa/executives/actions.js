@@ -30,7 +30,7 @@ export async function submitExecutiveReport(input) {
   const { session, error } = await requireQa();
   if (error) return { error };
 
-  const managerId = parseInt(input?.managerId, 10);
+  const managerIds = [...new Set((Array.isArray(input?.managerIds) ? input.managerIds : []).map((id) => parseInt(id, 10)).filter(Boolean))];
   const clientInput = clean(input?.client, 300);
   const description = clean(input?.description, 3000);
   const location = clean(input?.location, 300);
@@ -40,7 +40,7 @@ export async function submitExecutiveReport(input) {
   const urlInput = clean(input?.url, 5000);
   const screenshot = input?.screenshot || null;
 
-  if (!managerId) return { error: 'Select a manager' };
+  if (managerIds.length === 0) return { error: 'Select at least one manager' };
   if (!clientInput) return { error: 'Select the client this report is about' };
   if (!description) return { error: 'Description is required' };
   if (!QA_SEVERITIES.includes(severity)) return { error: 'Pick a severity (high, medium or low)' };
@@ -69,10 +69,11 @@ export async function submitExecutiveReport(input) {
 
   const db = await getDb();
   const placeholders = MANAGER_ROLES.map(() => '?').join(',');
-  const manager = await db.prepare(
-    `SELECT id, role FROM users WHERE id = ? AND is_active = 1 AND role IN (${placeholders})`
-  ).get(managerId, ...MANAGER_ROLES);
-  if (!manager) return { error: 'Manager not found' };
+  const idPlaceholders = managerIds.map(() => '?').join(',');
+  const managers = await db.prepare(
+    `SELECT id, role FROM users WHERE id IN (${idPlaceholders}) AND is_active = 1 AND role IN (${placeholders})`
+  ).all(...managerIds, ...MANAGER_ROLES);
+  if (managers.length !== managerIds.length) return { error: 'One of the selected managers was not found' };
 
   // The client must be one from the SEO roster (the list the form offers),
   // matched case-insensitively; the roster's own spelling is what's stored.
@@ -83,6 +84,8 @@ export async function submitExecutiveReport(input) {
   if (!clientName) return { error: 'Pick a client from the list' };
 
   const today = new Date().toISOString().split('T')[0];
+  // One report per manager — each has its own deadline, resolution and follow-up.
+  for (const manager of managers) {
   await db.prepare(`
     INSERT INTO qa_reports
       (qa_user_id, manager_id, eod_report_id, eod_entry_id, report_date, web_client_name, page_url, work_done, note,
@@ -98,7 +101,8 @@ export async function submitExecutiveReport(input) {
     message: `${clientName}: ${description.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
     link: getReportsLinkForRole(manager.role),
   });
+  }
 
   revalidatePath('/qa/reports');
-  return { success: true };
+  return { success: true, count: managers.length };
 }
