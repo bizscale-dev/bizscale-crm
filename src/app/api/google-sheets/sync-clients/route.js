@@ -212,6 +212,7 @@ export async function POST(request) {
     const associateAssignments = {}; // { "Associate Name": ["Client 1", "Client 2", ...] }
     const writerAssignments = {}; // { "Writer Name": ["Client 1", "Client 2", ...] }
     const sheetClients = new Map(); // name -> { name, website }
+    const supportByClient = new Map(); // lower-case name -> Support number (1-10) or null
 
     console.log(`[sync-clients] Sheet has ${rows.length} total rows`);
     console.log(`[sync-clients] Header row: ${rows[0]?.join(' | ')}`);
@@ -222,6 +223,7 @@ export async function POST(request) {
       const row = rows[i];
       const clientName = row[2]?.trim(); // Column C (index 2)
       const joiningDate = row[4]?.trim() || null; // Column E (index 4)
+      const supportNumber = parseInt(row[6], 10) || null; // Column G (index 6) — Support 1-10
       const associateName = row[7]?.trim(); // Column H (index 7)
       const writerName = row[8]?.trim(); // Column I (index 8)
 
@@ -231,6 +233,7 @@ export async function POST(request) {
         // verbatim as whatever text is in the sheet's Joining Date column — see
         // clients.joining_date in src/lib/db.js.
         sheetClients.set(clientName.toLowerCase(), { name: clientName, website: '', joiningDate });
+        supportByClient.set(clientName.toLowerCase(), supportNumber);
 
         // Add to associate assignment
         if (associateName) {
@@ -265,6 +268,12 @@ export async function POST(request) {
     console.log(`[sync-clients] Associate assignments found: ${Object.keys(associateAssignments).length} associates`);
     if (Object.keys(associateAssignments).length > 0) {
       console.log(`[sync-clients] Associates: ${Object.keys(associateAssignments).join(', ')}`);
+    }
+
+    // Keep each client's Support number (which SEO manager owns it) current — used
+    // by the QA Executives page to send an issue only to the manager who owns the client.
+    for (const [lowerName, support] of supportByClient) {
+      await db.prepare('UPDATE clients SET support_number = ? WHERE lower(name) = ?').run(support, lowerName);
     }
 
     // Get current database clients

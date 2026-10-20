@@ -248,6 +248,9 @@ async function runMigrations(raw) {
     // One manual issue can cover several clients (client_names, newline-joined) and go to
     // several managers; the manager rows of one submission share an issue_group so
     // Clients Stats counts it once per client, not once per manager.
+    // The SEO sheet's "Support" column (1-10): which SEO manager looks after the client
+    // (see src/lib/qaClientOwners.js). Refreshed by the daily clients sync.
+    "ALTER TABLE clients ADD COLUMN support_number INTEGER",
     "ALTER TABLE qa_reports ADD COLUMN client_names TEXT",
     "ALTER TABLE qa_reports ADD COLUMN issue_group TEXT",
   ];

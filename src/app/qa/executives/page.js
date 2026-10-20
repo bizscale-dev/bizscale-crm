@@ -1,4 +1,5 @@
 import { getDb } from '@/lib/db';
+import { getClientOwnership } from '@/lib/qaClientOwners';
 import ExecutiveReportForm from './ExecutiveReportForm';
 
 export const revalidate = 0;
@@ -18,25 +19,20 @@ export default async function QaExecutivesPage() {
     ORDER BY role, name
   `).all();
 
-  // The same SEO client roster the Clients Stats page uses (distinct names —
-  // one client exists as a row per campaign).
-  const clientRows = await db.prepare(`
-    SELECT DISTINCT TRIM(name) as name FROM clients
-    WHERE name IS NOT NULL AND TRIM(name) != ''
-    ORDER BY name
-  `).all();
+  // Every SEO + web client, and which manager owns each (see qaClientOwners.js).
+  const { clientNames, owners } = await getClientOwnership(db, managers);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div>
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>Executives</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-          File a report against a manager by hand — pick the manager and the client it concerns. It shows up on that manager&apos;s Reports page (with a
+          File a report against a manager by hand — pick the managers and the clients it concerns (each manager only gets the clients they own). It shows up on that manager&apos;s Reports page (with a
           5 working-day deadline to resolve it) and in your Reports page, like the ones flagged from EODs and tasks.
         </p>
       </div>
 
-      <ExecutiveReportForm managers={managers} clients={clientRows.map((c) => c.name)} roleLabels={ROLE_LABELS} />
+      <ExecutiveReportForm managers={managers} clients={clientNames} owners={owners} roleLabels={ROLE_LABELS} />
     </div>
   );
 }

@@ -44,7 +44,7 @@ const inputStyle = {
 
 const EMPTY = { client: '', description: '', location: '', url: '', issue: '', department: '', severity: '' };
 
-export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
+export default function ExecutiveReportForm({ managers, clients, owners, roleLabels }) {
   const [managerIds, setManagerIds] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [screenshot, setScreenshot] = useState(null);
@@ -56,6 +56,12 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
 
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
   const selectedManagers = managers.filter((m) => managerIds.includes(m.id));
+  // Each manager only gets the selected clients they own (writers managers own all).
+  const clientsOf = (m) => (m.role === 'writers_manager'
+    ? selectedClients
+    : selectedClients.filter((c) => (owners[c.toLowerCase()] || []).includes(m.id)));
+  const assignment = selectedManagers.map((m) => ({ manager: m, count: clientsOf(m).length }));
+  const nobodyOwns = selectedClients.length > 0 && assignment.every((a) => a.count === 0);
   const toggleManager = (id) => setManagerIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const toggleRole = (list) => setManagerIds((prev) => {
     const ids = list.map((m) => m.id);
@@ -116,7 +122,7 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
       setMessage({ type: 'error', text: result.error });
       return;
     }
-    setMessage({ type: 'success', text: `Issue filed${selectedClients.length > 1 ? ` across ${selectedClients.length} clients` : ''} against ${selectedManagers.map((m) => m.name).join(', ')}. ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.` });
+    setMessage({ type: 'success', text: `Issue filed${selectedClients.length > 1 ? ` across ${selectedClients.length} clients` : ''} — ${result.perManager.map((p) => (selectedClients.length ? `${p.name} (${p.clients} client${p.clients === 1 ? '' : 's'})` : p.name)).join(', ')}.${result.skipped.length ? ` Not sent to ${result.skipped.join(', ')} — none of those clients are theirs.` : ''} ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.` });
     setForm(EMPTY);
     setScreenshot(null);
     setFileKey((k) => k + 1);
@@ -216,6 +222,17 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
                 )}
               </div>
 
+              {selectedClients.length > 0 && (
+                <div style={{ padding: '0.75rem 1rem', border: '1px solid var(--border)', borderRadius: '0.5rem', backgroundColor: 'var(--background)', fontSize: '0.82rem' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '0.35rem' }}>Who gets what</div>
+                  {assignment.map(({ manager, count }) => (
+                    <div key={manager.id} style={{ color: count ? 'var(--foreground)' : 'var(--danger)' }}>
+                      {manager.name}: {count ? `${count} of the ${selectedClients.length} selected client${selectedClients.length === 1 ? '' : 's'}` : 'none of these clients — will not receive it'}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div>
                 <label style={labelStyle}>Description</label>
                 <textarea value={form.description} onChange={set('description')} rows={4} required style={{ ...inputStyle, resize: 'vertical' }} placeholder="Describe what's wrong in detail..." />
@@ -279,8 +296,8 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
                 <button
                   type="submit"
-                  disabled={submitting || !form.severity || clientInvalid}
-                  style={{ padding: '0.7rem 1.6rem', backgroundColor: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', opacity: submitting || !form.severity || clientInvalid ? 0.6 : 1 }}
+                  disabled={submitting || !form.severity || clientInvalid || nobodyOwns}
+                  style={{ padding: '0.7rem 1.6rem', backgroundColor: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', opacity: submitting || !form.severity || clientInvalid || nobodyOwns ? 0.6 : 1 }}
                 >
                   {submitting ? 'Submitting...' : 'Submit report'}
                 </button>

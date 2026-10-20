@@ -11,8 +11,9 @@ export default async function QaClientsStatsPage() {
   // EODs are written against) — distinct names, since the same client exists
   // as one row per campaign.
   const clientRows = await db.prepare(`
-    SELECT DISTINCT TRIM(name) as name FROM clients
-    WHERE name IS NOT NULL AND TRIM(name) != ''
+    SELECT TRIM(name) as name FROM clients WHERE name IS NOT NULL AND TRIM(name) != ''
+    UNION
+    SELECT TRIM(name) as name FROM web_clients WHERE name IS NOT NULL AND TRIM(name) != ''
     ORDER BY name
   `).all();
 
