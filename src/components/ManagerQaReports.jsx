@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import QaManualDetails, { SeverityBadge } from '@/components/QaManualDetails';
+import LinkList from '@/components/LinkList';
 
 const BRAND_COLOR = 'var(--primary)';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -115,16 +116,8 @@ function ReportCard({ report, resolveAction }) {
         </div>
       </div>
 
-      {report.page_url && (
-        <a href={report.page_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontSize: '0.78rem', color: BRAND_COLOR, wordBreak: 'break-all', textDecoration: 'none', marginBottom: '0.6rem' }}>
-          {report.page_url}
-        </a>
-      )}
-      {report.work_done && (
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem', whiteSpace: 'pre-wrap' }}>
-          <Linkify text={report.work_done} />
-        </div>
-      )}
+      <LinkList text={report.page_url} style={{ fontSize: '0.78rem', marginBottom: '0.6rem' }} />
+      <LinkList text={report.work_done} style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }} />
 
       {isManual && <QaManualDetails report={report} />}
 

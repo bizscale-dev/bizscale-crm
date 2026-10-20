@@ -177,7 +177,7 @@ export default function ExecutiveReportForm({ managers, clients, roleLabels }) {
                 </div>
                 <div>
                   <label style={labelStyle}>URL</label>
-                  <input type="text" value={form.url} onChange={set('url')} maxLength={1000} style={inputStyle} placeholder="https://..." />
+                  <textarea value={form.url} onChange={set('url')} rows={3} maxLength={5000} style={{ ...inputStyle, resize: 'vertical' }} placeholder="https://... (one link per line — add as many as you need)" />
                 </div>
                 <div>
                   <label style={labelStyle}>Issue</label>

@@ -1,6 +1,8 @@
 import { getDb } from '@/lib/db';
 import Link from 'next/link';
 import Linkify from '../Linkify';
+import LinkList from '@/components/LinkList';
+import DeleteReportButton from './DeleteReportButton';
 import QaManualDetails, { SeverityBadge } from '@/components/QaManualDetails';
 import { cardStyle, StatPill } from '../qaStyles';
 import { QA_RESOLVE_DAYS, withQaDue } from '@/lib/qaReports';
@@ -98,16 +100,8 @@ export default async function QaReportsPage() {
                   </div>
                 </div>
 
-                {r.page_url && (
-                  <a href={r.page_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontSize: '0.78rem', color: 'var(--primary)', wordBreak: 'break-all', textDecoration: 'none', marginBottom: '0.6rem' }}>
-                    {r.page_url}
-                  </a>
-                )}
-                {r.work_done && (
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem', whiteSpace: 'pre-wrap' }}>
-                    <Linkify text={r.work_done} />
-                  </div>
-                )}
+                <LinkList text={r.page_url} style={{ fontSize: '0.78rem', marginBottom: '0.6rem' }} />
+                <LinkList text={r.work_done} style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }} />
 
                 {r.source === 'manual' && <QaManualDetails report={r} />}
 
@@ -126,6 +120,7 @@ export default async function QaReportsPage() {
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.6rem' }}>
                   Flagged by {r.filed_by} · {new Date(r.created_at.replace(' ', 'T') + 'Z').toLocaleString()}
                 </div>
+                <DeleteReportButton reportId={r.id} />
               </div>
             );
           })}

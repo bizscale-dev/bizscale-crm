@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Linkify from '../Linkify';
+import LinkList from '@/components/LinkList';
 import { cardStyle } from '../qaStyles';
 import { markFollowUpChecked } from './actions';
 
@@ -54,9 +55,7 @@ export default function FollowUpsList({ items }) {
             <div style={{ fontSize: '0.875rem', wordBreak: 'break-word', marginBottom: '0.5rem' }}>
               <Linkify text={r.note} />
             </div>
-            {r.page_url && (
-              <div style={{ fontSize: '0.8rem', marginBottom: '0.5rem', wordBreak: 'break-all' }}><Linkify text={r.page_url} /></div>
-            )}
+            <LinkList text={r.page_url} style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }} />
             {r.resolution_note && (
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
                 Manager&apos;s note: {r.resolution_note}

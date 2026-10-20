@@ -37,7 +37,7 @@ export async function submitExecutiveReport(input) {
   const issue = clean(input?.issue, 500);
   const department = clean(input?.department, 100);
   const severity = clean(input?.severity, 10).toLowerCase();
-  let url = clean(input?.url, 1000);
+  const urlInput = clean(input?.url, 5000);
   const screenshot = input?.screenshot || null;
 
   if (!managerId) return { error: 'Select a manager' };
@@ -45,14 +45,18 @@ export async function submitExecutiveReport(input) {
   if (!description) return { error: 'Description is required' };
   if (!QA_SEVERITIES.includes(severity)) return { error: 'Pick a severity (high, medium or low)' };
 
-  if (url) {
-    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  // One or many links (separated by newlines, spaces or commas) — stored one per line.
+  const urls = [];
+  for (const raw of urlInput.split(/[\s,]+/).filter(Boolean)) {
+    const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     try {
-      new URL(url);
+      new URL(candidate);
     } catch {
-      return { error: 'That URL doesn’t look valid' };
+      return { error: `"${raw.slice(0, 60)}" doesn’t look like a valid URL` };
     }
+    urls.push(candidate);
   }
+  const url = urls.join('\n');
 
   if (screenshot) {
     if (typeof screenshot !== 'string' || !screenshot.startsWith('data:image/')) {
