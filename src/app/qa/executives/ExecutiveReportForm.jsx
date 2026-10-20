@@ -94,22 +94,41 @@ export default function ExecutiveReportForm({ managers, clients, owners, roleLab
     byRole.get(m.role).push(m);
   }
 
-  const handleFile = (e) => {
+  const loadImage = (file) => {
     setImageError(null);
-    const file = e.target.files?.[0];
     if (!file) {
       setScreenshot(null);
-      return;
+      return false;
     }
     if (file.size > MAX_IMAGE_BYTES) {
       setImageError('Image is too large — max 2MB.');
-      e.target.value = '';
       setScreenshot(null);
-      return;
+      return false;
     }
     const reader = new FileReader();
     reader.onload = () => setScreenshot(reader.result);
     reader.readAsDataURL(file);
+    return true;
+  };
+
+  const handleFile = (e) => {
+    if (!loadImage(e.target.files?.[0])) e.target.value = '';
+  };
+
+  // Ctrl+V anywhere in the form: if the clipboard holds an image (e.g. a
+  // screenshot), use it. Plain text pastes are left alone.
+  const handlePaste = (e) => {
+    const item = [...(e.clipboardData?.items || [])].find((i) => i.kind === 'file' && i.type.startsWith('image/'));
+    if (!item) return;
+    e.preventDefault();
+    setFileKey((k) => k + 1); // clear any file chosen in the picker
+    loadImage(item.getAsFile());
+  };
+
+  const removeScreenshot = () => {
+    setScreenshot(null);
+    setImageError(null);
+    setFileKey((k) => k + 1);
   };
 
   const handleSubmit = async (e) => {
@@ -142,7 +161,7 @@ export default function ExecutiveReportForm({ managers, clients, owners, roleLab
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+      <form onSubmit={handleSubmit} onPaste={handlePaste} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
         <div>
           <label style={labelStyle}>Managers (select one or more)</label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
@@ -283,11 +302,20 @@ export default function ExecutiveReportForm({ managers, clients, owners, roleLab
 
               <div>
                 <label style={labelStyle}>Screenshot (optional)</label>
-                <input key={fileKey} type="file" accept="image/*" onChange={handleFile} />
+                <div
+                  tabIndex={0}
+                  style={{ padding: '0.9rem 1rem', border: '1.5px dashed var(--border)', borderRadius: '0.5rem', fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.9rem', flexWrap: 'wrap', outline: 'none' }}
+                >
+                  <span>Press <strong>Ctrl+V</strong> to paste a screenshot, or</span>
+                  <input key={fileKey} type="file" accept="image/*" onChange={handleFile} />
+                </div>
                 {imageError && <div style={{ fontSize: '0.8rem', color: 'var(--danger)', marginTop: '0.35rem' }}>{imageError}</div>}
                 {screenshot && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={screenshot} alt="Preview" style={{ maxWidth: '100%', maxHeight: '220px', marginTop: '0.6rem', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block' }} />
+                  <div style={{ marginTop: '0.6rem' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={screenshot} alt="Preview" style={{ maxWidth: '100%', maxHeight: '220px', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block' }} />
+                    <button type="button" onClick={removeScreenshot} style={{ marginTop: '0.4rem', background: 'none', border: 'none', color: 'var(--danger)', fontSize: '0.78rem', cursor: 'pointer', padding: 0 }}>Remove screenshot</button>
+                  </div>
                 )}
               </div>
             </div>
