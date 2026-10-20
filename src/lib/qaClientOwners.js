@@ -28,17 +28,24 @@ export async function getClientOwnership(db, managers) {
     owners.get(key).add(managerId);
   };
 
-  const seo = await db.prepare(
-    "SELECT TRIM(name) AS name, support_number FROM clients WHERE name IS NOT NULL AND TRIM(name) != ''"
-  ).all();
+  // Only clients currently on the sheets: active rows of the active SEO / web
+  // campaign. Clients dropped from the sheet get deactivated by the daily sync
+  // and so fall out of the roster (their old reports keep the name).
+  const seo = await db.prepare(`
+    SELECT TRIM(c.name) AS name, c.support_number FROM clients c
+    JOIN campaigns cp ON cp.id = c.campaign_id
+    WHERE cp.status = 'active' AND c.is_active = 1 AND c.name IS NOT NULL AND TRIM(c.name) != ''
+  `).all();
   for (const c of seo) {
     const range = c.support_number == null ? null : SEO_SUPPORT_RANGES.find((r) => c.support_number >= r.from && c.support_number <= r.to);
     add(c.name, range ? byName.get(norm(range.managerName)) : null);
   }
 
-  const web = await db.prepare(
-    "SELECT TRIM(name) AS name, sheet_associate_name FROM web_clients WHERE name IS NOT NULL AND TRIM(name) != ''"
-  ).all();
+  const web = await db.prepare(`
+    SELECT TRIM(w.name) AS name, w.sheet_associate_name FROM web_clients w
+    JOIN webseo_campaigns wc ON wc.id = w.webseo_campaign_id
+    WHERE wc.status = 'active' AND w.is_active = 1 AND w.name IS NOT NULL AND TRIM(w.name) != ''
+  `).all();
   for (const c of web) add(c.name, c.sheet_associate_name ? byName.get(norm(c.sheet_associate_name)) : null);
 
   return {

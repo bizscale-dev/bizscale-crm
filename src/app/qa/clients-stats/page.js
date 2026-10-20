@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
 import { withQaDue } from '@/lib/qaReports';
+import { getClientOwnership } from '@/lib/qaClientOwners';
 import ClientsStatsClient from './ClientsStatsClient';
 
 export const revalidate = 0;
@@ -7,15 +8,8 @@ export const revalidate = 0;
 export default async function QaClientsStatsPage() {
   const db = await getDb();
 
-  // The full SEO client roster (the same `clients` table the SEO managers'
-  // EODs are written against) — distinct names, since the same client exists
-  // as one row per campaign.
-  const clientRows = await db.prepare(`
-    SELECT TRIM(name) as name FROM clients WHERE name IS NOT NULL AND TRIM(name) != ''
-    UNION
-    SELECT TRIM(name) as name FROM web_clients WHERE name IS NOT NULL AND TRIM(name) != ''
-    ORDER BY name
-  `).all();
+  // Every client currently on the SEO or web sheet (same roster as the Executives page).
+  const { clientNames } = await getClientOwnership(db, []);
 
   // Issues QA raised on a client = reports flagged from EOD entries, plus
   // manual (Executives) reports, which now name a client. Older manual
@@ -61,5 +55,5 @@ export default async function QaClientsStatsPage() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  return <ClientsStatsClient reports={withQaDue(rows)} clients={clientRows.map((c) => c.name)} today={today} />;
+  return <ClientsStatsClient reports={withQaDue(rows)} clients={clientNames} today={today} />;
 }
