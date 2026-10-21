@@ -3,7 +3,7 @@
 import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { fetchDueFollowUps, syncQaFollowUps } from '@/lib/qaReports';
-import { notifyAdminOnGoogleChat } from '@/lib/googleChat';
+import { postToGoogleChat, getChatIdsForEmails } from '@/lib/googleChat';
 
 async function requireQa() {
   const session = await verifySession();
@@ -32,7 +32,7 @@ export async function markFollowUpChecked(reportId, { notifyAdmin = false, note 
   if (notifyAdmin) {
     const r = await db.prepare(`
       SELECT q.source, q.title, q.web_client_name, q.client_names, q.work_done, q.note, q.page_url, q.report_date, q.severity,
-        q.status, q.created_at, m.name as manager_name, f.name as filed_by, c.name as checker
+        q.status, q.created_at, m.name as manager_name, m.email as manager_email, f.name as filed_by, c.name as checker
       FROM qa_reports q
       JOIN users m ON m.id = q.manager_id
       JOIN users f ON f.id = q.qa_user_id
@@ -53,7 +53,9 @@ export async function markFollowUpChecked(reportId, { notifyAdmin = false, note 
       r.page_url && `Links:\n${r.page_url}`,
       extra && `QA note: ${extra}`,
     ].filter(Boolean);
-    const chat = await notifyAdminOnGoogleChat(lines.join('\n'));
+    // @-mention the manager this report is about (if their Chat ID is stored).
+    const mentionIds = await getChatIdsForEmails(db, [r.manager_email]);
+    const chat = await postToGoogleChat(lines.join('\n'), mentionIds);
     if (!chat.ok) return { error: `Couldn't notify the admin (${chat.error}). Nothing was marked — try again.` };
   }
 

@@ -755,6 +755,13 @@ async function runMigrations(raw) {
       FOREIGN KEY (report_id) REFERENCES qa_reports(id) ON DELETE CASCADE
     )`,
     "CREATE INDEX IF NOT EXISTS idx_qa_report_comments_report ON qa_report_comments (report_id)",
+    // Team members' Google Chat user IDs, keyed by work email, so messages posted to the
+    // Google Chat space can @-mention the right person (see src/lib/googleChat.js).
+    `CREATE TABLE IF NOT EXISTS chat_members (
+      email TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      chat_user_id TEXT NOT NULL
+    )`,
   ];
 
   for (const sql of createTableStatements) {

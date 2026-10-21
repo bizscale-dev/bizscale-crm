@@ -76,7 +76,7 @@ export default function FollowUpsList({ items }) {
               value={notes[r.id] || ''}
               onChange={(e) => setNotes((prev) => ({ ...prev, [r.id]: e.target.value }))}
               maxLength={500}
-              placeholder="Note for the admin (optional, only sent with Notify admin)"
+              placeholder="Note for the Google Chat message (optional, only sent with Notify on Google Chat)"
               style={{ width: '100%', boxSizing: 'border-box', padding: '0.5rem 0.75rem', marginBottom: '0.6rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--foreground)', fontSize: '0.82rem' }}
             />
             <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
@@ -94,7 +94,7 @@ export default function FollowUpsList({ items }) {
                 onClick={() => check(r.id, true)}
                 style={{ padding: '0.55rem 1.3rem', backgroundColor: 'transparent', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', opacity: busyId === r.id ? 0.6 : 1 }}
               >
-                Checked — notify admin
+                Checked — notify on Google Chat
               </button>
             </div>
           </div>
