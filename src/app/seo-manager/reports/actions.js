@@ -3,6 +3,7 @@
 import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
+import { submitFixForReview } from '@/lib/qaReports';
 
 async function requireSeoManager() {
   const session = await verifySession();
@@ -30,30 +31,18 @@ export async function getOpenReportCount() {
 }
 
 /**
- * Resolves one QA report on this manager's own EOD. Scoped by manager_id in
- * the UPDATE itself, so a manager can only ever resolve their own reports,
- * and only while still open. A note on what was done is required — QA reads
- * it on their Reports page.
+ * The manager submits a fix for one QA report on their own list. It does not
+ * resolve it: it goes to QA for review (see submitFixForReview in
+ * src/lib/qaReports.js) and only counts as resolved once QA confirms. A note
+ * on what was done is required.
  */
 export async function resolveReport(reportId, note) {
   const { session, error } = await requireSeoManager();
   if (error) return { error };
 
-  const id = parseInt(reportId, 10);
-  if (!id) return { error: 'Invalid report' };
-
-  const cleanNote = (note || '').trim();
-  if (!cleanNote) return { error: 'Please describe how you resolved it' };
-  if (cleanNote.length > 2000) return { error: 'Note is too long (max 2000 characters)' };
-
   const db = await getDb();
-  const result = await db.prepare(`
-    UPDATE qa_reports
-    SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP, resolution_note = ?, resolved_by = ?
-    WHERE id = ? AND manager_id = ? AND status = 'open'
-  `).run(cleanNote, session.userId, id, session.userId);
-
-  if (!result.changes) return { error: 'This report is already resolved or not yours' };
+  const result = await submitFixForReview(db, session, reportId, note);
+  if (result.error) return result;
 
   revalidatePath('/seo-manager/reports');
   revalidatePath('/qa/reports');

@@ -41,7 +41,7 @@ export default function ClientsStatsView({ reports, clients, today }) {
       if (!map.has(k)) map.set(k, { name: r.web_client_name.trim(), total: 0, open: 0, lastFiled: '' });
       const c = map.get(k);
       c.total += 1;
-      if (r.status === 'open') c.open += 1;
+      if (r.status !== 'resolved') c.open += 1;
       const d = filedDate(r);
       if (d > c.lastFiled) c.lastFiled = d;
     }
@@ -66,7 +66,7 @@ export default function ClientsStatsView({ reports, clients, today }) {
         if (!map.has(id)) map.set(id, { name: names[i], total: 0, open: 0 });
         const m = map.get(id);
         m.total += 1;
-        if (r.status === 'open') m.open += 1;
+        if (r.status !== 'resolved') m.open += 1;
       });
     }
     return [...map.values()].sort((a, b) => b.total - a.total);

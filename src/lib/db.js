@@ -251,6 +251,12 @@ async function runMigrations(raw) {
     // The SEO sheet's "Support" column (1-10): which SEO manager looks after the client
     // (see src/lib/qaClientOwners.js). Refreshed by the daily clients sync.
     "ALTER TABLE clients ADD COLUMN support_number INTEGER",
+    // A manager's fix goes to status 'pending_review' first; QA confirms it (status
+    // 'resolved') or rejects it (back to 'open', rejection_count + 1). resolved_at is
+    // when the manager submitted the fix, so deadlines are judged on that.
+    "ALTER TABLE qa_reports ADD COLUMN confirmed_at DATETIME",
+    "ALTER TABLE qa_reports ADD COLUMN confirmed_by INTEGER",
+    "ALTER TABLE qa_reports ADD COLUMN rejection_count INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE qa_reports ADD COLUMN client_names TEXT",
     "ALTER TABLE qa_reports ADD COLUMN issue_group TEXT",
   ];
@@ -731,9 +737,24 @@ async function runMigrations(raw) {
       followup_notified_at DATETIME,
       client_names TEXT,
       issue_group TEXT,
+      confirmed_at DATETIME,
+      confirmed_by INTEGER,
+      rejection_count INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (qa_user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
+    // Discussion on a QA report: free comments from QA and the manager, plus the
+    // workflow events (fix submitted, rejected, confirmed) in one timeline.
+    `CREATE TABLE IF NOT EXISTS qa_report_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'comment',
+      body TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (report_id) REFERENCES qa_reports(id) ON DELETE CASCADE
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_qa_report_comments_report ON qa_report_comments (report_id)",
   ];
 
   for (const sql of createTableStatements) {

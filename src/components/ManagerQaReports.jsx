@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import QaManualDetails, { SeverityBadge } from '@/components/QaManualDetails';
 import LinkList from '@/components/LinkList';
+import ReportThread from '@/components/ReportThread';
 
 const BRAND_COLOR = 'var(--primary)';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -66,6 +67,10 @@ function StatPill({ label, value, color }) {
 function ReportCard({ report, resolveAction }) {
   const router = useRouter();
   const isOpen = report.status === 'open';
+  const isPending = report.status === 'pending_review';
+  const lastRejection = isOpen && report.rejection_count > 0
+    ? [...(report.comments || [])].reverse().find((c) => c.kind === 'rejected')
+    : null;
   const isTask = report.source === 'manager_task';
   const isManual = report.source === 'manual';
   const deadline = isOpen ? deadlineInfo(report.due_at) : null;
@@ -109,8 +114,8 @@ function ReportCard({ report, resolveAction }) {
             {deadline.label}
           </span>
         ) : (
-          <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--success)', backgroundColor: 'rgba(34, 197, 94, 0.12)', padding: '0.25rem 0.7rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>
-            ✅ Resolved{resolvedLate ? ' (late)' : ''}
+          <span style={{ fontSize: '0.75rem', fontWeight: '700', color: isPending ? '#3b82f6' : 'var(--success)', backgroundColor: isPending ? 'rgba(59, 130, 246, 0.12)' : 'rgba(34, 197, 94, 0.12)', padding: '0.25rem 0.7rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>
+            {isPending ? '⏳ Waiting for QA to confirm' : `✅ Resolved — confirmed by QA${resolvedLate ? ' (fixed late)' : ''}`}
           </span>
         )}
         </div>
@@ -126,10 +131,19 @@ function ReportCard({ report, resolveAction }) {
         <Linkify text={report.note} />
       </div>
 
+      {lastRejection && (
+        <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', backgroundColor: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.5)', borderRadius: '0.5rem', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
+          <div style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--danger)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
+            QA rejected your last fix — it is open again
+          </div>
+          <Linkify text={lastRejection.body} />
+        </div>
+      )}
+
       {!isOpen && (
-        <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', backgroundColor: 'rgba(34, 197, 94, 0.06)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '0.5rem', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
-          <div style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--success)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
-            Your resolution · {new Date(parseUtc(report.resolved_at)).toLocaleString()}
+        <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', backgroundColor: isPending ? 'rgba(59, 130, 246, 0.06)' : 'rgba(34, 197, 94, 0.06)', border: `1px solid ${isPending ? 'rgba(59, 130, 246, 0.4)' : 'rgba(34, 197, 94, 0.3)'}`, borderRadius: '0.5rem', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
+          <div style={{ fontSize: '0.7rem', fontWeight: '700', color: isPending ? '#3b82f6' : 'var(--success)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
+            {isPending ? 'Your fix (QA is checking it)' : 'Your resolution'} · {new Date(parseUtc(report.resolved_at)).toLocaleString()}
           </div>
           <Linkify text={report.resolution_note} />
         </div>
@@ -141,14 +155,14 @@ function ReportCard({ report, resolveAction }) {
           onClick={() => setResolving(true)}
           style={{ marginTop: '1rem', padding: '0.55rem 1.2rem', backgroundColor: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer' }}
         >
-          Resolve
+          Mark as fixed
         </button>
       )}
 
       {isOpen && resolving && (
         <div style={{ marginTop: '1rem' }}>
           <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            What did you do to fix it?
+            What did you do to fix it? QA will check it before it counts as resolved.
           </label>
           <textarea
             value={note}
@@ -160,7 +174,7 @@ function ReportCard({ report, resolveAction }) {
           {error && <div style={{ fontSize: '0.8rem', color: 'var(--danger)', marginTop: '0.4rem' }}>{error}</div>}
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
             <button type="button" onClick={submit} disabled={submitting} style={{ padding: '0.5rem 1.1rem', backgroundColor: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.4rem', fontWeight: '600', fontSize: '0.82rem', cursor: 'pointer', opacity: submitting ? 0.6 : 1 }}>
-              {submitting ? 'Saving...' : 'Mark as resolved'}
+              {submitting ? 'Saving...' : 'Send to QA for review'}
             </button>
             <button type="button" onClick={() => setResolving(false)} style={{ padding: '0.5rem 1.1rem', backgroundColor: 'transparent', color: 'var(--foreground)', border: '1px solid var(--border)', borderRadius: '0.4rem', fontWeight: '600', fontSize: '0.82rem', cursor: 'pointer' }}>
               Cancel
@@ -168,13 +182,16 @@ function ReportCard({ report, resolveAction }) {
           </div>
         </div>
       )}
+
+      <ReportThread reportId={report.id} comments={report.comments} canComment />
     </div>
   );
 }
 
 export default function ManagerQaReports({ reports, resolveAction, resolveDays }) {
   const open = reports.filter((r) => r.status === 'open');
-  const resolved = reports.filter((r) => r.status !== 'open');
+  const pending = reports.filter((r) => r.status === 'pending_review');
+  const resolved = reports.filter((r) => r.status === 'resolved');
   const overdueCount = open.filter((r) => deadlineInfo(r.due_at).overdue).length;
 
   return (
@@ -183,12 +200,13 @@ export default function ManagerQaReports({ reports, resolveAction, resolveDays }
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>Reports</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
           Issues QA has flagged on your EODs. You have {resolveDays} working days (Sat/Sun excluded) from when a report is filed to
-          resolve it — the dot on this tab keeps blinking until every report is resolved.
+          fix it. When you mark one as fixed it goes to QA, and it is only resolved once QA confirms — if it fails QA it comes back open. The dot on this tab keeps blinking until nothing is open.
         </p>
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <StatPill label="Open" value={open.length} color="#f59e0b" />
+        <StatPill label="Waiting for QA" value={pending.length} color="#3b82f6" />
         <StatPill label="Overdue" value={overdueCount} color="var(--danger)" />
         <StatPill label="Resolved" value={resolved.length} color="var(--success)" />
       </div>
@@ -203,6 +221,12 @@ export default function ManagerQaReports({ reports, resolveAction, resolveDays }
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <h2 style={{ fontSize: '1.05rem', margin: 0, color: '#f59e0b' }}>Needs your attention</h2>
               {open.map((r) => <ReportCard key={r.id} report={r} resolveAction={resolveAction} />)}
+            </div>
+          )}
+          {pending.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <h2 style={{ fontSize: '1.05rem', margin: 0, color: '#3b82f6' }}>Waiting for QA to confirm</h2>
+              {pending.map((r) => <ReportCard key={r.id} report={r} resolveAction={resolveAction} />)}
             </div>
           )}
           {resolved.length > 0 && (

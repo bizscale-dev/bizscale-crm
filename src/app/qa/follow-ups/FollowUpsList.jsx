@@ -9,7 +9,8 @@ import { markFollowUpChecked } from './actions';
 
 const MANAGER_STATUS = {
   open: { label: 'Manager: not resolved yet', color: '#f59e0b' },
-  resolved: { label: 'Manager: marked resolved', color: 'var(--success)' },
+  pending_review: { label: 'Manager: says fixed — waiting for QA', color: '#3b82f6' },
+  resolved: { label: 'Resolved (confirmed by QA)', color: 'var(--success)' },
 };
 
 function subjectOf(r) {

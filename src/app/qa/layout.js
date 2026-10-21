@@ -3,15 +3,20 @@
 import { useEffect, useState } from 'react';
 import RoleLayoutShell from '@/components/RoleLayoutShell';
 import { getDueFollowUpCount } from './follow-ups/actions';
+import { getPendingReviewCount } from './reports/actions';
 
 export default function QaLayout({ children }) {
   const [followUpCount, setFollowUpCount] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
-      const count = await getDueFollowUpCount();
-      if (!cancelled) setFollowUpCount(count);
+      const [count, review] = await Promise.all([getDueFollowUpCount(), getPendingReviewCount()]);
+      if (!cancelled) {
+        setFollowUpCount(count);
+        setReviewCount(review);
+      }
     };
     poll();
     const interval = setInterval(poll, 60000);
@@ -24,7 +29,7 @@ export default function QaLayout({ children }) {
     { href: '/qa/eod', label: 'EOD' },
     { href: '/qa/manager-tasks', label: 'Managers Tasks' },
     { href: '/qa/executives', label: 'Executives' },
-    { href: '/qa/reports', label: 'Reports' },
+    { href: '/qa/reports', label: 'Reports', badgeCount: reviewCount },
     { href: '/qa/resolved', label: 'Resolved' },
     { href: '/qa/follow-ups', label: 'Follow-ups', badgeCount: followUpCount },
   ];

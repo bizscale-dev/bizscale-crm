@@ -92,3 +92,63 @@ export const QA_SEVERITIES = ['high', 'medium', 'low'];
 // Manual (Executives) report screenshot cap — same ~2MB-of-image budget the
 // task proof uploads use, inflated by base64's ~1.37x overhead.
 export const QA_MAX_SCREENSHOT_BASE64 = 2 * 1024 * 1024 * 1.37;
+
+// What a report is about, for notifications and the like.
+export function reportSubject(r) {
+  if (r.source === 'manager_task') return `Task: ${(r.work_done || '').slice(0, 60)}`;
+  return r.web_client_name || r.title || 'a report';
+}
+
+// Adds a `comments` array (oldest first, with author name and role) to each
+// report — the discussion thread plus the fix / rejection / confirmation events.
+export async function attachComments(db, reports) {
+  if (reports.length === 0) return reports;
+  const ids = reports.map((r) => r.id);
+  const ph = ids.map(() => '?').join(',');
+  const rows = await db.prepare(`
+    SELECT c.id, c.report_id, c.kind, c.body, c.created_at, u.name AS author, u.role AS author_role
+    FROM qa_report_comments c
+    JOIN users u ON u.id = c.user_id
+    WHERE c.report_id IN (${ph})
+    ORDER BY c.created_at ASC, c.id ASC
+  `).all(...ids);
+  const byReport = new Map();
+  for (const c of rows) {
+    if (!byReport.has(c.report_id)) byReport.set(c.report_id, []);
+    byReport.get(c.report_id).push(c);
+  }
+  return reports.map((r) => ({ ...r, comments: byReport.get(r.id) || [] }));
+}
+
+// A manager says they've fixed a report. It does NOT become resolved: it goes
+// to 'pending_review' and QA is asked to verify it. Scoped to the manager's own
+// open reports. Shared by the three manager portals' resolveReport actions.
+export async function submitFixForReview(db, session, reportId, note) {
+  const id = parseInt(reportId, 10);
+  if (!id) return { error: 'Invalid report' };
+  const cleanNote = (note || '').trim();
+  if (!cleanNote) return { error: 'Please describe how you fixed it' };
+  if (cleanNote.length > 2000) return { error: 'Note is too long (max 2000 characters)' };
+
+  const result = await db.prepare(`
+    UPDATE qa_reports
+    SET status = 'pending_review', resolved_at = CURRENT_TIMESTAMP, resolution_note = ?, resolved_by = ?
+    WHERE id = ? AND manager_id = ? AND status = 'open'
+  `).run(cleanNote, session.userId, id, session.userId);
+  if (!result.changes) return { error: 'This report is not open, or not yours' };
+
+  await db.prepare(`INSERT INTO qa_report_comments (report_id, user_id, kind, body) VALUES (?, ?, 'fix', ?)`)
+    .run(id, session.userId, cleanNote);
+
+  const r = await db.prepare(`
+    SELECT q.source, q.title, q.web_client_name, q.work_done, m.name AS manager_name
+    FROM qa_reports q JOIN users m ON m.id = q.manager_id WHERE q.id = ?
+  `).get(id);
+  const qaUsers = await db.prepare(`SELECT id FROM users WHERE role = 'qa' AND is_active = 1`).all();
+  await createNotificationsForUsers(db, qaUsers.map((u) => u.id), {
+    title: 'Fix submitted — QA review needed',
+    message: `${r.manager_name} says ${reportSubject(r)} is fixed: ${cleanNote.slice(0, 100)} — confirm or reject it`,
+    link: '/qa/reports',
+  });
+  return { success: true };
+}

@@ -43,8 +43,8 @@ export default async function QaClientsStatsPage() {
       existing.manager_ids.push(r.manager_id);
       existing.manager_names.push(r.manager_name);
       // The client's issue is only resolved once every manager has resolved it.
-      if (r.status === 'open') {
-        existing.status = 'open';
+      if (r.status !== 'resolved') {
+        existing.status = r.status;
         existing.resolved_at = null;
       } else if (existing.status !== 'open' && r.resolved_at > existing.resolved_at) {
         existing.resolved_at = r.resolved_at;

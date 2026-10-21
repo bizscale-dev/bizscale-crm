@@ -41,6 +41,7 @@ export function isOverdue(report, nowMs) {
 
 export function statusOf(report, nowMs) {
   if (report.status === 'resolved') return 'resolved';
+  if (report.status === 'pending_review') return 'review';
   return isOverdue(report, nowMs) ? 'overdue' : 'open';
 }
 

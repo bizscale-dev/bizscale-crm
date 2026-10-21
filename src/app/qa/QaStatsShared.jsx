@@ -70,6 +70,7 @@ export function DateRangeControls({ from, to, setFrom, setTo, today, allowAllTim
 const STATUS_STYLES = {
   open: { label: 'Open', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)' },
   overdue: { label: 'Overdue', color: 'var(--danger)', bg: 'rgba(239, 68, 68, 0.12)' },
+  review: { label: 'Awaiting QA', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)' },
   resolved: { label: 'Resolved', color: 'var(--success)', bg: 'rgba(34, 197, 94, 0.12)' },
 };
 

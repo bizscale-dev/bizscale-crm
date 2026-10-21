@@ -3,9 +3,11 @@ import Link from 'next/link';
 import Linkify from '../Linkify';
 import LinkList from '@/components/LinkList';
 import DeleteReportButton from './DeleteReportButton';
+import ReviewControls from './ReviewControls';
+import ReportThread from '@/components/ReportThread';
 import QaManualDetails, { SeverityBadge } from '@/components/QaManualDetails';
 import { cardStyle, StatPill } from '../qaStyles';
-import { QA_RESOLVE_DAYS, withQaDue } from '@/lib/qaReports';
+import { QA_RESOLVE_DAYS, withQaDue, attachComments } from '@/lib/qaReports';
 
 export const revalidate = 0;
 
@@ -17,6 +19,7 @@ const ROLE_LABELS = {
 
 const STATUS_STYLES = {
   open: { label: 'Open', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)' },
+  review: { label: 'Awaiting QA check', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)' },
   overdue: { label: 'Overdue', color: 'var(--danger)', bg: 'rgba(239, 68, 68, 0.12)' },
   resolved: { label: 'Resolved', color: 'var(--success)', bg: 'rgba(34, 197, 94, 0.12)' },
 };
@@ -33,7 +36,7 @@ export default async function QaReportsPage({ readOnly = false, onlyResolved = f
   // QA works as a team, and this is the shared record of what's been flagged.
   const rows = await db.prepare(`
     SELECT q.id, q.source, q.title, q.location, q.issue, q.department, q.severity, q.screenshot_base64, q.client_names, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at,
-      q.resolved_at, q.resolution_note,
+      q.resolved_at, q.resolution_note, q.rejection_count, q.confirmed_at,
       m.id as manager_id, m.name as manager_name, m.role as manager_role,
       f.name as filed_by
     FROM qa_reports q
@@ -43,11 +46,15 @@ export default async function QaReportsPage({ readOnly = false, onlyResolved = f
     ORDER BY ${onlyResolved ? 'q.resolved_at DESC' : 'q.created_at DESC'}, q.id DESC
   `).all();
 
-  const reports = withQaDue(rows);
+  const withDue = withQaDue(rows);
+  // Fixes waiting for QA's verdict go first — they're the ones needing action.
+  if (!onlyResolved) withDue.sort((a, b) => (b.status === 'pending_review') - (a.status === 'pending_review'));
+  const reports = await attachComments(db, withDue);
   const isOverdue = (r) => !!r.is_overdue;
   const openCount = reports.filter((r) => r.status === 'open').length;
   const overdueCount = reports.filter(isOverdue).length;
-  const resolvedCount = reports.length - openCount;
+  const reviewCount = reports.filter((r) => r.status === 'pending_review').length;
+  const resolvedCount = reports.filter((r) => r.status === 'resolved').length;
   const lateCount = reports.filter((r) => r.status === 'resolved' && r.resolved_at > r.due_at).length;
 
   return (
@@ -71,6 +78,7 @@ export default async function QaReportsPage({ readOnly = false, onlyResolved = f
           <>
             <StatPill label="Total Reports" value={reports.length} color="var(--primary)" />
             <StatPill label="Open" value={openCount} color="#f59e0b" />
+            <StatPill label="Awaiting QA check" value={reviewCount} color="#3b82f6" />
             <StatPill label="Overdue" value={overdueCount} color="var(--danger)" />
             <StatPill label="Resolved" value={resolvedCount} color="var(--success)" />
           </>
@@ -86,7 +94,7 @@ export default async function QaReportsPage({ readOnly = false, onlyResolved = f
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {reports.map((r) => {
-            const status = r.status === 'resolved' ? STATUS_STYLES.resolved : isOverdue(r) ? STATUS_STYLES.overdue : STATUS_STYLES.open;
+            const status = r.status === 'resolved' ? STATUS_STYLES.resolved : r.status === 'pending_review' ? STATUS_STYLES.review : isOverdue(r) ? STATUS_STYLES.overdue : STATUS_STYLES.open;
             return (
               <div key={r.id} style={cardStyle}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
@@ -127,10 +135,15 @@ export default async function QaReportsPage({ readOnly = false, onlyResolved = f
                 <div style={{ padding: '0.75rem 1rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderLeft: '3px solid #f59e0b', borderRadius: '0.5rem', fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>
                   <Linkify text={r.note} />
                 </div>
-                {r.status === 'resolved' && (
-                  <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', backgroundColor: 'rgba(34, 197, 94, 0.06)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '0.5rem', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
-                    <div style={{ fontSize: '0.7rem', fontWeight: '700', color: 'var(--success)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
-                      Manager&apos;s resolution · {toDate(r.resolved_at).toLocaleString()}
+                {r.rejection_count > 0 && r.status === 'open' && (
+                  <div style={{ marginTop: '0.6rem', fontSize: '0.78rem', color: 'var(--danger)', fontWeight: '600' }}>
+                    Failed QA {r.rejection_count} time{r.rejection_count === 1 ? '' : 's'} — open again
+                  </div>
+                )}
+                {(r.status === 'resolved' || r.status === 'pending_review') && (
+                  <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', backgroundColor: r.status === 'resolved' ? 'rgba(34, 197, 94, 0.06)' : 'rgba(59, 130, 246, 0.06)', border: `1px solid ${r.status === 'resolved' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(59, 130, 246, 0.4)'}`, borderRadius: '0.5rem', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: '700', color: r.status === 'resolved' ? 'var(--success)' : '#3b82f6', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
+                      {r.status === 'resolved' ? "Manager's resolution (confirmed by QA)" : 'Manager says it is fixed'} · {toDate(r.resolved_at).toLocaleString()}
                       {toDate(r.resolved_at) > toDate(r.due_at) ? ' · resolved late' : ''}
                     </div>
                     <Linkify text={r.resolution_note} />
@@ -139,6 +152,8 @@ export default async function QaReportsPage({ readOnly = false, onlyResolved = f
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.6rem' }}>
                   Flagged by {r.filed_by} · {new Date(r.created_at.replace(' ', 'T') + 'Z').toLocaleString()}
                 </div>
+                {!readOnly && r.status === 'pending_review' && <ReviewControls reportId={r.id} />}
+                <ReportThread reportId={r.id} comments={r.comments} canComment={!readOnly} />
                 {!readOnly && <DeleteReportButton reportId={r.id} />}
               </div>
             );

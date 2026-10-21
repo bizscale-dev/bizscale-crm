@@ -49,7 +49,7 @@ export async function markFollowUpChecked(reportId, { notifyAdmin = false, note 
       r.client_names && r.client_names.includes('\n') && `Clients: ${r.client_names.split('\n').join(', ').slice(0, 700)}`,
       `Reported ${r.created_at.slice(0, 10)} by ${r.filed_by}${r.severity ? ` (${r.severity} severity)` : ''}`,
       `Issue: ${String(r.note || '').slice(0, 500)}`,
-      `Manager's status: ${r.status === 'resolved' ? 'marked resolved, but QA is not satisfied' : 'not resolved yet'}`,
+      `Manager's status: ${r.status === 'resolved' ? 'resolved (confirmed by QA)' : r.status === 'pending_review' ? 'says it is fixed, waiting for QA to confirm' : 'not resolved yet'}`,
       r.page_url && `Links:\n${r.page_url}`,
       extra && `QA note: ${extra}`,
     ].filter(Boolean);
