@@ -24,7 +24,7 @@ export const inputStyle = {
   fontFamily: 'inherit',
 };
 
-const quickBtn = (active) => ({
+export const quickBtn = (active) => ({
   padding: '0.45rem 0.85rem',
   borderRadius: '2rem',
   border: `1px solid ${active ? 'var(--primary)' : 'var(--border)'}`,

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { cardStyle, StatPill } from '../qaStyles';
 import QaBarChart from '../QaBarChart';
-import { DateRangeControls, StatusChip, TypeTag, formatResolveTime, labelStyle, inputStyle, th, td } from '../QaStatsShared';
+import { DateRangeControls, quickBtn, StatusChip, TypeTag, formatResolveTime, labelStyle, inputStyle, th, td } from '../QaStatsShared';
 import { SOURCES, bucketize, filedDate, formatDay, inRange, monthRange, statusOf, summarize } from '../statsUtils';
 
 const ROLE_LABELS = {
@@ -65,16 +65,21 @@ export default function QaStatsView({ reports, managers, today }) {
       </div>
 
       <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
-        <div style={{ maxWidth: '340px' }}>
+        <div>
           <label style={labelStyle}>Manager</label>
-          <select value={managerId} onChange={(e) => setManagerId(e.target.value)} style={{ ...inputStyle, width: '100%', cursor: 'pointer' }}>
-            <option value="">All managers</option>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button type="button" style={quickBtn(!managerId)} onClick={() => setManagerId('')}>All managers</button>
+            </div>
             {[...byRole.entries()].map(([role, list]) => (
-              <optgroup key={role} label={ROLE_LABELS[role] || role}>
-                {list.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </optgroup>
+              <div key={role} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', minWidth: '7.5rem' }}>{ROLE_LABELS[role] || role}</span>
+                {list.map((m) => (
+                  <button key={m.id} type="button" style={quickBtn(managerId === String(m.id))} onClick={() => setManagerId(String(m.id))}>{m.name}</button>
+                ))}
+              </div>
             ))}
-          </select>
+          </div>
         </div>
         <DateRangeControls from={from} to={to} setFrom={setFrom} setTo={setTo} today={today} allowAllTime />
       </div>
