@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import AdminAssignedTag, { adminLabelOf } from '@/components/AdminAssignedTag';
 
 export default function TasksClient({ tasksByClient, pendingByClient = [], availableDates, selectedDate, today, linkTypeLabels, basePath = '/associate/tasks' }) {
   const router = useRouter();
@@ -39,7 +40,7 @@ export default function TasksClient({ tasksByClient, pendingByClient = [], avail
             <div style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>
                 {client.client_name}
-                {client.is_month1_funnel && <Month1FunnelTag week={client.funnel_week} />}
+                {adminLabelOf(client) ? <AdminAssignedTag label={adminLabelOf(client)} /> : client.is_month1_funnel && <Month1FunnelTag week={client.funnel_week} />}
               </h3>
               {client.website && (
                 <a href={client.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.875rem', color: 'var(--primary)', textDecoration: 'none' }}>
@@ -109,7 +110,7 @@ function PendingSection({ pendingByClient, linkTypeLabels }) {
           <div style={{ marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
             <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>
               {client.client_name}
-              {client.is_month1_funnel && <Month1FunnelTag week={client.funnel_week} />}
+              {adminLabelOf(client) ? <AdminAssignedTag label={adminLabelOf(client)} /> : client.is_month1_funnel && <Month1FunnelTag week={client.funnel_week} />}
             </h3>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>

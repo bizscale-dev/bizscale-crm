@@ -4,6 +4,7 @@ import { verifySession } from '@/lib/session';
 import Logo from '@/components/Logo';
 import StatCard from '@/components/ui/StatCard';
 import PageHeader from '@/components/ui/PageHeader';
+import AdminAssignedTag, { adminLabelOf } from '@/components/AdminAssignedTag';
 
 export const revalidate = 0; // Disable caching for real-time data
 
@@ -219,7 +220,7 @@ export default async function AssociateDashboard() {
                   <div key={client.client_id} style={{ padding: '1rem', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '0.5rem', backgroundColor: 'rgba(245, 158, 11, 0.03)' }}>
                     <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600' }}>
                       {client.client_name}
-                      <FunnelBadge client={client} />
+                      {adminLabelOf(client) ? <AdminAssignedTag label={adminLabelOf(client)} /> : <FunnelBadge client={client} />}
                     </h3>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                       {client.tasks.map(task => (
@@ -251,7 +252,7 @@ export default async function AssociateDashboard() {
                       <div>
                         <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>
                           {client.client_name}
-                          <FunnelBadge client={client} />
+                          {adminLabelOf(client) ? <AdminAssignedTag label={adminLabelOf(client)} /> : <FunnelBadge client={client} />}
                         </h3>
                         {client.website && (
                           <a href={client.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.875rem', color: 'var(--primary)', textDecoration: 'none' }}>

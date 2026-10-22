@@ -576,8 +576,8 @@ export async function generateSEOTasks(campaignId, pinThroughDate = null) {
   // Insert all tasks atomically
   if (allTasks.length > 0) {
     const insertSql = `
-      INSERT INTO seo_tasks (campaign_id, associate_id, client_id, day_number, task_date, link_type, target_count, completed_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO seo_tasks (campaign_id, associate_id, client_id, day_number, task_date, link_type, target_count, completed_count, admin_label)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     await db.batch(allTasks.map(t => ({
       sql: insertSql,
@@ -591,12 +591,12 @@ export async function generateSEOTasks(campaignId, pinThroughDate = null) {
   // client, not just ones excluded from this regeneration's active roster.
   if (pastRows.length > 0) {
     const restoreSql = `
-      INSERT INTO seo_tasks (campaign_id, associate_id, client_id, day_number, task_date, link_type, target_count, completed_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO seo_tasks (campaign_id, associate_id, client_id, day_number, task_date, link_type, target_count, completed_count, admin_label)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     await db.batch(pastRows.map(r => ({
       sql: restoreSql,
-      args: [r.campaign_id, r.associate_id, r.client_id, r.day_number, r.task_date, r.link_type, r.target_count, r.completed_count],
+      args: [r.campaign_id, r.associate_id, r.client_id, r.day_number, r.task_date, r.link_type, r.target_count, r.completed_count, r.admin_label ?? null],
     })));
   }
 
