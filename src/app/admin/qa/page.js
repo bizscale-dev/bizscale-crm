@@ -15,7 +15,7 @@ const TABS = [
 // Read-only window into the QA portal: the same Stats, Clients Stats and
 // Reports pages QA works from, inside the admin portal.
 export default async function AdminQaPage({ searchParams }) {
-  const { tab } = await searchParams;
+  const { tab, status } = await searchParams;
   const active = TABS.some((t) => t.key === tab) ? tab : 'stats';
 
   return (
@@ -46,7 +46,7 @@ export default async function AdminQaPage({ searchParams }) {
 
       {active === 'stats' && <QaStatsPage />}
       {active === 'clients-stats' && <QaClientsStatsPage />}
-      {active === 'reports' && <QaReportsPage readOnly />}
+      {active === 'reports' && <QaReportsPage readOnly status={status} basePath="/admin/qa?tab=reports" />}
       {active === 'resolved' && <QaReportsPage readOnly onlyResolved />}
     </div>
   );

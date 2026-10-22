@@ -29,7 +29,12 @@ const toDate = (dateStr) => new Date(dateStr.replace(' ', 'T') + 'Z');
 // readOnly is passed by the admin QA page, which shows this same list without
 // the QA-only controls (delete, links into the QA portal).
 // onlyResolved is passed by the Resolved page (QA portal and admin tab).
-export default async function QaReportsPage({ readOnly = false, onlyResolved = false } = {}) {
+// The summary pills filter the list (?status=open|review|overdue|resolved); the admin page passes
+// `status` and its own `basePath` since it already owns the URL's query string.
+export default async function QaReportsPage(props = {}) {
+  const { readOnly = false, onlyResolved = false, basePath = '/qa/reports' } = props;
+  const query = props.searchParams ? await props.searchParams : {};
+  const filter = ['open', 'review', 'overdue', 'resolved'].includes(props.status ?? query?.status) ? (props.status ?? query.status) : 'all';
   const db = await getDb();
 
   // Every report the QA team has filed (not just the signed-in person's) —
@@ -56,6 +61,15 @@ export default async function QaReportsPage({ readOnly = false, onlyResolved = f
   const reviewCount = reports.filter((r) => r.status === 'pending_review').length;
   const resolvedCount = reports.filter((r) => r.status === 'resolved').length;
   const lateCount = reports.filter((r) => r.status === 'resolved' && r.resolved_at > r.due_at).length;
+  const hrefFor = (key) => (key === 'all' ? basePath : `${basePath}${basePath.includes('?') ? '&' : '?'}status=${key}`);
+  const matchesFilter = {
+    all: () => true,
+    open: (r) => r.status === 'open',
+    review: (r) => r.status === 'pending_review',
+    overdue: isOverdue,
+    resolved: (r) => r.status === 'resolved',
+  }[filter];
+  const visible = onlyResolved ? reports : reports.filter(matchesFilter);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -76,24 +90,24 @@ export default async function QaReportsPage({ readOnly = false, onlyResolved = f
           </>
         ) : (
           <>
-            <StatPill label="Total Reports" value={reports.length} color="var(--primary)" />
-            <StatPill label="Open" value={openCount} color="#f59e0b" />
-            <StatPill label="Awaiting QA check" value={reviewCount} color="#3b82f6" />
-            <StatPill label="Overdue" value={overdueCount} color="var(--danger)" />
-            <StatPill label="Resolved" value={resolvedCount} color="var(--success)" />
+            <StatPill label="Total Reports" value={reports.length} color="var(--primary)" href={hrefFor('all')} active={filter === 'all'} />
+            <StatPill label="Open" value={openCount} color="#f59e0b" href={hrefFor('open')} active={filter === 'open'} />
+            <StatPill label="Awaiting QA check" value={reviewCount} color="#3b82f6" href={hrefFor('review')} active={filter === 'review'} />
+            <StatPill label="Overdue" value={overdueCount} color="var(--danger)" href={hrefFor('overdue')} active={filter === 'overdue'} />
+            <StatPill label="Resolved" value={resolvedCount} color="var(--success)" href={hrefFor('resolved')} active={filter === 'resolved'} />
           </>
         )}
       </div>
 
-      {reports.length === 0 ? (
+      {visible.length === 0 ? (
         <div style={cardStyle}>
           <p style={{ color: 'var(--text-muted)', margin: 0, textAlign: 'center' }}>
-            {onlyResolved ? 'No resolved issues yet.' : 'Nothing flagged yet. Use the Report button next to a link on the EOD page.'}
+            {onlyResolved ? 'No resolved issues yet.' : filter !== 'all' ? 'No reports match this filter.' : 'Nothing flagged yet. Use the Report button next to a link on the EOD page.'}
           </p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {reports.map((r) => {
+          {visible.map((r) => {
             const status = r.status === 'resolved' ? STATUS_STYLES.resolved : r.status === 'pending_review' ? STATUS_STYLES.review : isOverdue(r) ? STATUS_STYLES.overdue : STATUS_STYLES.open;
             return (
               <div key={r.id} style={cardStyle}>
