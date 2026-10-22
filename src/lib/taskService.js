@@ -179,8 +179,8 @@ export async function generateSEOTasks(campaignId, pinThroughDate = null) {
     usedTargetByClientLinkType.set(key, (usedTargetByClientLinkType.get(key) || 0) + row.target_count);
   }
 
-  // Clear existing tasks for this campaign
-  await db.prepare('DELETE FROM seo_tasks WHERE campaign_id = ?').run(campaignId);
+  // NOTE: the campaign's old rows are deleted at the very end, in the SAME transaction as
+  // the inserts, so a failure anywhere can never leave the campaign with no tasks.
 
   const allTasks = [];
 
@@ -573,32 +573,27 @@ export async function generateSEOTasks(campaignId, pinThroughDate = null) {
     }
   }
 
-  // Insert all tasks atomically
-  if (allTasks.length > 0) {
-    const insertSql = `
-      INSERT INTO seo_tasks (campaign_id, associate_id, client_id, day_number, task_date, link_type, target_count, completed_count, admin_label)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    await db.batch(allTasks.map(t => ({
+  // Replace the campaign's rows atomically: delete + fresh rows + restored past rows
+  // all commit together, or none of it does.
+  const insertSql = `
+    INSERT INTO seo_tasks (campaign_id, associate_id, client_id, day_number, task_date, link_type, target_count, completed_count, admin_label)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+  await db.atomicBatch([
+    { sql: 'DELETE FROM seo_tasks WHERE campaign_id = ?', args: [campaignId] },
+    // Fresh rows for today-and-future.
+    ...allTasks.map(t => ({
       sql: insertSql,
-      args: [t.campaign_id, t.associate_id, t.client_id, t.day_number, t.task_date, t.link_type, t.target_count, t.completed_count],
-    })));
-  }
-
-  // Restore every client's past rows exactly as they were — see the
-  // snapshot/comment above. Verbatim re-insert, not re-derived, so real
-  // historical target/completed stays exactly what it always was for every
-  // client, not just ones excluded from this regeneration's active roster.
-  if (pastRows.length > 0) {
-    const restoreSql = `
-      INSERT INTO seo_tasks (campaign_id, associate_id, client_id, day_number, task_date, link_type, target_count, completed_count, admin_label)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    await db.batch(pastRows.map(r => ({
-      sql: restoreSql,
+      args: [t.campaign_id, t.associate_id, t.client_id, t.day_number, t.task_date, t.link_type, t.target_count, t.completed_count, null],
+    })),
+    // Every client's past rows exactly as they were — see the snapshot/comment above.
+    // Verbatim re-insert, not re-derived, so real historical target/completed stays
+    // exactly what it always was (admin_label included).
+    ...pastRows.map(r => ({
+      sql: insertSql,
       args: [r.campaign_id, r.associate_id, r.client_id, r.day_number, r.task_date, r.link_type, r.target_count, r.completed_count, r.admin_label ?? null],
-    })));
-  }
+    })),
+  ]);
 
   return allTasks.length + pastRows.length;
 }

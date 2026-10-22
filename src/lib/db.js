@@ -46,6 +46,22 @@ function makeDb(raw) {
         await raw.batch(statements.slice(i, i + CHUNK_SIZE), 'write');
       }
     },
+    // All-or-nothing: runs every statement in ONE transaction (chunked requests inside it),
+    // rolling everything back if any fails. For wipe-and-rebuild jobs (e.g. task
+    // regeneration) so a failure can never leave a table half-empty.
+    async atomicBatch(statements) {
+      const CHUNK_SIZE = 500;
+      const tx = await raw.transaction('write');
+      try {
+        for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
+          await tx.batch(statements.slice(i, i + CHUNK_SIZE));
+        }
+        await tx.commit();
+      } catch (e) {
+        try { await tx.rollback(); } catch (_) {}
+        throw e;
+      }
+    },
     // Transaction: for logic that reads then writes within one atomic unit. `fn`
     // receives a transaction-scoped db handle with the same prepare(sql).get/all/run
     // shape as the top-level db, bound to the transaction instead of the raw client.
