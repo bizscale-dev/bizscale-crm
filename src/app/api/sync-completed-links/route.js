@@ -139,6 +139,11 @@ export async function POST(request) {
 
     console.log(`[SYNC] Found ${databaseClients.length} active clients in database`);
 
+    // Sheet totals are lifetime; a client that moved to a new funnel month has a baseline
+    // (see src/lib/syncBaseline.js) — only progress beyond it counts toward the new month.
+    const baselineRows = await db.prepare('SELECT client_id, link_type, baseline FROM sync_baselines').all();
+    const baselineByKey = new Map(baselineRows.map((b) => [`${b.client_id}|${b.link_type}`, b.baseline]));
+
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const clientName = (row[clientNameIdx] || '').trim();
@@ -206,7 +211,8 @@ export async function POST(request) {
 
         if (dueTasks.length > 0) {
           const alreadyRecorded = dueTasks.reduce((sum, t) => sum + t.completed_count, 0);
-          let newProgress = Math.max(0, sheetCompletedCount - alreadyRecorded);
+          const baseline = baselineByKey.get(`${client.id}|${linkType}`) || 0;
+          let newProgress = Math.max(0, sheetCompletedCount - baseline - alreadyRecorded);
 
           const todayIndex = dueTasks.findIndex(t => t.task_date === today);
           const orderedTasks = todayIndex === -1

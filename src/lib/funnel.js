@@ -3,6 +3,7 @@ import { FUNNEL_MONTH1_ITEMS } from './funnelConstants';
 import { computeFunnelMonth1Window, computeFunnelNextMonthWindow } from './campaign-cycle';
 import { generateSEOTasks } from './taskService';
 import { getOffDaysSet, getWorkingDays } from './offDays';
+import { captureSyncBaseline } from './syncBaseline';
 
 function todayStr() {
   return new Date().toISOString().split('T')[0];
@@ -268,6 +269,10 @@ export async function moveHeldClientToNormal(clientId, campaignId) {
 async function moveClientIntoBonusMonth(client, campaign, targetMonth, { skipRegeneration = false } = {}) {
   const db = await getDb();
   const { monthEndDate } = computeFunnelNextMonthWindow(campaign.start_date, client.funnel_month_end_date, targetMonth);
+
+  // The new month's tasks start from 0: remember how much of the sheet's lifetime total is
+  // already used up so the completed-links sync doesn't credit the old month's work to them.
+  await captureSyncBaseline(client.id);
 
   await db.prepare(`
     UPDATE clients SET funnel_month = ?, funnel_month_end_date = ?,

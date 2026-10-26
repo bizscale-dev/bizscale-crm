@@ -773,6 +773,14 @@ async function runMigrations(raw) {
       FOREIGN KEY (report_id) REFERENCES qa_reports(id) ON DELETE CASCADE
     )`,
     "CREATE INDEX IF NOT EXISTS idx_qa_report_comments_report ON qa_report_comments (report_id)",
+    // Per client + link type: how much of the Completed Links sheet's lifetime total was already
+    // used up when the client started a new funnel month (see src/lib/syncBaseline.js).
+    `CREATE TABLE IF NOT EXISTS sync_baselines (
+      client_id INTEGER NOT NULL,
+      link_type TEXT NOT NULL,
+      baseline INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (client_id, link_type)
+    )`,
     // Team members' Google Chat user IDs, keyed by work email, so messages posted to the
     // Google Chat space can @-mention the right person (see src/lib/googleChat.js).
     `CREATE TABLE IF NOT EXISTS chat_members (
