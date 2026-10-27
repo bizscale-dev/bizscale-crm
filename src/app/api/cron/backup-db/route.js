@@ -1,5 +1,6 @@
 import { backupDatabase } from '@/lib/backupDb';
 import { logSyncRun } from '@/lib/syncLog';
+import { getDbConfig } from '@/lib/dbConfig';
 
 export const maxDuration = 60;
 
@@ -15,10 +16,11 @@ export async function GET(request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const source = getDbConfig();
   try {
     const result = await backupDatabase({
-      sourceUrl: process.env.TURSO_DATABASE_URL,
-      sourceToken: process.env.TURSO_AUTH_TOKEN,
+      sourceUrl: source.url,
+      sourceToken: source.authToken,
       backupUrl: process.env.BACKUP_DATABASE_URL,
       backupToken: process.env.BACKUP_AUTH_TOKEN,
     });

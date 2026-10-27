@@ -17,7 +17,7 @@ export default async function QaStatsPage() {
   // and the stats view never shows them). The view filters by manager and
   // date range in the browser, so switching filters is instant.
   const rows = await db.prepare(`
-    SELECT q.id, q.source, q.status, q.created_at, q.resolved_at,
+    SELECT q.id, q.source, q.status, q.created_at, q.resolve_days, q.resolved_at,
       q.severity, q.title, q.web_client_name, q.work_done, q.note,
       q.manager_id, m.name as manager_name, m.role as manager_role
     FROM qa_reports q

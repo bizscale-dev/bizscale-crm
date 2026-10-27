@@ -16,7 +16,7 @@ export default async function QaClientsStatsPage() {
   // reports were filed under a free-text title instead (title IS NOT NULL) —
   // those aren't tied to a client, so they're left out. Task reports never are.
   const rawRows = await db.prepare(`
-    SELECT q.id, q.source, q.severity, q.status, q.created_at, q.resolved_at, q.resolution_note,
+    SELECT q.id, q.source, q.severity, q.status, q.created_at, q.resolve_days, q.resolved_at, q.resolution_note,
       q.report_date, q.web_client_name, q.client_names, q.issue_group, q.page_url, q.work_done, q.note,
       q.location, q.issue, q.department,
       q.manager_id, m.name as manager_name, f.name as filed_by

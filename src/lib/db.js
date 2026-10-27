@@ -1,5 +1,6 @@
 import { createClient } from '@libsql/client';
 import bcrypt from 'bcryptjs';
+import { getDbConfig } from '@/lib/dbConfig';
 
 let rawClient;
 let migrationsDone = false;
@@ -277,6 +278,8 @@ async function runMigrations(raw) {
     "ALTER TABLE qa_reports ADD COLUMN rejection_count INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE qa_reports ADD COLUMN client_names TEXT",
     "ALTER TABLE qa_reports ADD COLUMN issue_group TEXT",
+    // Working days QA gave the manager to resolve it; NULL = the 5-day default.
+    "ALTER TABLE qa_reports ADD COLUMN resolve_days INTEGER",
   ];
 
   for (const sql of alterStatements) {
@@ -1146,10 +1149,8 @@ async function runMigrations(raw) {
 
 export async function getDb() {
   if (!rawClient) {
-    rawClient = createClient({
-      url: process.env.TURSO_DATABASE_URL,
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    });
+    const { url, authToken } = getDbConfig();
+    rawClient = createClient({ url, authToken });
     await rawClient.execute('PRAGMA foreign_keys = ON');
   }
 

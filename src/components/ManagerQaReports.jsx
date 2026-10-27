@@ -199,8 +199,7 @@ export default function ManagerQaReports({ reports, resolveAction, resolveDays }
       <div>
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>Reports</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-          Issues QA has flagged on your EODs. You have {resolveDays} working days (Sat/Sun excluded) from when a report is filed to
-          fix it. When you mark one as fixed it goes to QA, and it is only resolved once QA confirms — if it fails QA it comes back open. The dot on this tab keeps blinking until nothing is open.
+          Issues QA has flagged on your EODs. QA sets a deadline on each report (default {resolveDays} working days, Sat/Sun excluded) counted from when it is filed — the due date is shown on every report. When you mark one as fixed it goes to QA, and it is only resolved once QA confirms — if it fails QA it comes back open. The dot on this tab keeps blinking until nothing is open.
         </p>
       </div>
 

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { cardStyle, selectStyle, formatMonth, StatPill, BRAND_COLOR } from '../qaStyles';
 import Linkify from '../Linkify';
 import { reportManagerTask } from './actions';
+import ResolveDaysInput from '@/components/ResolveDaysInput';
 
 const ROLE_LABELS = {
   seo_manager: 'SEO Manager',
@@ -105,13 +106,14 @@ function TaskCard({ row, flagCount, onReported }) {
   const [expanded, setExpanded] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [note, setNote] = useState('');
+  const [resolveDays, setResolveDays] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
   const submitReport = async () => {
     setSubmitting(true);
     setError(null);
-    const result = await reportManagerTask(row.assignee_id, note);
+    const result = await reportManagerTask(row.assignee_id, note, resolveDays);
     setSubmitting(false);
     if (result?.error) {
       setError(result.error);
@@ -120,6 +122,7 @@ function TaskCard({ row, flagCount, onReported }) {
     onReported();
     setReporting(false);
     setNote('');
+    setResolveDays('');
   };
 
   const status = statusFor(row);
@@ -171,6 +174,14 @@ function TaskCard({ row, flagCount, onReported }) {
             placeholder="Add a note — e.g. submission doesn't match the task, proof is missing or unclear..."
             style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--foreground)', fontSize: '0.9rem', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
           />
+          <div style={{ marginTop: '0.6rem' }}>
+            <ResolveDaysInput
+              value={resolveDays}
+              onChange={setResolveDays}
+              labelStyle={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}
+              inputStyle={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--foreground)', fontSize: '0.9rem', boxSizing: 'border-box' }}
+            />
+          </div>
           {error && <div style={{ fontSize: '0.78rem', color: 'var(--danger)', marginTop: '0.4rem' }}>{error}</div>}
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
             <button type="button" onClick={submitReport} disabled={submitting} style={{ padding: '0.45rem 1rem', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '0.4rem', fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer', opacity: submitting ? 0.6 : 1 }}>

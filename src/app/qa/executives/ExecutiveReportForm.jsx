@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import ResolveDaysInput from '@/components/ResolveDaysInput';
 import { submitExecutiveReport } from './actions';
 
 const BRAND_COLOR = 'var(--primary)';
@@ -42,7 +43,7 @@ const inputStyle = {
   fontFamily: 'inherit',
 };
 
-const EMPTY = { client: '', description: '', location: '', url: '', issue: '', department: '', severity: '' };
+const EMPTY = { client: '', description: '', location: '', url: '', issue: '', department: '', severity: '', resolveDays: '' };
 
 export default function ExecutiveReportForm({ managers, clients, owners, roleLabels }) {
   const [managerIds, setManagerIds] = useState([]);
@@ -141,7 +142,7 @@ export default function ExecutiveReportForm({ managers, clients, owners, roleLab
       setMessage({ type: 'error', text: result.error });
       return;
     }
-    setMessage({ type: 'success', text: `Issue filed${selectedClients.length > 1 ? ` across ${selectedClients.length} clients` : ''} — ${result.perManager.map((p) => (selectedClients.length ? `${p.name} (${p.clients} client${p.clients === 1 ? '' : 's'})` : p.name)).join(', ')}.${result.skipped.length ? ` Not sent to ${result.skipped.join(', ')} — none of those clients are theirs.` : ''} ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have 5 working days (Mon-Fri) to resolve it.` });
+    setMessage({ type: 'success', text: `Issue filed${selectedClients.length > 1 ? ` across ${selectedClients.length} clients` : ''} — ${result.perManager.map((p) => (selectedClients.length ? `${p.name} (${p.clients} client${p.clients === 1 ? '' : 's'})` : p.name)).join(', ')}.${result.skipped.length ? ` Not sent to ${result.skipped.join(', ')} — none of those clients are theirs.` : ''} ${selectedManagers.length === 1 ? "They've" : "They've each"} been notified and have ${result.resolveDays} working day${result.resolveDays === 1 ? '' : 's'} (Mon-Fri) to resolve it.` });
     setForm(EMPTY);
     setScreenshot(null);
     setFileKey((k) => k + 1);
@@ -275,6 +276,8 @@ export default function ExecutiveReportForm({ managers, clients, owners, roleLab
                   <input type="text" value={form.department} onChange={set('department')} maxLength={100} style={inputStyle} placeholder="e.g. SEO, Web SEO, Writing" />
                 </div>
               </div>
+
+              <ResolveDaysInput value={form.resolveDays} onChange={(v) => setForm((prev) => ({ ...prev, resolveDays: v }))} labelStyle={labelStyle} inputStyle={inputStyle} />
 
               <div>
                 <label style={labelStyle}>Severity</label>

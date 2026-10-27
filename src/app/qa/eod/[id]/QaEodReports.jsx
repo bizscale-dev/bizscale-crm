@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { getQaManagerEodReports, reportEodEntry } from '../actions';
 import Linkify from '../../Linkify';
+import ResolveDaysInput from '@/components/ResolveDaysInput';
 
 const BRAND_COLOR = 'var(--primary)';
 
@@ -63,6 +64,7 @@ export default function QaEodReports({ managerId, webClients, initialReports, in
 
   const [reportingId, setReportingId] = useState(null);
   const [note, setNote] = useState('');
+  const [resolveDays, setResolveDays] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [reportError, setReportError] = useState(null);
 
@@ -108,13 +110,14 @@ export default function QaEodReports({ managerId, webClients, initialReports, in
   const openReportForm = (entryId) => {
     setReportingId(entryId);
     setNote('');
+    setResolveDays('');
     setReportError(null);
   };
 
   const submitReport = async () => {
     setSubmitting(true);
     setReportError(null);
-    const result = await reportEodEntry(reportingId, note);
+    const result = await reportEodEntry(reportingId, note, resolveDays);
     setSubmitting(false);
     if (result?.error) {
       setReportError(result.error);
@@ -243,6 +246,9 @@ export default function QaEodReports({ managerId, webClients, initialReports, in
                                         placeholder="Add a note — e.g. link is broken, page doesn't match the work described..."
                                         style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit' }}
                                       />
+                                      <div style={{ marginTop: '0.6rem' }}>
+                                        <ResolveDaysInput value={resolveDays} onChange={setResolveDays} labelStyle={labelStyle} inputStyle={inputStyle} />
+                                      </div>
                                       {reportError && <div style={{ fontSize: '0.78rem', color: 'var(--danger)', marginTop: '0.4rem' }}>{reportError}</div>}
                                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
                                         <button

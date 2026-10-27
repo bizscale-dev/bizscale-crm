@@ -45,3 +45,6 @@ next-env.d.ts
 
 # local Claude Code tooling config
 /.claude
+
+# local database exports
+*.db

@@ -11,11 +11,18 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const toUtcMs = (s) => new Date(s.replace(' ', 'T') + 'Z').getTime();
 const fmtUtc = (ms) => new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
 
-// created_at (UTC 'YYYY-MM-DD HH:MM:SS') + QA_RESOLVE_DAYS working days,
-// keeping the time of day. Filed on a weekend, the count starts on Monday.
-export function qaDueAt(createdAt) {
+// QA's chosen deadline in working days: a whole number >= 1, else the default.
+export function parseResolveDays(v) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, 365) : QA_RESOLVE_DAYS;
+}
+
+// created_at (UTC 'YYYY-MM-DD HH:MM:SS') + `days` working days (default
+// QA_RESOLVE_DAYS), keeping the time of day. Filed on a weekend, the count
+// starts on Monday.
+export function qaDueAt(createdAt, days) {
   let ms = toUtcMs(createdAt);
-  let left = QA_RESOLVE_DAYS;
+  let left = parseResolveDays(days);
   while (left > 0) {
     ms += DAY_MS;
     const dow = new Date(ms + PKT_OFFSET_MS).getUTCDay();
@@ -82,7 +89,7 @@ export async function syncQaFollowUps(db) {
 export function withQaDue(rows) {
   const now = fmtUtc(Date.now());
   return rows.map((r) => {
-    const due_at = qaDueAt(r.created_at);
+    const due_at = qaDueAt(r.created_at, r.resolve_days);
     return { ...r, due_at, is_overdue: r.status === 'open' && due_at < now ? 1 : 0 };
   });
 }

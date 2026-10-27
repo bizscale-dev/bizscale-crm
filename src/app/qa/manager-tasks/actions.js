@@ -4,7 +4,7 @@ import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifications';
-import { QA_RESOLVE_DAYS } from '@/lib/qaReports';
+import { parseResolveDays } from '@/lib/qaReports';
 
 const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
 
@@ -27,7 +27,7 @@ async function requireQa() {
  * stays readable if the task is later edited. For source='manager_task' the
  * NOT NULL eod_report_id/eod_entry_id columns hold 0 (see db.js).
  */
-export async function reportManagerTask(assigneeId, note) {
+export async function reportManagerTask(assigneeId, note, resolveDaysInput) {
   const { session, error } = await requireQa();
   if (error) return { error };
 
@@ -50,15 +50,16 @@ export async function reportManagerTask(assigneeId, note) {
   `).get(id, ...MANAGER_ROLES);
   if (!row) return { error: 'Task not found' };
 
+  const resolveDays = parseResolveDays(resolveDaysInput);
   await db.prepare(`
     INSERT INTO qa_reports
-      (qa_user_id, manager_id, eod_report_id, eod_entry_id, report_date, web_client_name, page_url, work_done, note, source, task_assignee_id)
-    VALUES (?, ?, 0, 0, ?, 'Manager Task', NULL, ?, ?, 'manager_task', ?)
-  `).run(session.userId, row.manager_id, row.due_date, row.task_text.slice(0, 1000), cleanNote, row.id);
+      (qa_user_id, manager_id, eod_report_id, eod_entry_id, report_date, web_client_name, page_url, work_done, note, source, task_assignee_id, resolve_days)
+    VALUES (?, ?, 0, 0, ?, 'Manager Task', NULL, ?, ?, 'manager_task', ?, ?)
+  `).run(session.userId, row.manager_id, row.due_date, row.task_text.slice(0, 1000), cleanNote, row.id, resolveDays);
 
   await createNotificationsForUsers(db, [row.manager_id], {
     title: 'New QA Report on your task',
-    message: `${row.task_text.slice(0, 70)}${row.task_text.length > 70 ? '…' : ''}: ${cleanNote.slice(0, 100)} — resolve within ${QA_RESOLVE_DAYS} working days`,
+    message: `${row.task_text.slice(0, 70)}${row.task_text.length > 70 ? '…' : ''}: ${cleanNote.slice(0, 100)} — resolve within ${resolveDays} working day${resolveDays === 1 ? '' : 's'}`,
     link: getReportsLinkForRole(row.manager_role),
   });
 

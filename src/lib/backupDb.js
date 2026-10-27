@@ -62,7 +62,9 @@ export async function backupDatabase({ sourceUrl, sourceToken, backupUrl, backup
     ];
     // Foreign keys off so drop/insert order doesn't matter on the backup.
     await dst.execute('PRAGMA foreign_keys = OFF');
-    if (drops.length) await dst.batch(drops, 'write');
+    // (PRAGMA foreign_keys can't persist across HTTP requests or change inside a
+    // transaction, so defer the checks to commit time within the drop batch.)
+    if (drops.length) await dst.batch(['PRAGMA defer_foreign_keys = ON', ...drops], 'write');
 
     // Tables copy in parallel; each one waits only for the tables it references.
     const counts = {};

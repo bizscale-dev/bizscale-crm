@@ -5,7 +5,7 @@ import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifications';
 import { getClientOwnership, clientsForManager } from '@/lib/qaClientOwners';
-import { QA_RESOLVE_DAYS, QA_SEVERITIES, QA_MAX_SCREENSHOT_BASE64 } from '@/lib/qaReports';
+import { parseResolveDays, QA_SEVERITIES, QA_MAX_SCREENSHOT_BASE64 } from '@/lib/qaReports';
 
 const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
 
@@ -40,6 +40,7 @@ export async function submitExecutiveReport(input) {
   const severity = clean(input?.severity, 10).toLowerCase();
   const urlInput = clean(input?.url, 5000);
   const screenshot = input?.screenshot || null;
+  const resolveDays = parseResolveDays(input?.resolveDays);
 
   if (managerIds.length === 0) return { error: 'Select at least one manager' };
   if (!description) return { error: 'Description is required' };
@@ -109,15 +110,15 @@ export async function submitExecutiveReport(input) {
   const insertSql = `
     INSERT INTO qa_reports
       (qa_user_id, manager_id, eod_report_id, eod_entry_id, report_date, web_client_name, page_url, work_done, note,
-       source, title, location, issue, department, severity, screenshot_base64, client_names, issue_group)
-    VALUES (?, ?, 0, 0, ?, ?, ?, NULL, ?, 'manual', NULL, ?, ?, ?, ?, ?, ?, ?)
+       source, title, location, issue, department, severity, screenshot_base64, client_names, issue_group, resolve_days)
+    VALUES (?, ?, 0, 0, ?, ?, ?, NULL, ?, 'manual', NULL, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
   await db.batch(targets.map(({ manager, clients }) => ({
     sql: insertSql,
     args: [
       session.userId, manager.id, today, clients.length > 1 ? `${clients.length} clients` : (clients[0] || ''),
       url || null, description, location || null, issue || null, department || null, severity, screenshot,
-      clients.length ? clients.join('\n') : null, issueGroup,
+      clients.length ? clients.join('\n') : null, issueGroup, resolveDays,
     ],
   })));
 
@@ -125,8 +126,8 @@ export async function submitExecutiveReport(input) {
     await createNotificationsForUsers(db, [manager.id], {
       title: `New ${severity} severity QA report`,
       message: clients.length > 1
-        ? `1 issue across ${clients.length} clients: ${description.slice(0, 100)} \u2014 resolve within ${QA_RESOLVE_DAYS} working days`
-        : `${clients[0] ? `${clients[0]}: ` : ''}${description.slice(0, 100)} \u2014 resolve within ${QA_RESOLVE_DAYS} working days`,
+        ? `1 issue across ${clients.length} clients: ${description.slice(0, 100)} \u2014 resolve within ${resolveDays} working day${resolveDays === 1 ? '' : 's'}`
+        : `${clients[0] ? `${clients[0]}: ` : ''}${description.slice(0, 100)} \u2014 resolve within ${resolveDays} working day${resolveDays === 1 ? '' : 's'}`,
       link: getReportsLinkForRole(manager.role),
     });
   }
@@ -136,6 +137,7 @@ export async function submitExecutiveReport(input) {
   return {
     success: true,
     count: targets.length,
+    resolveDays,
     perManager: targets.map(({ manager, clients }) => ({ name: manager.name, clients: clients.length })),
     skipped,
   };

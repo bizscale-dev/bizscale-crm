@@ -40,7 +40,7 @@ export default async function QaReportsPage(props = {}) {
   // Every report the QA team has filed (not just the signed-in person's) —
   // QA works as a team, and this is the shared record of what's been flagged.
   const rows = await db.prepare(`
-    SELECT q.id, q.source, q.title, q.location, q.issue, q.department, q.severity, q.screenshot_base64, q.client_names, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at,
+    SELECT q.id, q.source, q.title, q.location, q.issue, q.department, q.severity, q.screenshot_base64, q.client_names, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at, q.resolve_days,
       q.resolved_at, q.resolution_note, q.rejection_count, q.confirmed_at,
       m.id as manager_id, m.name as manager_name, m.role as manager_role,
       f.name as filed_by
@@ -77,7 +77,7 @@ export default async function QaReportsPage(props = {}) {
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>{onlyResolved ? 'Resolved' : 'Reports'}</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
           {onlyResolved ? 'Issues the managers have resolved, newest resolution first, with their resolution notes.' : <>EOD entries QA has flagged, with the note explaining what didn&apos;t check out. Each manager
-          has {QA_RESOLVE_DAYS} working days (Sat/Sun excluded) to resolve a report. Flag new ones from the EOD page.</>}
+          gets the deadline QA set on each report (default {QA_RESOLVE_DAYS} working days, Sat/Sun excluded). Flag new ones from the EOD page.</>}
         </p>
       </div>
 
