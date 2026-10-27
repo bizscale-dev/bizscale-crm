@@ -144,6 +144,24 @@ export async function POST(request) {
     const baselineRows = await db.prepare('SELECT client_id, link_type, baseline FROM sync_baselines').all();
     const baselineByKey = new Map(baselineRows.map((b) => [`${b.client_id}|${b.link_type}`, b.baseline]));
 
+    // One query for every due row (today and still-overdue) instead of one per
+    // client/link type — hundreds of round trips otherwise, which can blow the
+    // 60s limit when the database is far from the function. Writes are batched
+    // at the end for the same reason.
+    const dueTasksByKey = new Map();
+    const allDueTasks = await db.prepare(`
+      SELECT id, client_id, link_type, task_date, target_count, completed_count
+      FROM seo_tasks
+      WHERE campaign_id = ? AND task_date <= ?
+      ORDER BY task_date ASC
+    `).all(campaign.id, today);
+    for (const t of allDueTasks) {
+      const key = `${t.client_id}|${t.link_type}`;
+      if (!dueTasksByKey.has(key)) dueTasksByKey.set(key, []);
+      dueTasksByKey.get(key).push(t);
+    }
+    const taskUpdates = [];
+
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const clientName = (row[clientNameIdx] || '').trim();
@@ -202,12 +220,7 @@ export async function POST(request) {
         // today; it's picked up automatically on a later sync once a new
         // occurrence day opens up more room (alreadyRecorded stays capped, so
         // the gap against the sheet's total reappears as newProgress then).
-        const dueTasks = await db.prepare(`
-          SELECT id, task_date, target_count, completed_count
-          FROM seo_tasks
-          WHERE campaign_id = ? AND client_id = ? AND link_type = ? AND task_date <= ?
-          ORDER BY task_date ASC
-        `).all(campaign.id, client.id, linkType, today);
+        const dueTasks = dueTasksByKey.get(`${client.id}|${linkType}`) || [];
 
         if (dueTasks.length > 0) {
           const alreadyRecorded = dueTasks.reduce((sum, t) => sum + t.completed_count, 0);
@@ -232,7 +245,7 @@ export async function POST(request) {
           }
 
           for (const { id, newCompleted } of updates) {
-            await db.prepare('UPDATE seo_tasks SET completed_count = ? WHERE id = ?').run(newCompleted, id);
+            taskUpdates.push({ sql: 'UPDATE seo_tasks SET completed_count = ? WHERE id = ?', args: [newCompleted, id] });
             syncedCount++;
           }
 
@@ -259,19 +272,27 @@ export async function POST(request) {
       }
     }
 
+    const writes = [...taskUpdates];
     for (const [associateId, total] of Object.entries(lifetimeTotalByAssociate)) {
-      await db.prepare('UPDATE users SET lifetime_completed_links = ? WHERE id = ?').run(total, associateId);
+      writes.push({ sql: 'UPDATE users SET lifetime_completed_links = ? WHERE id = ?', args: [total, associateId] });
     }
 
     // Accumulate today's backlog resolution — this route runs 4x daily (plus any
     // manual trigger), and each run's newly-applied backlog progress should add on
     // top of the day's earlier runs, not overwrite them.
     for (const [associateId, resolved] of Object.entries(backlogResolvedByAssociate)) {
-      await db.prepare(`
+      writes.push({
+        sql: `
         INSERT INTO daily_pending_snapshot (user_id, work_date, resolved_count)
         VALUES (?, ?, ?)
         ON CONFLICT(user_id, work_date) DO UPDATE SET resolved_count = resolved_count + excluded.resolved_count
-      `).run(associateId, today, resolved);
+      `,
+        args: [associateId, today, resolved],
+      });
+    }
+    // Chunked so one request never carries an unbounded number of statements.
+    for (let i = 0; i < writes.length; i += 200) {
+      await db.batch(writes.slice(i, i + 200));
     }
 
     // Month 1 funnel clients whose current week's 5 working days are over move up
