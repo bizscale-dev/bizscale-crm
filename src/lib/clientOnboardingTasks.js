@@ -20,10 +20,16 @@ export const ONBOARDING_TASKS = [
 
 export const ONBOARDING_DUE_DAYS = 2;
 
-// Due at the end of the second day after the client arrived (Pakistan time).
+// Due at the end of the Nth working day after the client arrived (Pakistan
+// time) — Saturdays and Sundays are not counted.
 function dueDateInDays(days) {
   const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
-  pkt.setUTCDate(pkt.getUTCDate() + days);
+  let left = days;
+  while (left > 0) {
+    pkt.setUTCDate(pkt.getUTCDate() + 1);
+    const dow = pkt.getUTCDay();
+    if (dow !== 0 && dow !== 6) left--;
+  }
   return pkt.toISOString().split('T')[0];
 }
 
