@@ -199,6 +199,70 @@ export async function deleteRecurringTemplate(templateId) {
 }
 
 /**
+ * Moves a task's deadline later — works on any task, default (recurring /
+ * onboarding) or not, manager task or associate task. Only the deadline
+ * changes; lateness of an already-made submission stays as it was decided at
+ * submit time. People who haven't submitted yet are notified.
+ */
+export async function extendTaskDeadline(kind, taskId, newDate, newTime) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return { error: authError };
+
+  const tables = {
+    manager: { task: 'manager_tasks', assignees: 'manager_task_assignees' },
+    associate: { task: 'associate_tasks', assignees: 'associate_task_assignees' },
+  };
+  const t = tables[kind];
+  const id = parseInt(taskId, 10);
+  const date = String(newDate || '').trim();
+  const time = String(newTime || '').trim();
+  if (!t || !id) return { error: 'Invalid task' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: 'Pick the new due date' };
+  if (!/^\d{2}:\d{2}$/.test(time)) return { error: 'Pick the new due time' };
+
+  try {
+    const db = await getDb();
+    const task = await db.prepare(`SELECT id, task_text, due_date, due_time FROM ${t.task} WHERE id = ?`).get(id);
+    if (!task) return { error: 'Task not found' };
+    if (`${date} ${time}` <= `${task.due_date} ${task.due_time}`) {
+      return { error: 'The new deadline must be later than the current one' };
+    }
+
+    try {
+      await db.prepare(`UPDATE ${t.task} SET due_date = ?, due_time = ? WHERE id = ?`).run(date, time, id);
+    } catch (err) {
+      if (/UNIQUE/i.test(err.message || '')) {
+        return { error: 'Another occurrence of this default task already uses that date — pick a different day' };
+      }
+      throw err;
+    }
+
+    const waiting = await db.prepare(`
+      SELECT a.user_id, u.role FROM ${t.assignees} a JOIN users u ON u.id = a.user_id
+      WHERE a.task_id = ? AND a.submitted_at IS NULL AND u.is_active = 1
+    `).all(id);
+    const byRole = new Map();
+    for (const a of waiting) {
+      if (!byRole.has(a.role)) byRole.set(a.role, []);
+      byRole.get(a.role).push(a.user_id);
+    }
+    for (const [role, ids] of byRole.entries()) {
+      await createNotificationsForUsers(db, ids, {
+        title: 'Task Deadline Extended',
+        message: `${task.task_text.slice(0, 120)} — now due ${date} ${time}`,
+        link: getTasksLinkForRole(role),
+      });
+    }
+
+    revalidatePath('/admin/manager-tasks');
+    return { success: true };
+  } catch (err) {
+    console.error('[ManagerTasks] extendTaskDeadline failed:', err);
+    return { error: err.message || 'Failed to extend the deadline — please try again.' };
+  }
+}
+
+/**
  * Approves or rejects one late submission. Only ever acts on an assignee row
  * that's actually is_late=1 and approval_status='pending' — an on-time
  * submission was never routed for review in the first place (approval_status

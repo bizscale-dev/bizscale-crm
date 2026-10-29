@@ -6,7 +6,7 @@ import TaskBadges from '@/components/TaskBadges';
 import { TASK_URGENCIES } from '@/lib/taskUrgency';
 import {
   createManagerTask, approveTaskSubmission, rejectTaskSubmission,
-  createRecurringTemplate, setRecurringTemplateActive, deleteRecurringTemplate,
+  createRecurringTemplate, setRecurringTemplateActive, deleteRecurringTemplate, extendTaskDeadline,
 } from './actions';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -295,8 +295,24 @@ function parseList(v) {
 }
 
 // One task with who it went to and how far along each person is.
-function TaskCard({ task, now, compact }) {
+function TaskCard({ task, now, compact, kind = 'manager' }) {
+  const router = useRouter();
   const st = taskStatus(task, now);
+  const [extending, setExtending] = useState(false);
+  const [newDate, setNewDate] = useState(task.due_date);
+  const [newTime, setNewTime] = useState(task.due_time || '23:59');
+  const [saving, setSaving] = useState(false);
+  const [extendError, setExtendError] = useState(null);
+
+  const saveExtension = async () => {
+    setSaving(true);
+    setExtendError(null);
+    const result = await extendTaskDeadline(kind, task.id, newDate, newTime);
+    setSaving(false);
+    if (result?.error) { setExtendError(result.error); return; }
+    setExtending(false);
+    router.refresh();
+  };
   const items = parseList(task.checklist);
   const tickedBy = (i) => task.assignees.every((a) => parseList(a.checklist_done).includes(i));
   const stripe = URGENCY_COLOR[task.urgency] || URGENCY_COLOR.moderate;
@@ -315,9 +331,28 @@ function TaskCard({ task, now, compact }) {
           {st.done ? <Pill color="var(--success)">Completed</Pill>
             : st.overdue ? <Pill color="var(--danger)">Overdue</Pill> : null}
           <Pill color="var(--text-muted)">Due {formatDue(task)}</Pill>
+          <button type="button" onClick={() => setExtending((v) => !v)} style={{ ...ghostButtonStyle, padding: '0.15rem 0.7rem', fontSize: '0.72rem', borderRadius: '1rem' }}>
+            {extending ? 'Cancel' : '⏱ Extend'}
+          </button>
           {task.assignees.length > 1 && <Pill color="var(--text-muted)">{st.submitted}/{st.total} submitted</Pill>}
         </div>
       </div>
+      {extending && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '0.75rem', marginBottom: '0.75rem', padding: '0.75rem', border: '1px dashed var(--border)', borderRadius: '0.6rem' }}>
+          <div>
+            <label style={labelStyle}>New due date</label>
+            <input type="date" value={newDate} min={task.due_date} onChange={(e) => setNewDate(e.target.value)} onClick={(e) => e.target.showPicker?.()} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }} />
+          </div>
+          <div>
+            <label style={labelStyle}>New due time</label>
+            <input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} onClick={(e) => e.target.showPicker?.()} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }} />
+          </div>
+          <button type="button" disabled={saving} onClick={saveExtension} style={{ ...primaryButtonStyle, padding: '0.6rem 1.2rem', opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'Saving…' : 'Extend deadline'}
+          </button>
+          {extendError && <div style={{ fontSize: '0.8rem', color: 'var(--danger)', flexBasis: '100%' }}>{extendError}</div>}
+        </div>
+      )}
       {items.length > 0 && (
         <details style={{ marginBottom: '0.75rem', fontSize: '0.85rem' }}>
           <summary style={{ cursor: 'pointer', fontWeight: '600', color: 'var(--text-muted)' }}>
@@ -595,12 +630,12 @@ function BalanceTab({ managers, tasks, associateTasks }) {
     : [];
   const up = selectedManagerId ? associateTasks.filter((t) => t.manager_id === selectedManagerId) : [];
 
-  const section = (title, list, emptyText) => (
+  const section = (title, list, emptyText, kind) => (
     <div>
       <h3 style={{ fontSize: '0.95rem', marginBottom: '0.75rem' }}>{title} <span style={{ color: 'var(--text-muted)', fontWeight: '500' }}>({list.length})</span></h3>
       {list.length === 0
         ? <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{emptyText}</p>
-        : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>{list.map((t) => <TaskCard key={t.id} task={t} now={now} compact />)}</div>}
+        : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>{list.map((t) => <TaskCard key={t.id} task={t} now={now} compact kind={kind} />)}</div>}
     </div>
   );
 
@@ -623,8 +658,8 @@ function BalanceTab({ managers, tasks, associateTasks }) {
       </div>
       {selectedManager ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
-          {section(`Admin → ${selectedManager.name}`, down, 'Nothing assigned to them yet.')}
-          {section(`${selectedManager.name} → their associates`, up, "They haven't assigned anything to their associates yet.")}
+          {section(`Admin → ${selectedManager.name}`, down, 'Nothing assigned to them yet.', 'manager')}
+          {section(`${selectedManager.name} → their associates`, up, "They haven't assigned anything to their associates yet.", 'associate')}
         </div>
       ) : (
         <Empty icon="🔍" title="Choose a manager" text="Both directions of work will show up here." />
