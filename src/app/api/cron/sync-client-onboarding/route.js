@@ -7,7 +7,7 @@ export const maxDuration = 60;
 /**
  * GET /api/cron/sync-client-onboarding
  *
- * Runs every day at 12:00 PM Pakistan time (VPS scheduler). Reads the SEO clients
+ * Runs every day at 4:00 PM Pakistan time (VPS scheduler). Reads the SEO clients
  * sheet and, for every client it hasn't seen before, creates the onboarding
  * checklist for the owning SEO manager. Has no link to the clients table,
  * campaigns or task generation — see src/lib/clientOnboardingSync.js.
