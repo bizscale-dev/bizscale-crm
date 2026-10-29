@@ -6,6 +6,8 @@ import {
   createManagerTask, approveTaskSubmission, rejectTaskSubmission,
   createRecurringTemplate, setRecurringTemplateActive, deleteRecurringTemplate,
 } from './actions';
+import TaskBadges from '@/components/TaskBadges';
+import UrgencySelect from '@/components/UrgencySelect';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -194,6 +196,7 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
   const [taskText, setTaskText] = useState('');
   const [startWeekday, setStartWeekday] = useState('');
   const [durationDays, setDurationDays] = useState(1);
+  const [urgency, setUrgency] = useState('moderate');
   const [selectedIds, setSelectedIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
@@ -211,6 +214,7 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
     formData.set('task_text', taskText);
     formData.set('start_weekday', startWeekday);
     formData.set('duration_days', durationDays);
+    formData.set('urgency', urgency);
     selectedIds.forEach((id) => formData.append('assignee_ids', id));
     const result = await createRecurringTemplate(formData);
     setSubmitting(false);
@@ -224,6 +228,7 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
     setTaskText('');
     setStartWeekday('');
     setDurationDays(1);
+    setUrgency('moderate');
     setSelectedIds([]);
     router.refresh();
   };
@@ -271,6 +276,7 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
             )}
           </div>
         </div>
+        <UrgencySelect value={urgency} onChange={setUrgency} labelStyle={labelStyle} inputStyle={inputStyle} />
         <div>
           <label style={labelStyle}>Assign To</label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -302,7 +308,7 @@ function DefaultTasksSection({ managers, roleLabels, templates }) {
           {templates.map((t) => (
             <div key={t.id} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', opacity: t.is_active ? 1 : 0.55 }}>
               <div>
-                <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{t.task_text}</div>
+                <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}><TaskBadges urgency={t.urgency} isDefault={false} />{t.task_text}</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                   Every {formatTemplateSchedule(t.weekdays, t.duration_days)} · {t.assignee_names || 'no managers'}{t.is_active ? '' : ' · paused'}
                 </div>
@@ -378,7 +384,7 @@ function ManagerCheckBalance({ managers, tasks, associateTasks }) {
                 {tasksAssignedToManager.map((task) => (
                   <div key={task.id} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.9rem 1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.6rem' }}>
-                      <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>{task.template_id ? '🔁 ' : ''}{task.task_text}</div>
+                      <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         Due {task.due_date} {task.template_id ? '(12 AM)' : task.due_time}
                       </div>
@@ -401,7 +407,7 @@ function ManagerCheckBalance({ managers, tasks, associateTasks }) {
                 {tasksManagerAssignedDown.map((task) => (
                   <div key={task.id} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.9rem 1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.6rem' }}>
-                      <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>{task.template_id ? '🔁 ' : ''}{task.task_text}</div>
+                      <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         Due {task.due_date} {task.template_id ? '(12 AM)' : task.due_time}
                       </div>
@@ -425,6 +431,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
   const [taskText, setTaskText] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [dueTime, setDueTime] = useState('');
+  const [urgency, setUrgency] = useState('moderate');
   const [selectedIds, setSelectedIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
@@ -444,6 +451,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
     formData.set('task_text', taskText);
     formData.set('due_date', dueDate);
     formData.set('due_time', dueTime);
+    formData.set('urgency', urgency);
     selectedIds.forEach((id) => formData.append('assignee_ids', id));
 
     const result = await createManagerTask(formData);
@@ -458,6 +466,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
     setTaskText('');
     setDueDate('');
     setDueTime('');
+    setUrgency('moderate');
     setSelectedIds([]);
     router.refresh();
   };
@@ -524,6 +533,8 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
             </div>
           </div>
 
+          <UrgencySelect value={urgency} onChange={setUrgency} labelStyle={labelStyle} inputStyle={inputStyle} />
+
           <div>
             <label style={labelStyle}>Assign To</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -572,7 +583,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
             {tasks.map((task) => (
               <div key={task.id} style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', gap: '1rem' }}>
-                  <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{task.template_id ? '🔁 ' : ''}{task.task_text}</div>
+                  <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                     Due {task.due_date} {task.template_id ? '(12 AM)' : task.due_time}
                   </div>

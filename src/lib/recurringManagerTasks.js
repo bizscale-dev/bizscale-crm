@@ -23,7 +23,7 @@ export async function ensureRecurringManagerTasks() {
   const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
 
   const templates = await db.prepare(`
-    SELECT id, task_text, weekdays, duration_days, due_time, created_by
+    SELECT id, task_text, weekdays, duration_days, due_time, created_by, urgency
     FROM manager_task_templates WHERE is_active = 1
   `).all();
 
@@ -37,9 +37,9 @@ export async function ensureRecurringManagerTasks() {
     const dueDateStr = dueDate.toISOString().split('T')[0];
 
     const result = await db.prepare(`
-      INSERT OR IGNORE INTO manager_tasks (task_text, due_date, due_time, created_by, template_id)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(t.task_text, dueDateStr, t.due_time, t.created_by, t.id);
+      INSERT OR IGNORE INTO manager_tasks (task_text, due_date, due_time, created_by, template_id, urgency)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(t.task_text, dueDateStr, t.due_time, t.created_by, t.id, t.urgency || 'moderate');
     if (!result.changes) continue; // already spawned for this occurrence
 
     const taskId = result.lastInsertRowid;

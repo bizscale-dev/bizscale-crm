@@ -21,7 +21,7 @@ export default async function ManagerTasksPage() {
   `).all();
 
   const rows = await db.prepare(`
-    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id,
+    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency, t.is_default,
       a.id as assignee_row_id, a.user_id, u.name as manager_name, u.role as manager_role,
       a.submitted_at, a.submission_description, a.proof_image_base64,
       a.is_late, a.late_reason, a.approval_status
@@ -43,6 +43,8 @@ export default async function ManagerTasksPage() {
         due_time: row.due_time,
         created_at: row.created_at,
         template_id: row.template_id,
+        urgency: row.urgency,
+        is_default: row.is_default,
         assignees: [],
       });
     }
@@ -61,7 +63,7 @@ export default async function ManagerTasksPage() {
   }
 
   const templateRows = await db.prepare(`
-    SELECT t.id, t.task_text, t.weekdays, t.duration_days, t.due_time, t.is_active,
+    SELECT t.id, t.task_text, t.weekdays, t.duration_days, t.due_time, t.is_active, t.urgency,
       (SELECT GROUP_CONCAT(u.name, ', ') FROM manager_task_template_assignees ta
         JOIN users u ON u.id = ta.user_id WHERE ta.template_id = t.id) as assignee_names
     FROM manager_task_templates t ORDER BY t.created_at DESC
@@ -73,7 +75,7 @@ export default async function ManagerTasksPage() {
   // create/write time. This feeds the "check & balance" filter below: pick a
   // manager, see both what admin assigned THEM and what THEY assigned down.
   const associateTaskRows = await db.prepare(`
-    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id,
+    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency,
       t.created_by as manager_id,
       a.id as assignee_row_id, a.user_id, u.name as associate_name, u.role as associate_role,
       a.submitted_at, a.submission_description, a.proof_image_base64,
@@ -94,6 +96,7 @@ export default async function ManagerTasksPage() {
         due_time: row.due_time,
         created_at: row.created_at,
         template_id: row.template_id,
+        urgency: row.urgency,
         manager_id: row.manager_id,
         assignees: [],
       });

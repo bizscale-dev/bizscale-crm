@@ -15,7 +15,7 @@ export default async function SeoManagerAssociateTasksPage() {
   `).all(ASSOCIATE_ROLE);
 
   const rows = await db.prepare(`
-    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id,
+    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency,
       a.id as assignee_row_id, a.user_id, u.name as associate_name,
       a.submitted_at, a.submission_description, a.proof_image_base64,
       a.is_late, a.late_reason, a.approval_status
@@ -36,6 +36,7 @@ export default async function SeoManagerAssociateTasksPage() {
         due_time: row.due_time,
         created_at: row.created_at,
         template_id: row.template_id,
+        urgency: row.urgency,
         assignees: [],
       });
     }
@@ -53,7 +54,7 @@ export default async function SeoManagerAssociateTasksPage() {
   }
 
   const templateRows = await db.prepare(`
-    SELECT t.id, t.task_text, t.weekdays, t.duration_days, t.due_time, t.is_active,
+    SELECT t.id, t.task_text, t.weekdays, t.duration_days, t.due_time, t.is_active, t.urgency,
       (SELECT GROUP_CONCAT(u.name, ', ') FROM associate_task_template_assignees ta
         JOIN users u ON u.id = ta.user_id WHERE ta.template_id = t.id) as assignee_names
     FROM associate_task_templates t

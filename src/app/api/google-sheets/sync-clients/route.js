@@ -232,7 +232,7 @@ export async function POST(request) {
         // Add client to map (no website in this sheet, so empty string). Stored
         // verbatim as whatever text is in the sheet's Joining Date column — see
         // clients.joining_date in src/lib/db.js.
-        sheetClients.set(clientName.toLowerCase(), { name: clientName, website: '', joiningDate });
+        sheetClients.set(clientName.toLowerCase(), { name: clientName, website: '', joiningDate, supportNumber });
         supportByClient.set(clientName.toLowerCase(), supportNumber);
 
         // Add to associate assignment

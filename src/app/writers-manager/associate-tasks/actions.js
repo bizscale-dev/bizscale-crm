@@ -5,6 +5,7 @@ import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
 import { createNotificationsForUsers, getTasksLinkForRole } from '@/lib/notifications';
+import { parseUrgency } from '@/lib/taskUrgency';
 
 const ASSOCIATE_ROLE = 'writer';
 const BASE_PATH = '/writers-manager/associate-tasks';
@@ -31,6 +32,7 @@ export async function createAssociateTask(formData) {
   const taskText = (formData.get('task_text') || '').toString().trim();
   const dueDate = (formData.get('due_date') || '').toString().trim();
   const dueTime = (formData.get('due_time') || '').toString().trim();
+  const urgency = parseUrgency(formData.get('urgency'));
   const assigneeIds = formData.getAll('assignee_ids')
     .map((v) => parseInt(v, 10))
     .filter((n) => !Number.isNaN(n));
@@ -50,9 +52,9 @@ export async function createAssociateTask(formData) {
 
     const create = db.transaction(async (tx) => {
       const result = await tx.prepare(`
-        INSERT INTO associate_tasks (task_text, due_date, due_time, created_by)
-        VALUES (?, ?, ?, ?)
-      `).run(taskText, dueDate, dueTime, session.userId);
+        INSERT INTO associate_tasks (task_text, due_date, due_time, created_by, urgency)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(taskText, dueDate, dueTime, session.userId, urgency);
       for (const u of valid) {
         await tx.prepare(`
           INSERT INTO associate_task_assignees (task_id, user_id) VALUES (?, ?)
@@ -89,6 +91,7 @@ export async function createRecurringAssociateTemplate(formData) {
   const dueTime = '23:59';
   const startWeekday = parseInt(formData.get('start_weekday'), 10);
   const durationDays = parseInt(formData.get('duration_days'), 10) || 1;
+  const urgency = parseUrgency(formData.get('urgency'));
   const assigneeIds = formData.getAll('assignee_ids')
     .map((v) => parseInt(v, 10))
     .filter((n) => !Number.isNaN(n));
@@ -110,9 +113,9 @@ export async function createRecurringAssociateTemplate(formData) {
 
     const create = db.transaction(async (tx) => {
       const result = await tx.prepare(`
-        INSERT INTO associate_task_templates (task_text, weekdays, duration_days, due_time, created_by)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(taskText, String(startWeekday), durationDays, dueTime, session.userId);
+        INSERT INTO associate_task_templates (task_text, weekdays, duration_days, due_time, created_by, urgency)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(taskText, String(startWeekday), durationDays, dueTime, session.userId, urgency);
       for (const u of valid) {
         await tx.prepare(`
           INSERT INTO associate_task_template_assignees (template_id, user_id) VALUES (?, ?)

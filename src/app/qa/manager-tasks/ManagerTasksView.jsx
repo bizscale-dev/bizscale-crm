@@ -5,6 +5,7 @@ import { cardStyle, selectStyle, formatMonth, StatPill, BRAND_COLOR } from '../q
 import Linkify from '../Linkify';
 import { reportManagerTask } from './actions';
 import ResolveDaysInput from '@/components/ResolveDaysInput';
+import TaskBadges from '@/components/TaskBadges';
 
 const ROLE_LABELS = {
   seo_manager: 'SEO Manager',
@@ -195,7 +196,7 @@ function TaskCard({ row, flagCount, onReported }) {
       )}
 
       <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>
-        {row.template_id ? '🔁 ' : ''}<Linkify text={row.task_text} />
+        <TaskBadges urgency={row.urgency} isDefault={!!(row.template_id || row.is_default)} /><Linkify text={row.task_text} />
       </div>
 
       {canExpand && expanded && (

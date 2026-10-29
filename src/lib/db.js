@@ -219,6 +219,15 @@ async function runMigrations(raw) {
     // Links a spawned occurrence back to its recurring template (NULL for a
     // normal one-off task).
     "ALTER TABLE manager_tasks ADD COLUMN template_id INTEGER",
+    // How urgent a task is (low / moderate / urgent) — picked when assigning, and
+    // copied from a default task's template onto each occurrence it spawns.
+    // is_default = 1 marks tasks created automatically by the system as default
+    // tasks (e.g. the new-client onboarding checklist), shown with a "Default" tag.
+    "ALTER TABLE manager_tasks ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
+    "ALTER TABLE manager_tasks ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE manager_task_templates ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
+    "ALTER TABLE associate_tasks ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
+    "ALTER TABLE associate_task_templates ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
     // First working day of a Month 1 client's CURRENT week — the 5-working-day
     // clock that drives automatic week advancement (see autoAdvanceMonth1Weeks
     // in src/lib/funnel.js). NULL until the clock is first started.

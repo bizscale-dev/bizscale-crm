@@ -10,7 +10,7 @@ export default async function HrAssociateTasksPage() {
   // associate_tasks already only ever holds this one kind of assignment
   // (see src/lib/db.js), no role filter needed.
   const rows = await db.prepare(`
-    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.template_id,
+    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.template_id, t.urgency,
       a.id as assignee_id, u.id as associate_id, u.name as associate_name, u.role as associate_role,
       m.name as assigned_by,
       a.submitted_at, a.submission_description, a.proof_image_base64,

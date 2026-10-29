@@ -5,6 +5,7 @@ import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { ensureRecurringManagerTasks } from '@/lib/recurringManagerTasks';
 import { createNotificationsForUsers, getTasksLinkForRole } from '@/lib/notifications';
+import { parseUrgency } from '@/lib/taskUrgency';
 
 const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
 
@@ -31,6 +32,7 @@ export async function createManagerTask(formData) {
   const taskText = (formData.get('task_text') || '').toString().trim();
   const dueDate = (formData.get('due_date') || '').toString().trim();
   const dueTime = (formData.get('due_time') || '').toString().trim();
+  const urgency = parseUrgency(formData.get('urgency'));
   const assigneeIds = formData.getAll('assignee_ids')
     .map((v) => parseInt(v, 10))
     .filter((n) => !Number.isNaN(n));
@@ -64,11 +66,11 @@ export async function createManagerTask(formData) {
     }
     const validIds = validManagers.map((m) => m.id);
 
-    const createTask = db.transaction(async (tx, { taskText, dueDate, dueTime, createdBy, validIds }) => {
+    const createTask = db.transaction(async (tx, { taskText, dueDate, dueTime, urgency, createdBy, validIds }) => {
       const result = await tx.prepare(`
-        INSERT INTO manager_tasks (task_text, due_date, due_time, created_by)
-        VALUES (?, ?, ?, ?)
-      `).run(taskText, dueDate, dueTime, createdBy);
+        INSERT INTO manager_tasks (task_text, due_date, due_time, created_by, urgency)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(taskText, dueDate, dueTime, createdBy, urgency);
 
       const taskId = result.lastInsertRowid;
       for (const userId of validIds) {
@@ -79,7 +81,7 @@ export async function createManagerTask(formData) {
       return taskId;
     });
 
-    await createTask({ taskText, dueDate, dueTime, createdBy: session.userId, validIds });
+    await createTask({ taskText, dueDate, dueTime, urgency, createdBy: session.userId, validIds });
 
     // Notify each assignee — grouped by role since the link (and each
     // recipient's own Tasks page) differs per manager role.
@@ -125,6 +127,7 @@ export async function createRecurringTemplate(formData) {
   const dueTime = '23:59';
   const startWeekday = parseInt(formData.get('start_weekday'), 10);
   const durationDays = parseInt(formData.get('duration_days'), 10) || 1;
+  const urgency = parseUrgency(formData.get('urgency'));
   const assigneeIds = formData.getAll('assignee_ids')
     .map((v) => parseInt(v, 10))
     .filter((n) => !Number.isNaN(n));
@@ -148,9 +151,9 @@ export async function createRecurringTemplate(formData) {
 
     const create = db.transaction(async (tx) => {
       const result = await tx.prepare(`
-        INSERT INTO manager_task_templates (task_text, weekdays, duration_days, due_time, created_by)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(taskText, String(startWeekday), durationDays, dueTime, session.userId);
+        INSERT INTO manager_task_templates (task_text, weekdays, duration_days, due_time, created_by, urgency)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(taskText, String(startWeekday), durationDays, dueTime, session.userId, urgency);
       for (const m of valid) {
         await tx.prepare(`
           INSERT INTO manager_task_template_assignees (template_id, user_id) VALUES (?, ?)
