@@ -1,7 +1,6 @@
 import { getDb, initDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { generateSEOTasks } from '@/lib/taskService';
-import { createClientOnboardingTasks } from '@/lib/clientOnboardingTasks';
 
 // 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
 // for why this matters (a killed function fails silently with no error surfaced). This
@@ -42,7 +41,6 @@ export async function POST(request) {
     let results = {
       clientsAdded: 0,
       tasksCreated: 0,
-      onboardingTasks: 0,
       notAssigned: [],
     };
 
@@ -175,16 +173,6 @@ export async function POST(request) {
         `).run(campaign.id, clientData.name, clientData.website || '', maxSortOrder, assignedAssociateId, assignedWriterId, clientData.joiningDate || null, clientData.supportNumber || null);
 
         results.clientsAdded++;
-
-        // Onboarding checklist for the SEO manager who owns this client (by Support number).
-        try {
-          results.onboardingTasks += await createClientOnboardingTasks(db, {
-            clientName: clientData.name,
-            supportNumber: clientData.supportNumber || null,
-          });
-        } catch (err) {
-          console.error(`Failed to create onboarding tasks for ${clientData.name}:`, err.message);
-        }
 
         if (!assignedAssociateId) {
           results.notAssigned.push(clientData.name);

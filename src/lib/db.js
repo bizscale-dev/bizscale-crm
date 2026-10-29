@@ -720,6 +720,16 @@ async function runMigrations(raw) {
     // (admin -> manager) and associate_tasks (manager -> associate) — see
     // src/lib/notifications.js. No role/portal split needed: every
     // notification is read identically, scoped only by user_id.
+    // Every client the daily onboarding sheet check has already handled (name_key =
+    // lowercased sheet name), so a client only ever gets its onboarding tasks once.
+    // Independent of the clients table and campaigns — see src/lib/clientOnboardingSync.js.
+    `CREATE TABLE IF NOT EXISTS client_onboarding_log (
+      name_key TEXT PRIMARY KEY,
+      client_name TEXT NOT NULL,
+      support_number INTEGER,
+      tasks_created INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
     `CREATE TABLE IF NOT EXISTS notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
