@@ -285,9 +285,20 @@ function AssigneeStatus({ assignee }) {
   );
 }
 
+function parseList(v) {
+  try {
+    const a = JSON.parse(v || '[]');
+    return Array.isArray(a) ? a : [];
+  } catch {
+    return [];
+  }
+}
+
 // One task with who it went to and how far along each person is.
 function TaskCard({ task, now, compact }) {
   const st = taskStatus(task, now);
+  const items = parseList(task.checklist);
+  const tickedBy = (i) => task.assignees.every((a) => parseList(a.checklist_done).includes(i));
   const stripe = URGENCY_COLOR[task.urgency] || URGENCY_COLOR.moderate;
   return (
     <div style={{
@@ -307,6 +318,18 @@ function TaskCard({ task, now, compact }) {
           {task.assignees.length > 1 && <Pill color="var(--text-muted)">{st.submitted}/{st.total} submitted</Pill>}
         </div>
       </div>
+      {items.length > 0 && (
+        <details style={{ marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+          <summary style={{ cursor: 'pointer', fontWeight: '600', color: 'var(--text-muted)' }}>
+            Checklist · {task.assignees.map((a) => `${a.name}: ${parseList(a.checklist_done).length}/${items.length}`).join(' · ')}
+          </summary>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.5rem' }}>
+            {items.map((item, i) => (
+              <div key={i} style={{ color: tickedBy(i) ? 'var(--success)' : 'inherit' }}>{tickedBy(i) ? '☑' : '☐'} {item}</div>
+            ))}
+          </div>
+        </details>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '0.5rem' }}>
         {task.assignees.map((a) => <AssigneeStatus key={a.id} assignee={a} />)}
       </div>

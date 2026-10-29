@@ -21,8 +21,8 @@ export default async function ManagerTasksPage() {
   `).all();
 
   const rows = await db.prepare(`
-    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency, t.is_default,
-      a.id as assignee_row_id, a.user_id, u.name as manager_name, u.role as manager_role,
+    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency, t.is_default, t.checklist,
+      a.checklist_done, a.id as assignee_row_id, a.user_id, u.name as manager_name, u.role as manager_role,
       a.submitted_at, a.submission_description, a.proof_image_base64,
       a.is_late, a.late_reason, a.approval_status
     FROM manager_tasks t
@@ -45,12 +45,14 @@ export default async function ManagerTasksPage() {
         template_id: row.template_id,
         urgency: row.urgency,
         is_default: row.is_default,
+        checklist: row.checklist,
         assignees: [],
       });
     }
     byTask.get(row.task_id).assignees.push({
       id: row.assignee_row_id,
       user_id: row.user_id,
+      checklist_done: row.checklist_done,
       name: row.manager_name,
       role: row.manager_role,
       submitted_at: row.submitted_at,

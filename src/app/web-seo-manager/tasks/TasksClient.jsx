@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitTaskProof } from './actions';
 import TaskBadges from '@/components/TaskBadges';
+import { setChecklistItem } from '@/app/actions/managerTaskChecklist';
 
 const BRAND_COLOR = 'var(--primary)';
 const PORTAL = 'web-seo-manager';
@@ -39,6 +40,15 @@ function writeDraft(taskId, description) {
 }
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
+function parseList(v) {
+  try {
+    const a = JSON.parse(v || '[]');
+    return Array.isArray(a) ? a : [];
+  } catch {
+    return [];
+  }
+}
 
 const labelStyle = {
   display: 'block',
@@ -98,6 +108,24 @@ function TaskCard({ task }) {
   const [imageError, setImageError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const items = parseList(task.checklist);
+  const [checked, setChecked] = useState(() => new Set(parseList(task.checklist_done)));
+
+  const toggleItem = async (i) => {
+    if (submitted) return;
+    const on = !checked.has(i);
+    const apply = (value) => setChecked((prev) => {
+      const next = new Set(prev);
+      if (value) next.add(i); else next.delete(i);
+      return next;
+    });
+    apply(on);
+    const result = await setChecklistItem(task.task_id, i, on);
+    if (result?.error) {
+      apply(!on);
+      setError(result.error);
+    }
+  };
 
   const handleDescriptionChange = (value) => {
     setDescription(value);
@@ -124,7 +152,12 @@ function TaskCard({ task }) {
 
   const handleSubmit = async () => {
     setError(null);
-    if (!description.trim()) {
+    if (items.length > 0 && checked.size < items.length) {
+      setError('Tick every item on the checklist before submitting');
+      return;
+    }
+    const finalDescription = description.trim() || (items.length > 0 ? `Checklist completed (${items.length}/${items.length})` : '');
+    if (!finalDescription) {
       setError('Description is required');
       return;
     }
@@ -134,7 +167,7 @@ function TaskCard({ task }) {
     }
 
     setSubmitting(true);
-    const result = await submitTaskProof(task.task_id, description, imageDataUrl, lateReason);
+    const result = await submitTaskProof(task.task_id, finalDescription, imageDataUrl, lateReason);
     setSubmitting(false);
 
     if (result?.error) {
@@ -159,6 +192,25 @@ function TaskCard({ task }) {
           Due {task.due_date} {task.template_id ? '12 AM' : task.due_time}
         </div>
       </div>
+
+      {items.length > 0 && (
+        <div style={{ marginBottom: '0.9rem', padding: '0.75rem 0.9rem', border: '1px solid var(--border)', borderRadius: '0.6rem', backgroundColor: 'var(--background)' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+            Checklist · {checked.size}/{items.length} done
+          </div>
+          <div style={{ height: '5px', borderRadius: '3px', backgroundColor: 'var(--border)', marginBottom: '0.6rem', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${(checked.size / items.length) * 100}%`, backgroundColor: 'var(--primary)', transition: 'width 0.2s' }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            {items.map((item, i) => (
+              <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', fontSize: '0.875rem', cursor: submitted ? 'default' : 'pointer', textDecoration: checked.has(i) ? 'line-through' : 'none', color: checked.has(i) ? 'var(--text-muted)' : 'inherit' }}>
+                <input type="checkbox" checked={checked.has(i)} disabled={submitted} onChange={() => toggleItem(i)} />
+                {item}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       {submitted ? (
         <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>

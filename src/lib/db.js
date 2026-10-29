@@ -225,6 +225,11 @@ async function runMigrations(raw) {
     // tasks (e.g. the new-client onboarding checklist), shown with a "Default" tag.
     "ALTER TABLE manager_tasks ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
     "ALTER TABLE manager_tasks ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0",
+    // Checklist tasks: manager_tasks.checklist is a JSON array of item texts and
+    // manager_task_assignees.checklist_done the JSON array of item indexes that
+    // assignee has ticked (e.g. the new-client onboarding task).
+    "ALTER TABLE manager_tasks ADD COLUMN checklist TEXT",
+    "ALTER TABLE manager_task_assignees ADD COLUMN checklist_done TEXT",
     "ALTER TABLE manager_task_templates ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
     "ALTER TABLE associate_tasks ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
     "ALTER TABLE associate_task_templates ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",

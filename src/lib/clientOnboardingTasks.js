@@ -28,10 +28,11 @@ function dueDateInDays(days) {
 }
 
 /**
- * Creates the onboarding checklist for one new client as ordinary manager
- * tasks (tagged is_default = 1), assigned to the owning SEO manager. Does
+ * Creates the onboarding checklist for one new client as a single manager task
+ * (tagged is_default = 1, the items are tickable boxes), assigned to the owning
+ * SEO manager. Does
  * nothing when the client has no Support number or its manager can't be found.
- * Returns the number of tasks created.
+ * Returns the number of tasks created (0 or 1).
  */
 export async function createClientOnboardingTasks(db, { clientName, supportNumber }) {
   const range = supportNumber == null
@@ -49,20 +50,18 @@ export async function createClientOnboardingTasks(db, { clientName, supportNumbe
   if (!manager || !admin) return 0;
 
   const dueDate = dueDateInDays(ONBOARDING_DUE_DAYS);
-  for (const item of ONBOARDING_TASKS) {
-    const result = await db.prepare(`
-      INSERT INTO manager_tasks (task_text, due_date, due_time, created_by, urgency, is_default)
-      VALUES (?, ?, '23:59', ?, 'moderate', 1)
-    `).run(`${clientName} — ${item}`, dueDate, admin.id);
-    await db.prepare(`
-      INSERT INTO manager_task_assignees (task_id, user_id) VALUES (?, ?)
-    `).run(result.lastInsertRowid, manager.id);
-  }
+  const result = await db.prepare(`
+    INSERT INTO manager_tasks (task_text, due_date, due_time, created_by, urgency, is_default, checklist)
+    VALUES (?, ?, '23:59', ?, 'moderate', 1, ?)
+  `).run(`${clientName} — Onboarding checklist`, dueDate, admin.id, JSON.stringify(ONBOARDING_TASKS));
+  await db.prepare(`
+    INSERT INTO manager_task_assignees (task_id, user_id) VALUES (?, ?)
+  `).run(result.lastInsertRowid, manager.id);
 
   await createNotificationsForUsers(db, [manager.id], {
-    title: 'New Client Onboarding Tasks',
-    message: `${ONBOARDING_TASKS.length} tasks for ${clientName} — due ${dueDate}`,
+    title: 'New Client Onboarding Task',
+    message: `${clientName} — onboarding checklist (${ONBOARDING_TASKS.length} items) — due ${dueDate}`,
     link: getTasksLinkForRole(manager.role),
   });
-  return ONBOARDING_TASKS.length;
+  return 1;
 }

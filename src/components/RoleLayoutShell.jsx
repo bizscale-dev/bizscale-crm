@@ -25,7 +25,7 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
   return (
     <>
     <NotificationLoginDialog />
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--background)' }}>
+    <div style={{ display: 'flex', height: '100dvh', overflow: 'hidden', backgroundColor: 'var(--background)' }}>
       <aside style={{
         width: sidebarOpen ? '260px' : '80px',
         backgroundColor: 'var(--card-bg)',
@@ -259,7 +259,7 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
         </div>
       </aside>
 
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflowY: 'auto' }}>
+      <main style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
         <header style={{
           padding: '1rem 2rem',
           backgroundColor: 'var(--card-bg)',
