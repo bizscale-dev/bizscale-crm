@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { ensureRecurringManagerTasks } from '@/lib/recurringManagerTasks';
 import { createNotificationsForUsers, getTasksLinkForRole } from '@/lib/notifications';
 import { parseUrgency } from '@/lib/taskUrgency';
+import { ONBOARDING_KEYS, validateSections, createOnboardingTasks } from '@/lib/onboardingChecklists';
 
 const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
 
@@ -196,6 +197,64 @@ export async function deleteRecurringTemplate(templateId) {
   await db.prepare('DELETE FROM manager_task_templates WHERE id = ?').run(id);
   revalidatePath('/admin/manager-tasks');
   return { success: true };
+}
+
+/**
+ * Saves an edited onboarding checklist (sections, items, due working days).
+ * Only affects tasks created from now on.
+ */
+export async function saveOnboardingChecklist(key, sections) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return { error: authError };
+  if (!ONBOARDING_KEYS.includes(key)) return { error: 'Unknown checklist' };
+  const clean = validateSections(sections);
+  if (clean.error) return { error: clean.error };
+
+  try {
+    const db = await getDb();
+    await db.prepare(`
+      INSERT INTO onboarding_checklists (key, sections, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET sections = excluded.sections, updated_at = CURRENT_TIMESTAMP
+    `).run(key, JSON.stringify(clean.sections));
+    revalidatePath('/admin/manager-tasks');
+    return { success: true };
+  } catch (err) {
+    console.error('[ManagerTasks] saveOnboardingChecklist failed:', err);
+    return { error: err.message || 'Failed to save the checklist — please try again.' };
+  }
+}
+
+/**
+ * Admin hands the Web onboarding task for one client to a Web SEO manager.
+ * Creates one checklist task per section of the web checklist.
+ */
+export async function assignWebOnboarding(formData) {
+  const { session, error: authError } = await requireAdmin();
+  if (authError) return { error: authError };
+
+  const managerId = parseInt(formData.get('manager_id'), 10);
+  const clientName = (formData.get('client_name') || '').toString().trim().slice(0, 150);
+  const website = (formData.get('website') || '').toString().trim().slice(0, 200);
+  if (!managerId) return { error: 'Pick a manager' };
+  if (!clientName) return { error: 'Client name is required' };
+  if (!website) return { error: 'Website is required' };
+
+  try {
+    const db = await getDb();
+    const manager = await db.prepare(`
+      SELECT id, role FROM users WHERE id = ? AND role = 'web_seo_manager' AND is_active = 1
+    `).get(managerId);
+    if (!manager) return { error: 'That manager is not valid' };
+
+    const count = await createOnboardingTasks(db, {
+      key: 'web', label: `${clientName} (${website})`, manager, adminId: session.userId,
+    });
+    revalidatePath('/admin/manager-tasks');
+    return { success: true, taskCount: count };
+  } catch (err) {
+    console.error('[ManagerTasks] assignWebOnboarding failed:', err);
+    return { error: err.message || 'Failed to assign — please try again.' };
+  }
 }
 
 /**

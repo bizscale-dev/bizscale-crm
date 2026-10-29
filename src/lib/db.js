@@ -728,6 +728,13 @@ async function runMigrations(raw) {
     // Every client the daily onboarding sheet check has already handled (name_key =
     // lowercased sheet name), so a client only ever gets its onboarding tasks once.
     // Independent of the clients table and campaigns — see src/lib/clientOnboardingSync.js.
+    // Admin-edited onboarding checklists ('gbp' | 'web'): sections as JSON
+    // [{ title, due_days, items: [...] }] — see src/lib/onboardingChecklists.js.
+    `CREATE TABLE IF NOT EXISTS onboarding_checklists (
+      key TEXT PRIMARY KEY,
+      sections TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
     `CREATE TABLE IF NOT EXISTS client_onboarding_log (
       name_key TEXT PRIMARY KEY,
       client_name TEXT NOT NULL,

@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/db';
 import ManagerTasksClient from './ManagerTasksClient';
 import { ensureRecurringManagerTasks } from '@/lib/recurringManagerTasks';
+import { getOnboardingTemplate } from '@/lib/onboardingChecklists';
 
 export const revalidate = 0;
 
@@ -117,8 +118,16 @@ export default async function ManagerTasksPage() {
     });
   }
 
+  const onboardingTemplates = {
+    gbp: await getOnboardingTemplate(db, 'gbp'),
+    web: await getOnboardingTemplate(db, 'web'),
+  };
+  const webManagers = managers.filter((m) => m.role === 'web_seo_manager').map((m) => ({ id: m.id, name: m.name }));
+
   return (
     <ManagerTasksClient
+      onboardingTemplates={onboardingTemplates}
+      webManagers={webManagers}
       templates={templateRows}
       managers={managers.map((m) => ({ ...m, roleLabel: ROLE_LABELS[m.role] || m.role }))}
       tasks={[...byTask.values()]}

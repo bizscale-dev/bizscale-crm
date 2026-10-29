@@ -7,6 +7,7 @@ import { TASK_URGENCIES } from '@/lib/taskUrgency';
 import {
   createManagerTask, approveTaskSubmission, rejectTaskSubmission,
   createRecurringTemplate, setRecurringTemplateActive, deleteRecurringTemplate, extendTaskDeadline,
+  saveOnboardingChecklist, assignWebOnboarding,
 } from './actions';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -668,16 +669,175 @@ function BalanceTab({ managers, tasks, associateTasks }) {
   );
 }
 
+/* ---------- Tab: onboarding checklists ---------- */
+
+// Edit one onboarding checklist: sections (title + due working days) and the
+// items in each. Saved checklists only apply to tasks created afterwards.
+function ChecklistEditor({ keyName, template, children }) {
+  const router = useRouter();
+  const [sections, setSections] = useState(() => template.sections.map((s) => ({ ...s, items: [...s.items] })));
+  const [drafts, setDrafts] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const update = (si, patch) => setSections((prev) => prev.map((s, i) => (i === si ? { ...s, ...patch } : s)));
+  const removeItem = (si, ii) => update(si, { items: sections[si].items.filter((_, i) => i !== ii) });
+  const addItem = (si) => {
+    const text = (drafts[si] || '').trim();
+    if (!text) return;
+    update(si, { items: [...sections[si].items, text] });
+    setDrafts((d) => ({ ...d, [si]: '' }));
+  };
+  const addSection = () => setSections((prev) => [...prev, { title: 'New section', due_days: 2, items: [] }]);
+  const removeSection = (si) => setSections((prev) => prev.filter((_, i) => i !== si));
+
+  const save = async () => {
+    setSaving(true);
+    setMessage(null);
+    const result = await saveOnboardingChecklist(keyName, sections);
+    setSaving(false);
+    if (result?.error) { setMessage({ type: 'error', text: result.error }); return; }
+    setMessage({ type: 'success', text: 'Checklist saved — it applies to tasks created from now on.' });
+    router.refresh();
+  };
+
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>{template.name}</h2>
+      {children}
+      <Message message={message} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {sections.map((s, si) => (
+          <div key={si} style={{ border: '1px solid var(--border)', borderRadius: '0.7rem', padding: '1rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '0.75rem' }}>
+              {(sections.length > 1 || keyName === 'web') && (
+                <div style={{ flex: '1 1 220px' }}>
+                  <label style={labelStyle}>Section</label>
+                  <input value={s.title} onChange={(e) => update(si, { title: e.target.value })} style={inputStyle} />
+                </div>
+              )}
+              <div style={{ width: '150px' }}>
+                <label style={labelStyle}>Due (working days)</label>
+                <input type="number" min={1} max={60} value={s.due_days}
+                  onChange={(e) => update(si, { due_days: Math.min(60, Math.max(1, parseInt(e.target.value, 10) || 1)) })} style={inputStyle} />
+              </div>
+              {sections.length > 1 && (
+                <button type="button" onClick={() => { if (confirm(`Remove the "${s.title}" section?`)) removeSection(si); }}
+                  style={{ ...smallButtonStyle, backgroundColor: 'transparent', border: '1px solid var(--danger)', color: 'var(--danger)' }}>
+                  Remove section
+                </button>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '0.75rem' }}>
+              {s.items.map((item, ii) => (
+                <div key={ii} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.875rem', padding: '0.3rem 0.6rem', borderRadius: '0.4rem', backgroundColor: 'var(--background)' }}>
+                  <span style={{ flex: 1 }}>☐ {item}</span>
+                  <button type="button" onClick={() => removeItem(si, ii)} title="Remove item"
+                    style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>×</button>
+                </div>
+              ))}
+              {s.items.length === 0 && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No items yet.</div>}
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input value={drafts[si] || ''} placeholder="Add an item…" style={inputStyle}
+                onChange={(e) => setDrafts((d) => ({ ...d, [si]: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(si); } }} />
+              <button type="button" onClick={() => addItem(si)} style={{ ...ghostButtonStyle, whiteSpace: 'nowrap' }}>＋ Add</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+        <button type="button" onClick={addSection} style={ghostButtonStyle}>＋ Add section</button>
+        <button type="button" onClick={save} disabled={saving} style={{ ...primaryButtonStyle, opacity: saving ? 0.6 : 1 }}>
+          {saving ? 'Saving…' : 'Save checklist'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WebOnboardingAssign({ webManagers }) {
+  const router = useRouter();
+  const [managerId, setManagerId] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [website, setWebsite] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setMessage(null);
+    const formData = new FormData();
+    formData.set('manager_id', managerId);
+    formData.set('client_name', clientName);
+    formData.set('website', website);
+    const result = await assignWebOnboarding(formData);
+    setSubmitting(false);
+    if (result?.error) { setMessage({ type: 'error', text: result.error }); return; }
+    setMessage({ type: 'success', text: `Assigned — ${result.taskCount} checklist task(s) created.` });
+    setClientName(''); setWebsite('');
+    router.refresh();
+  };
+
+  return (
+    <form onSubmit={submit} style={{ border: '1px solid var(--border)', borderRadius: '0.7rem', padding: '1rem', margin: '0.75rem 0 1.25rem' }}>
+      <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.75rem' }}>Assign to a client</div>
+      <Message message={message} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '0.9rem' }}>
+        <div>
+          <label style={labelStyle}>Manager</label>
+          <select value={managerId} onChange={(e) => setManagerId(e.target.value)} style={inputStyle}>
+            <option value="">Select a manager…</option>
+            {webManagers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Client name</label>
+          <input value={clientName} onChange={(e) => setClientName(e.target.value)} style={inputStyle} placeholder="e.g. Acme Roofing" />
+        </div>
+        <div>
+          <label style={labelStyle}>Website</label>
+          <input value={website} onChange={(e) => setWebsite(e.target.value)} style={inputStyle} placeholder="e.g. acmeroofing.com" />
+        </div>
+      </div>
+      <button type="submit" disabled={submitting} style={{ ...primaryButtonStyle, opacity: submitting ? 0.6 : 1 }}>
+        {submitting ? 'Assigning…' : 'Assign web onboarding task'}
+      </button>
+    </form>
+  );
+}
+
+function OnboardingTab({ templates, webManagers }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <ChecklistEditor keyName="gbp" template={templates.gbp}>
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+          Created automatically for every new SEO client (daily check at 4 PM) and assigned to Talha or M Hussain by the client&apos;s Support number.
+        </p>
+      </ChecklistEditor>
+      <ChecklistEditor keyName="web" template={templates.web}>
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+          You assign this one yourself. Each section becomes its own checklist task with its own due date (working days).
+        </p>
+        <WebOnboardingAssign webManagers={webManagers} />
+      </ChecklistEditor>
+    </div>
+  );
+}
+
 /* ---------- page ---------- */
 
 const TABS = [
   { id: 'tasks', label: 'All tasks' },
   { id: 'assign', label: '＋ Assign task' },
   { id: 'default', label: '🔁 Default tasks' },
+  { id: 'onboarding', label: '🧭 Onboarding' },
   { id: 'balance', label: '🔍 Check & balance' },
 ];
 
-export default function ManagerTasksClient({ managers, tasks, roleLabels, templates = [], associateTasks = [] }) {
+export default function ManagerTasksClient({ managers, tasks, roleLabels, templates = [], associateTasks = [], onboardingTemplates, webManagers = [] }) {
   const [tab, setTab] = useState('tasks');
   const now = useMemo(() => new Date(), []);
 
@@ -725,6 +885,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
       {tab === 'tasks' && <TasksTab tasks={tasks} managers={managers} />}
       {tab === 'assign' && <AssignTab managers={managers} roleLabels={roleLabels} />}
       {tab === 'default' && <DefaultTab managers={managers} roleLabels={roleLabels} templates={templates} />}
+      {tab === 'onboarding' && <OnboardingTab templates={onboardingTemplates} webManagers={webManagers} />}
       {tab === 'balance' && <BalanceTab managers={managers} tasks={tasks} associateTasks={associateTasks} />}
     </div>
   );
