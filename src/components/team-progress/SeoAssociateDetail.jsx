@@ -2,6 +2,7 @@
 import { getActiveCampaign, LINK_TYPE_LABELS } from '@/lib/services';
 import { getAccurateSeoDailyStats } from '@/lib/dailyStats';
 import { expectedLinksFor, liveCompletedLinks } from '@/lib/seoAssociateStats';
+import { attachSyncedLinks } from '@/lib/syncedClientLinks';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
 import TasksClient from '@/app/associate/tasks/TasksClient';
@@ -183,6 +184,11 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
         AND c.tunnel_status = 'active' AND c.funnel_month = 1
       ORDER BY st.task_date DESC, c.sort_order, st.link_type
     `).all(associateId, campaign.id, today);
+
+    // Links the sheet sync attached to each done task (shown under its card).
+    await attachSyncedLinks(db, dateTasks);
+    await attachSyncedLinks(db, pendingTasks);
+    await attachSyncedLinks(db, month1PendingTasks);
 
     // Week boundaries: weeks 1-3 split the days before the campaign's last day as
     // evenly as possible (front-loaded remainder), week 4 is always the single

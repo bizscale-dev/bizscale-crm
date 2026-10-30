@@ -45,7 +45,7 @@ export async function loadStoredLinks(db) {
  * Builds the write statements for one client. `credited` is this sync's
  * [{ task_date, link_type, applied }] for the client, in the order credited.
  */
-export function buildLinkWrites({ stored, clientId, linkType, urls, credited }) {
+export function buildLinkWrites({ stored, clientId, linkType, urls, credited, fallback = null }) {
   const writes = [];
   const known = stored.known.get(clientId) || new Set();
   const fresh = urls.filter((u) => !known.has(u));
@@ -63,15 +63,18 @@ export function buildLinkWrites({ stored, clientId, linkType, urls, credited }) 
   // New links plus any earlier ones still waiting for a task to be credited.
   const waiting = (stored.unattached.get(`${clientId}|${linkType || ''}`) || []).filter((u) => urls.includes(u));
   const queue = [...waiting, ...fresh];
+  // Nothing credited this sync (the links showed up in the sheet after their count was
+  // already credited): attach to the client's most recent done task of this type.
+  const slots = credited.length > 0 ? credited : (fallback ? [{ ...fallback, applied: queue.length }] : []);
   let cursor = 0;
-  for (const slot of credited) {
+  for (const slot of slots) {
     for (let n = 0; n < slot.applied && cursor < queue.length; n++, cursor++) {
       writes.push(attach(clientId, queue[cursor], slot, known));
     }
   }
   // More links than credited units: the rest ride along with the last credited task.
-  if (credited.length > 0) {
-    const last = credited[credited.length - 1];
+  if (slots.length > 0) {
+    const last = slots[slots.length - 1];
     for (; cursor < queue.length; cursor++) writes.push(attach(clientId, queue[cursor], last, known));
   } else {
     for (const url of fresh) {

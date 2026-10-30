@@ -29,6 +29,16 @@ export const maxDuration = 60;
  * - Column M: Last Update
  */
 
+// Most recent due task of this client + type that has work done (before or during this
+// sync) — where links that arrive after their count was credited get attached.
+function latestDoneTask(dueTasks, credited, linkType) {
+  const creditedDates = new Set(credited.filter((c) => c.link_type === linkType).map((c) => c.task_date));
+  const done = dueTasks.filter((t) => t.completed_count > 0 || creditedDates.has(t.task_date));
+  if (done.length === 0) return null;
+  const latest = done.reduce((a, b) => (b.task_date > a.task_date ? b : a));
+  return { task_date: latest.task_date, link_type: linkType };
+}
+
 export async function POST(request) {
   // Logs the failure to sync_logs (visible on /admin/link-sync) before returning it —
   // early-exit failures like "no sheet URL configured" are exactly what that page needs
@@ -304,6 +314,7 @@ export async function POST(request) {
               linkType,
               urls: parseSheetLinks(row[idx]),
               credited: credited.filter((c) => c.link_type === linkType),
+              fallback: latestDoneTask(dueTasksByKey.get(`${client.id}|${linkType}`) || [], credited, linkType),
             }));
           } catch (e) {
             console.error(`[SYNC] ${linkType} links for ${client.name} failed:`, e);
