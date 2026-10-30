@@ -376,20 +376,25 @@ function TaskCard({ task, now, compact, kind = 'manager' }) {
 
 /* ---------- Tab: all assigned tasks ---------- */
 
-function TasksTab({ tasks, managers }) {
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('all');
-  const [urgency, setUrgency] = useState('all');
-  const [managerId, setManagerId] = useState('all');
+const DEFAULT_FILTERS = { search: '', status: 'all', urgency: 'all', managerId: 'all' };
+
+// Search / urgency / manager filters, shared by the task list and the stat tiles above it.
+function matchesBase(t, { search, urgency, managerId }) {
+  const q = search.trim().toLowerCase();
+  if (q && !t.task_text.toLowerCase().includes(q) && !t.assignees.some((a) => a.name.toLowerCase().includes(q))) return false;
+  if (urgency !== 'all' && (t.urgency || 'moderate') !== urgency) return false;
+  if (managerId !== 'all' && !t.assignees.some((a) => a.user_id === parseInt(managerId, 10))) return false;
+  return true;
+}
+
+function TasksTab({ tasks, managers, filters, setFilters }) {
+  const { search, status, urgency, managerId } = filters;
   const [limit, setLimit] = useState(PAGE_SIZE);
   const now = useMemo(() => new Date(), []);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return tasks.filter((t) => {
-      if (q && !t.task_text.toLowerCase().includes(q) && !t.assignees.some((a) => a.name.toLowerCase().includes(q))) return false;
-      if (urgency !== 'all' && (t.urgency || 'moderate') !== urgency) return false;
-      if (managerId !== 'all' && !t.assignees.some((a) => a.user_id === parseInt(managerId, 10))) return false;
+      if (!matchesBase(t, filters)) return false;
       const st = taskStatus(t, now);
       if (status === 'late') return st.late;
       if (status === 'review') return st.needsReview;
@@ -398,15 +403,15 @@ function TasksTab({ tasks, managers }) {
       if (status === 'done') return st.done;
       return true;
     });
-  }, [tasks, search, status, urgency, managerId, now]);
+  }, [tasks, filters, status, now]);
 
-  const reset = (setter) => (e) => { setter(e.target.value); setLimit(PAGE_SIZE); };
+  const reset = (key) => (e) => { setFilters((f) => ({ ...f, [key]: e.target.value })); setLimit(PAGE_SIZE); };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={{ ...cardStyle, padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem' }}>
-        <input value={search} onChange={reset(setSearch)} placeholder="🔍 Search task or manager…" style={{ ...inputStyle, gridColumn: 'span 2' }} />
-        <select value={status} onChange={reset(setStatus)} style={inputStyle}>
+        <input value={search} onChange={reset('search')} placeholder="🔍 Search task or manager…" style={{ ...inputStyle, gridColumn: 'span 2' }} />
+        <select value={status} onChange={reset('status')} style={inputStyle}>
           <option value="all">All statuses</option>
           <option value="late">Late submissions</option>
           <option value="review">Needs review</option>
@@ -414,11 +419,11 @@ function TasksTab({ tasks, managers }) {
           <option value="pending">Not completed</option>
           <option value="done">Completed</option>
         </select>
-        <select value={urgency} onChange={reset(setUrgency)} style={inputStyle}>
+        <select value={urgency} onChange={reset('urgency')} style={inputStyle}>
           <option value="all">Any urgency</option>
           {TASK_URGENCIES.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
         </select>
-        <select value={managerId} onChange={reset(setManagerId)} style={inputStyle}>
+        <select value={managerId} onChange={reset('managerId')} style={inputStyle}>
           <option value="all">All managers</option>
           {managers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
@@ -842,11 +847,18 @@ const TABS = [
 
 export default function ManagerTasksClient({ managers, tasks, roleLabels, templates = [], associateTasks = [], onboardingTemplates, webManagers = [] }) {
   const [tab, setTab] = useState('tasks');
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const now = useMemo(() => new Date(), []);
 
+  // The tiles follow the search / urgency / manager filters (not the status filter, so
+  // they keep showing the breakdown). With a manager selected they count only that
+  // manager's own assignment of each task.
   const stats = useMemo(() => {
     let open = 0, overdue = 0, review = 0, late = 0, done = 0;
-    for (const t of tasks) {
+    const managerFilter = filters.managerId !== 'all' ? parseInt(filters.managerId, 10) : null;
+    for (const task of tasks) {
+      if (!matchesBase(task, filters)) continue;
+      const t = managerFilter ? { ...task, assignees: task.assignees.filter((a) => a.user_id === managerFilter) } : task;
       const st = taskStatus(t, now);
       if (st.done) done++; else open++;
       if (st.overdue) overdue++;
@@ -854,7 +866,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
       if (st.late) late++;
     }
     return { open, overdue, review, late, done };
-  }, [tasks, now]);
+  }, [tasks, filters, now]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -887,7 +899,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
         })}
       </div>
 
-      {tab === 'tasks' && <TasksTab tasks={tasks} managers={managers} />}
+      {tab === 'tasks' && <TasksTab tasks={tasks} managers={managers} filters={filters} setFilters={setFilters} />}
       {tab === 'assign' && <AssignTab managers={managers} roleLabels={roleLabels} />}
       {tab === 'default' && <DefaultTab managers={managers} roleLabels={roleLabels} templates={templates} />}
       {tab === 'onboarding' && <OnboardingTab templates={onboardingTemplates} webManagers={webManagers} />}
