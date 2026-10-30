@@ -380,33 +380,30 @@ const DEFAULT_FILTERS = { search: '', status: 'all', urgency: 'all', managerId: 
 
 const PERIODS = [
   { value: 'all', label: 'All time' },
-  { value: 'today', label: 'Due today' },
+  { value: 'today', label: 'Today' },
   { value: 'week', label: 'This week' },
-  { value: 'last7', label: 'Last 7 days' },
-  { value: 'month', label: 'This month' },
-  { value: 'lastMonth', label: 'Last month' },
-  { value: 'custom', label: 'Custom range…' },
+  { value: 'lastWeek', label: 'Last week' },
 ];
 
-// [from, to] due-date bounds (YYYY-MM-DD, inclusive, Pakistan time) for a period filter.
+// "2026-10" -> "October 2026"
+function monthLabel(ym) {
+  return new Date(`${ym}-01T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
+// [from, to] due-date bounds (YYYY-MM-DD, inclusive, Pakistan time) for a period filter:
+// 'today', 'week' / 'lastWeek' (Monday to Sunday), a month ('m:2026-10') or a custom range.
 function periodRange({ period, from, to }) {
   const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
   const iso = (d) => d.toISOString().split('T')[0];
   const shift = (d, days) => { const c = new Date(d); c.setUTCDate(c.getUTCDate() + days); return c; };
-  const today = iso(pkt);
-  if (period === 'today') return [today, today];
-  if (period === 'week') {
-    const monday = shift(pkt, -((pkt.getUTCDay() + 6) % 7));
+  if (period === 'today') return [iso(pkt), iso(pkt)];
+  if (period === 'week' || period === 'lastWeek') {
+    const monday = shift(pkt, -((pkt.getUTCDay() + 6) % 7) - (period === 'lastWeek' ? 7 : 0));
     return [iso(monday), iso(shift(monday, 6))];
   }
-  if (period === 'last7') return [iso(shift(pkt, -6)), today];
-  if (period === 'month') {
-    const first = new Date(Date.UTC(pkt.getUTCFullYear(), pkt.getUTCMonth(), 1));
-    return [iso(first), iso(new Date(Date.UTC(pkt.getUTCFullYear(), pkt.getUTCMonth() + 1, 0)))];
-  }
-  if (period === 'lastMonth') {
-    const first = new Date(Date.UTC(pkt.getUTCFullYear(), pkt.getUTCMonth() - 1, 1));
-    return [iso(first), iso(new Date(Date.UTC(pkt.getUTCFullYear(), pkt.getUTCMonth(), 0)))];
+  if (period.startsWith('m:')) {
+    const [y, m] = period.slice(2).split('-').map(Number);
+    return [iso(new Date(Date.UTC(y, m - 1, 1))), iso(new Date(Date.UTC(y, m, 0)))];
   }
   if (period === 'custom') return [from || '', to || ''];
   return ['', ''];
@@ -428,6 +425,8 @@ function matchesBase(t, filters) {
 function TasksTab({ tasks, managers, filters, setFilters }) {
   const { search, status, urgency, managerId } = filters;
   const [limit, setLimit] = useState(PAGE_SIZE);
+  // Every month that has a task due in it, newest first.
+  const months = useMemo(() => [...new Set(tasks.map((t) => t.due_date.slice(0, 7)))].sort().reverse(), [tasks]);
   const now = useMemo(() => new Date(), []);
 
   const filtered = useMemo(() => {
@@ -467,6 +466,8 @@ function TasksTab({ tasks, managers, filters, setFilters }) {
         </select>
         <select value={filters.period} onChange={reset('period')} style={inputStyle}>
           {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+          {months.map((ym) => <option key={ym} value={`m:${ym}`}>{monthLabel(ym)}</option>)}
+          <option value="custom">Custom range…</option>
         </select>
         {filters.period === 'custom' && (
           <>
