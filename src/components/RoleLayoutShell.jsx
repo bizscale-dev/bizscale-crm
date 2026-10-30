@@ -116,7 +116,7 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
           </span>
         )}
 
-        <nav style={{ flex: 1, padding: '1rem 0', position: 'relative' }}>
+        <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '1rem 0', position: 'relative' }}>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {navItems.map((item) => {
               const active = isActive(item.href);
