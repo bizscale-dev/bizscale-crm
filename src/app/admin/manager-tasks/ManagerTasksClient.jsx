@@ -376,14 +376,52 @@ function TaskCard({ task, now, compact, kind = 'manager' }) {
 
 /* ---------- Tab: all assigned tasks ---------- */
 
-const DEFAULT_FILTERS = { search: '', status: 'all', urgency: 'all', managerId: 'all' };
+const DEFAULT_FILTERS = { search: '', status: 'all', urgency: 'all', managerId: 'all', period: 'all', from: '', to: '' };
+
+const PERIODS = [
+  { value: 'all', label: 'All time' },
+  { value: 'today', label: 'Due today' },
+  { value: 'week', label: 'This week' },
+  { value: 'last7', label: 'Last 7 days' },
+  { value: 'month', label: 'This month' },
+  { value: 'lastMonth', label: 'Last month' },
+  { value: 'custom', label: 'Custom range…' },
+];
+
+// [from, to] due-date bounds (YYYY-MM-DD, inclusive, Pakistan time) for a period filter.
+function periodRange({ period, from, to }) {
+  const pkt = new Date(Date.now() + 5 * 60 * 60 * 1000);
+  const iso = (d) => d.toISOString().split('T')[0];
+  const shift = (d, days) => { const c = new Date(d); c.setUTCDate(c.getUTCDate() + days); return c; };
+  const today = iso(pkt);
+  if (period === 'today') return [today, today];
+  if (period === 'week') {
+    const monday = shift(pkt, -((pkt.getUTCDay() + 6) % 7));
+    return [iso(monday), iso(shift(monday, 6))];
+  }
+  if (period === 'last7') return [iso(shift(pkt, -6)), today];
+  if (period === 'month') {
+    const first = new Date(Date.UTC(pkt.getUTCFullYear(), pkt.getUTCMonth(), 1));
+    return [iso(first), iso(new Date(Date.UTC(pkt.getUTCFullYear(), pkt.getUTCMonth() + 1, 0)))];
+  }
+  if (period === 'lastMonth') {
+    const first = new Date(Date.UTC(pkt.getUTCFullYear(), pkt.getUTCMonth() - 1, 1));
+    return [iso(first), iso(new Date(Date.UTC(pkt.getUTCFullYear(), pkt.getUTCMonth(), 0)))];
+  }
+  if (period === 'custom') return [from || '', to || ''];
+  return ['', ''];
+}
 
 // Search / urgency / manager filters, shared by the task list and the stat tiles above it.
-function matchesBase(t, { search, urgency, managerId }) {
+function matchesBase(t, filters) {
+  const { search, urgency, managerId } = filters;
   const q = search.trim().toLowerCase();
   if (q && !t.task_text.toLowerCase().includes(q) && !t.assignees.some((a) => a.name.toLowerCase().includes(q))) return false;
   if (urgency !== 'all' && (t.urgency || 'moderate') !== urgency) return false;
   if (managerId !== 'all' && !t.assignees.some((a) => a.user_id === parseInt(managerId, 10))) return false;
+  const [from, to] = periodRange(filters);
+  if (from && t.due_date < from) return false;
+  if (to && t.due_date > to) return false;
   return true;
 }
 
@@ -427,6 +465,21 @@ function TasksTab({ tasks, managers, filters, setFilters }) {
           <option value="all">All managers</option>
           {managers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
+        <select value={filters.period} onChange={reset('period')} style={inputStyle}>
+          {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+        </select>
+        {filters.period === 'custom' && (
+          <>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Due from
+              <input type="date" value={filters.from} onChange={reset('from')} style={{ ...inputStyle, marginTop: '0.2rem' }} />
+            </label>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Due to
+              <input type="date" value={filters.to} onChange={reset('to')} style={{ ...inputStyle, marginTop: '0.2rem' }} />
+            </label>
+          </>
+        )}
       </div>
 
       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
@@ -850,22 +903,23 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const now = useMemo(() => new Date(), []);
 
-  // The tiles follow the search / urgency / manager filters (not the status filter, so
+  // The tiles follow the search / urgency / manager / due-date filters (not the status filter, so
   // they keep showing the breakdown). With a manager selected they count only that
   // manager's own assignment of each task.
   const stats = useMemo(() => {
-    let open = 0, overdue = 0, review = 0, late = 0, done = 0;
+    let total = 0, open = 0, overdue = 0, review = 0, late = 0, done = 0;
     const managerFilter = filters.managerId !== 'all' ? parseInt(filters.managerId, 10) : null;
     for (const task of tasks) {
       if (!matchesBase(task, filters)) continue;
       const t = managerFilter ? { ...task, assignees: task.assignees.filter((a) => a.user_id === managerFilter) } : task;
       const st = taskStatus(t, now);
+      total++;
       if (st.done) done++; else open++;
       if (st.overdue) overdue++;
       if (st.needsReview) review++;
       if (st.late) late++;
     }
-    return { open, overdue, review, late, done };
+    return { total, open, overdue, review, late, done };
   }, [tasks, filters, now]);
 
   return (
@@ -876,6 +930,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.9rem' }}>
+        <StatTile label="Total assigned" value={stats.total} color="#3b82f6" hint="tasks in this view" />
         <StatTile label="Open" value={stats.open} color="var(--primary)" hint="not fully submitted" />
         <StatTile label="Overdue" value={stats.overdue} color="var(--danger)" hint="past their deadline" />
         <StatTile label="Late submissions" value={stats.late} color="#f97316" hint="submitted after the deadline" />
