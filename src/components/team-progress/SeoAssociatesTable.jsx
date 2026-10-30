@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
 import Link from 'next/link';
+import { expectedLinksFor } from '@/lib/seoAssociateStats';
 import { getActiveCampaign, getTotalLinksPerClient } from '@/lib/services';
 import { LINK_TYPES } from '@/lib/linkTargetConstants';
 import { FUNNEL_BONUS_FIELDS, FUNNEL_MONTH1_WEEK_TARGETS } from '@/lib/funnelConstants';
@@ -133,7 +134,7 @@ export default async function SeoAssociatesTable({ basePath, campaign: campaignP
                   const funnelM1Expected = associate.funnel_m1 * funnelMonth1TargetPerClient;
                   const funnelM2Expected = associate.funnel_m2 * funnelBonusTargetPerClient;
                   const funnelM3Expected = associate.funnel_m3 * funnelBonusTargetPerClient;
-                  const expectedTotalLinks = (associate.total_clients * monthlyTargetPerClient) + funnelM2Expected + funnelM3Expected;
+                  const expectedTotalLinks = expectedLinksFor(campaign, { regularClients: associate.total_clients, funnelM2: associate.funnel_m2, funnelM3: associate.funnel_m3 });
                   const totalClientsDisplay = associate.total_clients + associate.funnel_m1 + associate.funnel_m2 + associate.funnel_m3;
                   // Capped at 100% for display only — the Completed column right next
                   // to this still shows the real, uncapped count. completed_tasks is a

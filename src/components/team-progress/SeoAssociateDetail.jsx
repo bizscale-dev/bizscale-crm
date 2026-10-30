@@ -1,6 +1,7 @@
 ﻿import { getDb } from '@/lib/db';
 import { getActiveCampaign, LINK_TYPE_LABELS } from '@/lib/services';
 import { getAccurateSeoDailyStats } from '@/lib/dailyStats';
+import { expectedLinksFor, liveCompletedLinks } from '@/lib/seoAssociateStats';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
 import TasksClient from '@/app/associate/tasks/TasksClient';
@@ -51,6 +52,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   }
 
   let todayTasks = [], recentLogs = [], upcomingDays = [], dailySummary = [], pendingTasks = [], month1PendingTasks = [], weeklySummary = [], funnelClients = [];
+  let liveCompleted = 0;
   let dateTasks = [], availableDates = [];
   let totalExpectedLinks = 0;
   let cumulativeByClientType = {};
@@ -79,29 +81,14 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
       ORDER BY c.tunnel_start_date DESC
     `).all(associateId, campaign.id);
 
-    // Get campaign link targets
-    const monthlyLinkTargets = {
-      web2: campaign.web2_target || 7,
-      guestpost: campaign.guestpost_target || 7,
-      pdf: campaign.pdf_target || 7,
-      profile: campaign.profile_target || 10,
-      citation: campaign.citation_target || 10,
-      image: campaign.image_target || 9,
-    };
-    const totalMonthlyTarget = Object.values(monthlyLinkTargets).reduce((a, b) => a + b, 0);
-
-    // Funnel Month 1 clients are tracked entirely separately from here on — their
-    // own Funnel Clients card above has their real progress, so none of the
-    // "regular" queries below (today/date/cumulative/overall/pending/logs) should
-    // include their seo_tasks rows. Month 2/3 funnel clients still count as
-    // regular here (same as before), via their own real seo_tasks total —
-    // overallCompleted below (see near onTimeCompletion) counts every non-Month-1
-    // day for this associate including Month 2/3, so their targets need to be
-    // included here too or Overall Target's percentage can run past 100%.
-    const funnelM2M3ExpectedLinks = funnelClients
-      .filter(fc => fc.funnel_month !== 1)
-      .reduce((s, fc) => s + (fc.total_tasks || 0), 0);
-    totalExpectedLinks = (assignedClients?.count || 0) * totalMonthlyTarget + funnelM2M3ExpectedLinks;
+    // Overall Target / completed use the exact same formula as the SEO Associates
+    // list (see src/lib/seoAssociateStats.js), so the two pages always agree.
+    totalExpectedLinks = expectedLinksFor(campaign, {
+      regularClients: assignedClients?.count || 0,
+      funnelM2: funnelClients.filter(fc => fc.funnel_month === 2).length,
+      funnelM3: funnelClients.filter(fc => fc.funnel_month === 3).length,
+    });
+    liveCompleted = await liveCompletedLinks(db, campaign.id, associateId);
 
     todayTasks = await db.prepare(`
       SELECT st.*, c.name as client_name, c.website
@@ -296,7 +283,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   // or lower that old day's own frozen number, so a live-only sum could drift
   // out of sync with the frozen totals used by On Time Completion above — even
   // showing LESS than onTimeCompletion, which should always be a subset of it.
-  const overallCompleted = dailySummary.reduce((s, d) => s + d.completed, 0);
+  const overallCompleted = liveCompleted;
   // Capped at 100% for display only — overallCompleted itself stays real and
   // uncapped (shown uncapped in the card's sub-label right next to this).
   // completed includes resolved backlog credit on top of each day's own work,
