@@ -815,6 +815,22 @@ async function runMigrations(raw) {
       baseline INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (client_id, link_type)
     )`,
+    // Every URL from the Completed Links sheet's "Links" column, per client (see
+    // src/lib/syncedClientLinks.js). The first sync stores them all as seeded = 1
+    // (no task); links that show up on later syncs are attached to the task day
+    // that sync marked as done (task_date + link_type, not a task id, so they
+    // survive task regeneration).
+    `CREATE TABLE IF NOT EXISTS synced_client_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER NOT NULL,
+      url TEXT NOT NULL,
+      seeded INTEGER NOT NULL DEFAULT 0,
+      task_date DATE,
+      link_type TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (client_id, url)
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_synced_client_links_task ON synced_client_links (client_id, task_date)",
     // Team members' Google Chat user IDs, keyed by work email, so messages posted to the
     // Google Chat space can @-mention the right person (see src/lib/googleChat.js).
     `CREATE TABLE IF NOT EXISTS chat_members (

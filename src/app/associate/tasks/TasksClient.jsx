@@ -69,6 +69,7 @@ export default function TasksClient({ tasksByClient, pendingByClient = [], avail
                         {task.completed_count} / {task.target_count} ({pct}%)
                       </span>
                     </div>
+                    <TaskLinks links={task.links} />
                   </div>
                 );
               })}
@@ -76,6 +77,21 @@ export default function TasksClient({ tasksByClient, pendingByClient = [], avail
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+// Links the sheet sync attached to this task when it was marked done.
+function TaskLinks({ links }) {
+  if (!links || links.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.4rem' }}>
+      {links.map((url) => (
+        <a key={url} href={url} target="_blank" rel="noopener noreferrer" title={url}
+          style={{ fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '260px' }}>
+          🔗 {url.replace(/^https?:\/\/(www\.)?/, '')}
+        </a>
+      ))}
     </div>
   );
 }

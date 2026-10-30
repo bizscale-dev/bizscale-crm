@@ -2,6 +2,7 @@ import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { parseGoogleSheetUrl, fetchGoogleSheetRows, parseCsv } from '@/lib/googleSheets';
 import { logSyncRun } from '@/lib/syncLog';
+import { parseSheetLinks, loadStoredLinks, buildLinkWrites } from '@/lib/syncedClientLinks';
 import { autoAdvanceMonth1Weeks } from '@/lib/funnel';
 
 // 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
@@ -95,6 +96,8 @@ export async function POST(request) {
     const profileIdx = headers.findIndex(h => h.toLowerCase().includes('profile'));
     const citationIdx = headers.findIndex(h => h.toLowerCase().includes('citation') || h.toLowerCase().includes('directory'));
     const imageIdx = headers.findIndex(h => h.toLowerCase().includes('image'));
+    // Optional: the "Links" column (all created URLs per client) — stored in synced_client_links.
+    const linksIdx = headers.findIndex(h => h.toLowerCase() === 'links');
 
     // Validate we found the essential columns
     if (clientNameIdx === -1) {
@@ -162,6 +165,17 @@ export async function POST(request) {
     }
     const taskUpdates = [];
 
+    // Links column: a failure here must never fail the sync itself.
+    const linkWrites = [];
+    let storedLinks = null;
+    if (linksIdx !== -1) {
+      try {
+        storedLinks = await loadStoredLinks(db);
+      } catch (e) {
+        console.error('[SYNC] Could not load stored links:', e);
+      }
+    }
+
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const clientName = (row[clientNameIdx] || '').trim();
@@ -195,6 +209,9 @@ export async function POST(request) {
         citation: 0,
         image: 0
       };
+
+      // Tasks this sync credited for the client (feeds the Links column below).
+      const credited = [];
 
       // Update completed counts for each link type
       for (const [linkType, colIdx] of Object.entries(linkTypeMap)) {
@@ -240,6 +257,7 @@ export async function POST(request) {
             if (room <= 0) continue;
             const applied = Math.min(room, newProgress);
             updates.push({ id: task.id, newCompleted: task.completed_count + applied });
+            credited.push({ task_date: task.task_date, link_type: linkType, applied });
             if (task.task_date < today) backlogApplied += applied;
             newProgress -= applied;
           }
@@ -262,6 +280,19 @@ export async function POST(request) {
         }
       }
 
+      if (storedLinks && linksIdx < row.length) {
+        try {
+          linkWrites.push(...buildLinkWrites({
+            stored: storedLinks,
+            clientId: client.id,
+            urls: parseSheetLinks(row[linksIdx]),
+            credited,
+          }));
+        } catch (e) {
+          console.error(`[SYNC] Links for ${client.name} failed:`, e);
+        }
+      }
+
       syncedClients.push(clientResult);
 
       if (client.assigned_associate_id) {
@@ -272,7 +303,7 @@ export async function POST(request) {
       }
     }
 
-    const writes = [...taskUpdates];
+    const writes = [...taskUpdates, ...linkWrites];
     for (const [associateId, total] of Object.entries(lifetimeTotalByAssociate)) {
       writes.push({ sql: 'UPDATE users SET lifetime_completed_links = ? WHERE id = ?', args: [total, associateId] });
     }

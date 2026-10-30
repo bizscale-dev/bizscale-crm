@@ -2,6 +2,7 @@ import { getDb } from '@/lib/db';
 import { getActiveCampaign, LINK_TYPE_LABELS } from '@/lib/services';
 import { verifySession } from '@/lib/session';
 import TasksClient from './TasksClient';
+import { attachSyncedLinks } from '@/lib/syncedClientLinks';
 
 export const revalidate = 0; // Disable caching for real-time data
 
@@ -66,6 +67,9 @@ export default async function AssociateTasksPage({ searchParams }) {
         AND st.task_date < ? AND st.completed_count < st.target_count AND c.is_active = 1
       ORDER BY st.task_date DESC, c.sort_order, st.link_type
     `).all(userId, campaign.id, today);
+
+    await attachSyncedLinks(db, tasks);
+    await attachSyncedLinks(db, pendingTasks);
   }
 
   return (
