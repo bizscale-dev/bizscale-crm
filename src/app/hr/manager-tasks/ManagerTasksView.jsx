@@ -40,18 +40,21 @@ export default function ManagerTasksView({ rows }) {
 
   const [personId, setPersonId] = useState('');
   const [month, setMonth] = useState(months[0] || '');
+  const [lateOnly, setLateOnly] = useState(false);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       if (personId && String(r.manager_id) !== personId) return false;
       if (month && r.due_date.slice(0, 7) !== month) return false;
+      if (lateOnly && !(r.submitted_at && r.is_late)) return false;
       return true;
     });
-  }, [rows, personId, month]);
+  }, [rows, personId, month, lateOnly]);
 
   const total = filtered.length;
   const completed = filtered.filter((r) => !!r.submitted_at).length;
   const pending = total - completed;
+  const late = filtered.filter((r) => r.submitted_at && r.is_late).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -71,12 +74,17 @@ export default function ManagerTasksView({ rows }) {
           <option value="">All Months</option>
           {months.map((ym) => <option key={ym} value={ym}>{formatMonth(ym)}</option>)}
         </select>
+        <select value={lateOnly ? 'late' : ''} onChange={(e) => setLateOnly(e.target.value === 'late')} style={selectStyle}>
+          <option value="">All Tasks</option>
+          <option value="late">Late Submissions Only</option>
+        </select>
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <StatPill label="Total Tasks" value={total} color={BRAND_COLOR} />
         <StatPill label="Completed" value={completed} color="var(--success)" />
         <StatPill label="Pending" value={pending} color="#f59e0b" />
+        <StatPill label="Late Submissions" value={late} color="#f97316" />
       </div>
 
       {filtered.length === 0 ? (

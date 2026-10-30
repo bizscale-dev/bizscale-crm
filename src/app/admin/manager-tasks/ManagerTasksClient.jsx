@@ -80,7 +80,8 @@ function taskStatus(task, now) {
   const submitted = task.assignees.filter((a) => a.submitted_at).length;
   const needsReview = task.assignees.some((a) => a.is_late && a.approval_status === 'pending');
   const overdue = submitted < total && dueMoment(task) < now;
-  return { total, submitted, needsReview, overdue, done: submitted === total };
+  const late = task.assignees.some((a) => a.is_late);
+  return { total, submitted, needsReview, late, overdue, done: submitted === total };
 }
 
 /* ---------- small UI pieces ---------- */
@@ -390,6 +391,7 @@ function TasksTab({ tasks, managers }) {
       if (urgency !== 'all' && (t.urgency || 'moderate') !== urgency) return false;
       if (managerId !== 'all' && !t.assignees.some((a) => a.user_id === parseInt(managerId, 10))) return false;
       const st = taskStatus(t, now);
+      if (status === 'late') return st.late;
       if (status === 'review') return st.needsReview;
       if (status === 'overdue') return st.overdue;
       if (status === 'pending') return !st.done;
@@ -406,6 +408,7 @@ function TasksTab({ tasks, managers }) {
         <input value={search} onChange={reset(setSearch)} placeholder="🔍 Search task or manager…" style={{ ...inputStyle, gridColumn: 'span 2' }} />
         <select value={status} onChange={reset(setStatus)} style={inputStyle}>
           <option value="all">All statuses</option>
+          <option value="late">Late submissions</option>
           <option value="review">Needs review</option>
           <option value="overdue">Overdue</option>
           <option value="pending">Not completed</option>
@@ -842,14 +845,15 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
   const now = useMemo(() => new Date(), []);
 
   const stats = useMemo(() => {
-    let open = 0, overdue = 0, review = 0, done = 0;
+    let open = 0, overdue = 0, review = 0, late = 0, done = 0;
     for (const t of tasks) {
       const st = taskStatus(t, now);
       if (st.done) done++; else open++;
       if (st.overdue) overdue++;
       if (st.needsReview) review++;
+      if (st.late) late++;
     }
-    return { open, overdue, review, done };
+    return { open, overdue, review, late, done };
   }, [tasks, now]);
 
   return (
@@ -862,7 +866,8 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.9rem' }}>
         <StatTile label="Open" value={stats.open} color="var(--primary)" hint="not fully submitted" />
         <StatTile label="Overdue" value={stats.overdue} color="var(--danger)" hint="past their deadline" />
-        <StatTile label="Needs review" value={stats.review} color="#f59e0b" hint="late submissions" />
+        <StatTile label="Late submissions" value={stats.late} color="#f97316" hint="submitted after the deadline" />
+        <StatTile label="Needs review" value={stats.review} color="#f59e0b" hint="late ones waiting for you" />
         <StatTile label="Completed" value={stats.done} color="var(--success)" hint="everyone submitted" />
       </div>
 
