@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
 import { getActiveCampaign, LINK_TYPE_LABELS } from '@/lib/services';
+import { expectedLinksFor, liveCompletedLinks } from '@/lib/seoAssociateStats';
 import { verifySession } from '@/lib/session';
 import Logo from '@/components/Logo';
 import StatCard from '@/components/ui/StatCard';
@@ -40,8 +41,9 @@ export default async function AssociateDashboard() {
   const campaign = await getActiveCampaign();
   const today = new Date().toISOString().split('T')[0];
 
-  let todayTasks = [], overallStats = null, recentLogs = [], upcomingDays = [], pendingTasks = [], weeklySummary = [];
+  let todayTasks = [], recentLogs = [], upcomingDays = [], pendingTasks = [], weeklySummary = [];
   let totalExpectedLinks = 0;
+  let liveCompleted = 0;
   let dailyTarget = 0;
 
   if (campaign) {
@@ -61,9 +63,27 @@ export default async function AssociateDashboard() {
     };
     const totalMonthlyTarget = Object.values(monthlyLinkTargets).reduce((a, b) => a + b, 0);
 
-    // Calculate daily target: (total clients × total monthly per client) / 16 working days
-    totalExpectedLinks = (assignedClients?.count || 0) * totalMonthlyTarget;
-    dailyTarget = Math.round(totalExpectedLinks / 16);
+    // Daily target: (total clients × total monthly per client) / 16 working days
+    dailyTarget = Math.round(((assignedClients?.count || 0) * totalMonthlyTarget) / 16);
+
+    // Overall Target / completed use the same formula as the SEO Associates list and
+    // the admin's view of this dashboard (see src/lib/seoAssociateStats.js).
+    const regularClients = await db.prepare(`
+      SELECT COUNT(*) as count FROM clients WHERE assigned_associate_id = ? AND campaign_id = ? AND is_active = 1
+        AND (tunnel_status IS NULL OR tunnel_status NOT IN ('active', 'hold'))
+    `).get(userId, campaign.id);
+    const funnelByMonth = await db.prepare(`
+      SELECT funnel_month, COUNT(*) as count FROM clients
+      WHERE assigned_associate_id = ? AND campaign_id = ? AND is_active = 1 AND tunnel_status = 'active'
+      GROUP BY funnel_month
+    `).all(userId, campaign.id);
+    const funnelCount = (month) => funnelByMonth.find(r => r.funnel_month === month)?.count || 0;
+    totalExpectedLinks = expectedLinksFor(campaign, {
+      regularClients: regularClients?.count || 0,
+      funnelM2: funnelCount(2),
+      funnelM3: funnelCount(3),
+    });
+    liveCompleted = await liveCompletedLinks(db, campaign.id, userId);
 
     todayTasks = await db.prepare(`
       SELECT st.*, c.name as client_name, c.website, c.tunnel_status, c.funnel_month,
@@ -73,13 +93,6 @@ export default async function AssociateDashboard() {
       WHERE st.associate_id = ? AND st.campaign_id = ? AND st.task_date = ? AND c.is_active = 1
       ORDER BY c.sort_order, st.link_type
     `).all(userId, campaign.id, today);
-
-    overallStats = await db.prepare(`
-      SELECT SUM(st.target_count) as target, SUM(st.completed_count) as completed
-      FROM seo_tasks st
-      JOIN clients c ON c.id = st.client_id
-      WHERE st.associate_id = ? AND st.campaign_id = ? AND c.is_active = 1
-    `).get(userId, campaign.id);
 
     recentLogs = await db.prepare(`
       SELECT ll.*, c.name as client_name, st.link_type, st.task_date
@@ -182,9 +195,15 @@ export default async function AssociateDashboard() {
     pendingByClient[t.client_id].tasks.push(t);
   });
 
+  // Missing links across overdue rows, Month 1 funnel excluded — same as the list and
+  // the admin's view of this dashboard.
+  const pendingLinksMissing = pendingTasks
+    .filter(t => !(t.tunnel_status === 'active' && t.funnel_month === 1))
+    .reduce((sum, t) => sum + Math.max(0, t.target_count - t.completed_count), 0);
+
   const todayTarget = dailyTarget; // Use calculated daily target (66 for Mohib)
   const todayCompleted = todayTasks.reduce((s, t) => s + t.completed_count, 0);
-  const overallPercent = totalExpectedLinks > 0 ? Math.round((overallStats?.completed / totalExpectedLinks) * 100) : 0;
+  const overallPercent = totalExpectedLinks > 0 ? Math.min(100, Math.round((liveCompleted / totalExpectedLinks) * 100)) : 0;
   const todayPercent = todayTarget > 0 ? Math.round((todayCompleted / todayTarget) * 100) : 0;
 
   return (
@@ -197,10 +216,10 @@ export default async function AssociateDashboard() {
           {/* Stats Row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
             <StatCard title="Today's Target" value={todayTarget} sub={`${todayCompleted} completed (${todayPercent}%)`} color="var(--primary)" />
-            <StatCard title="Overall Target" value={totalExpectedLinks} sub={`${overallStats?.completed || 0} completed (${overallPercent}%)`} color="var(--success)" />
+            <StatCard title="Overall Target" value={totalExpectedLinks} sub={`${liveCompleted} completed (${overallPercent}%)`} color="var(--success)" />
             <StatCard title="Upcoming Days" value={upcomingDays.length} sub="remaining days with tasks" color="#f59e0b" />
             <StatCard title="Recent Logs" value={recentLogs.length} sub="links logged recently" color="#8b5cf6" />
-            <StatCard title="Pending Tasks" value={pendingTasks.length} sub="overdue, not yet completed" color="#f59e0b" />
+            <StatCard title="Pending Tasks" value={pendingLinksMissing} sub="overdue, not yet completed" color="#f59e0b" />
           </div>
 
           {/* Pending (overdue) tasks */}
