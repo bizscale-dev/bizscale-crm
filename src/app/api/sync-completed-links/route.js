@@ -88,16 +88,30 @@ export async function POST(request) {
 
     console.log('[SYNC] Headers found:', headers);
 
-    // Find columns by name (more flexible matching)
+    // Find columns by name (more flexible matching). The sheet also has a "... Links"
+    // column per link type (e.g. "Web2.0 Links") holding the URLs — those are not counts.
+    const isLinksCol = (h) => h.toLowerCase().endsWith('links');
+    const countCol = (match) => headers.findIndex(h => !isLinksCol(h) && match(h.toLowerCase()));
+    const urlCol = (match) => headers.findIndex(h => isLinksCol(h) && h.toLowerCase() !== 'links' && match(h.toLowerCase()));
+    const matchers = {
+      web2: (h) => h.includes('web') && h.includes('2'),
+      guestpost: (h) => h.includes('guest'),
+      pdf: (h) => h.includes('pdf'),
+      profile: (h) => h.includes('profile'),
+      citation: (h) => h.includes('citation') || h.includes('directory'),
+      image: (h) => h.includes('image'),
+    };
     const clientNameIdx = headers.findIndex(h => h.toLowerCase().includes('client'));
-    const web2Idx = headers.findIndex(h => h.toLowerCase().includes('web') && h.toLowerCase().includes('2'));
-    const guestPostIdx = headers.findIndex(h => h.toLowerCase().includes('guest'));
-    const pdfIdx = headers.findIndex(h => h.toLowerCase().includes('pdf'));
-    const profileIdx = headers.findIndex(h => h.toLowerCase().includes('profile'));
-    const citationIdx = headers.findIndex(h => h.toLowerCase().includes('citation') || h.toLowerCase().includes('directory'));
-    const imageIdx = headers.findIndex(h => h.toLowerCase().includes('image'));
-    // Optional: the "Links" column (all created URLs per client) — stored in synced_client_links.
-    const linksIdx = headers.findIndex(h => h.toLowerCase() === 'links');
+    const web2Idx = countCol(matchers.web2);
+    const guestPostIdx = countCol(matchers.guestpost);
+    const pdfIdx = countCol(matchers.pdf);
+    const profileIdx = countCol(matchers.profile);
+    const citationIdx = countCol(matchers.citation);
+    const imageIdx = countCol(matchers.image);
+    // Optional: one URL column per link type — stored in synced_client_links under that type.
+    const linkUrlCols = Object.fromEntries(
+      Object.entries(matchers).map(([type, match]) => [type, urlCol(match)]).filter(([, idx]) => idx !== -1)
+    );
 
     // Validate we found the essential columns
     if (clientNameIdx === -1) {
@@ -168,7 +182,7 @@ export async function POST(request) {
     // Links column: a failure here must never fail the sync itself.
     const linkWrites = [];
     let storedLinks = null;
-    if (linksIdx !== -1) {
+    if (Object.keys(linkUrlCols).length > 0) {
       try {
         storedLinks = await loadStoredLinks(db);
       } catch (e) {
@@ -280,16 +294,20 @@ export async function POST(request) {
         }
       }
 
-      if (storedLinks && linksIdx < row.length) {
-        try {
-          linkWrites.push(...buildLinkWrites({
-            stored: storedLinks,
-            clientId: client.id,
-            urls: parseSheetLinks(row[linksIdx]),
-            credited,
-          }));
-        } catch (e) {
-          console.error(`[SYNC] Links for ${client.name} failed:`, e);
+      if (storedLinks) {
+        for (const [linkType, idx] of Object.entries(linkUrlCols)) {
+          if (idx >= row.length) continue;
+          try {
+            linkWrites.push(...buildLinkWrites({
+              stored: storedLinks,
+              clientId: client.id,
+              linkType,
+              urls: parseSheetLinks(row[idx]),
+              credited: credited.filter((c) => c.link_type === linkType),
+            }));
+          } catch (e) {
+            console.error(`[SYNC] ${linkType} links for ${client.name} failed:`, e);
+          }
         }
       }
 

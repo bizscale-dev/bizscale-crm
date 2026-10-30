@@ -1,11 +1,12 @@
-// URLs from the Completed Links sheet's "Links" column (one cell per client,
-// many URLs separated by commas/spaces/newlines), stored in synced_client_links.
+// URLs from the Completed Links sheet's per-type link columns ("Web2.0 Links",
+// "Guest Post Links", ...: one cell per client, many URLs separated by
+// commas/spaces/newlines), stored in synced_client_links with their link_type.
 //
 //  - First sync ever (table empty): every URL is stored as seeded = 1 — it is
 //    history, not tied to any task.
 //  - Later syncs: a URL not stored yet for that client is new. It is attached
 //    (task_date + link_type) to the task row(s) that same sync marked as done,
-//    one link per credited unit, in order. When nothing was credited the link is
+//    one link per credited unit of the SAME link type, in order. When nothing was credited the link is
 //    stored unattached and picked up by the next sync that credits that client.
 
 export function parseSheetLinks(cell) {
@@ -25,15 +26,16 @@ export function parseSheetLinks(cell) {
 // Loads what is already stored: { isFirstRun, known: Map<clientId, Set<url>>,
 // unattached: Map<clientId, url[]> }.
 export async function loadStoredLinks(db) {
-  const rows = await db.prepare('SELECT client_id, url, seeded, task_date FROM synced_client_links').all();
+  const rows = await db.prepare('SELECT client_id, url, seeded, task_date, link_type FROM synced_client_links').all();
   const known = new Map();
   const unattached = new Map();
   for (const r of rows) {
     if (!known.has(r.client_id)) known.set(r.client_id, new Set());
     known.get(r.client_id).add(r.url);
     if (!r.seeded && !r.task_date) {
-      if (!unattached.has(r.client_id)) unattached.set(r.client_id, []);
-      unattached.get(r.client_id).push(r.url);
+      const key = `${r.client_id}|${r.link_type || ''}`;
+      if (!unattached.has(key)) unattached.set(key, []);
+      unattached.get(key).push(r.url);
     }
   }
   return { isFirstRun: rows.length === 0, known, unattached };
@@ -43,7 +45,7 @@ export async function loadStoredLinks(db) {
  * Builds the write statements for one client. `credited` is this sync's
  * [{ task_date, link_type, applied }] for the client, in the order credited.
  */
-export function buildLinkWrites({ stored, clientId, urls, credited }) {
+export function buildLinkWrites({ stored, clientId, linkType, urls, credited }) {
   const writes = [];
   const known = stored.known.get(clientId) || new Set();
   const fresh = urls.filter((u) => !known.has(u));
@@ -51,15 +53,15 @@ export function buildLinkWrites({ stored, clientId, urls, credited }) {
   if (stored.isFirstRun) {
     for (const url of fresh) {
       writes.push({
-        sql: 'INSERT OR IGNORE INTO synced_client_links (client_id, url, seeded) VALUES (?, ?, 1)',
-        args: [clientId, url],
+        sql: 'INSERT OR IGNORE INTO synced_client_links (client_id, url, seeded, link_type) VALUES (?, ?, 1, ?)',
+        args: [clientId, url, linkType || null],
       });
     }
     return writes;
   }
 
   // New links plus any earlier ones still waiting for a task to be credited.
-  const waiting = (stored.unattached.get(clientId) || []).filter((u) => urls.includes(u));
+  const waiting = (stored.unattached.get(`${clientId}|${linkType || ''}`) || []).filter((u) => urls.includes(u));
   const queue = [...waiting, ...fresh];
   let cursor = 0;
   for (const slot of credited) {
@@ -74,8 +76,8 @@ export function buildLinkWrites({ stored, clientId, urls, credited }) {
   } else {
     for (const url of fresh) {
       writes.push({
-        sql: 'INSERT OR IGNORE INTO synced_client_links (client_id, url, seeded) VALUES (?, ?, 0)',
-        args: [clientId, url],
+        sql: 'INSERT OR IGNORE INTO synced_client_links (client_id, url, seeded, link_type) VALUES (?, ?, 0, ?)',
+        args: [clientId, url, linkType || null],
       });
     }
   }
