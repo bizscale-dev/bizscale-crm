@@ -61,7 +61,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
     // yet), neither of which should count toward this associate's regular quota.
     const assignedClients = await db.prepare(`
       SELECT COUNT(*) as count FROM clients
-      WHERE assigned_associate_id = ? AND campaign_id = ?
+      WHERE assigned_associate_id = ? AND campaign_id = ? AND is_active = 1
         AND (tunnel_status IS NULL OR tunnel_status NOT IN ('active', 'hold'))
     `).get(associateId, campaign.id);
 
