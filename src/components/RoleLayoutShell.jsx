@@ -116,7 +116,7 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
           </span>
         )}
 
-        <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '1rem 0', position: 'relative' }}>
+        <nav className="sidebar-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '1rem 0', position: 'relative' }}>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {navItems.map((item) => {
               const active = isActive(item.href);
@@ -205,6 +205,21 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
           </ul>
 
           <style>{`
+            .sidebar-scroll {
+              scrollbar-width: thin;
+              scrollbar-color: var(--primary) transparent;
+            }
+            .sidebar-scroll::-webkit-scrollbar {
+              width: 4px;
+            }
+            .sidebar-scroll::-webkit-scrollbar-track {
+              background: transparent;
+            }
+            .sidebar-scroll::-webkit-scrollbar-thumb {
+              background-color: var(--primary);
+              border-radius: 4px;
+            }
+
             @keyframes slideIn {
               from {
                 opacity: 0;
