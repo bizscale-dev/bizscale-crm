@@ -8,12 +8,13 @@ const ROLE_LABELS = {
   web_seo_manager: 'Web SEO Manager',
   seo_manager: 'SEO Manager',
   writers_manager: 'Writers Manager',
+  web_developer_seo: 'Web Developer - SEO',
 };
 
 export default async function AdminEodsPage() {
   const db = await getDb();
 
-  // Every manager role that files EOD reports — Web SEO, SEO, and Writers Managers
+  // Every role that files EOD reports (the Web Developer - SEO files the same EOD as the managers) — Web SEO, SEO, and Writers Managers
   // all share the same eod_reports/eod_report_entries tables (see
   // src/app/web-seo-manager/eod/, src/app/seo-manager/eod/,
   // src/app/writers-manager/eod/), so they're all listed here together.
@@ -24,7 +25,7 @@ export default async function AdminEodsPage() {
         JOIN eod_reports r ON r.id = e.report_id WHERE r.user_id = u.id) as entry_count,
       (SELECT MAX(r.report_date) FROM eod_reports r WHERE r.user_id = u.id) as last_report_date
     FROM users u
-    WHERE u.role IN ('web_seo_manager', 'seo_manager', 'writers_manager')
+    WHERE u.role IN ('web_seo_manager', 'seo_manager', 'writers_manager', 'web_developer_seo')
     ORDER BY u.role, u.name
   `).all();
 
@@ -33,7 +34,7 @@ export default async function AdminEodsPage() {
       <div>
         <h1 style={{ fontSize: '1.75rem', margin: 0, marginBottom: '0.5rem' }}>EOD Reports</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-          End-of-day reports filed by Web SEO, SEO, and Writers Managers. Pick a manager to see
+          End-of-day reports filed by Web SEO, SEO and Writers Managers and the Web Developer - SEO. Pick a person to see
           everything they&apos;ve submitted, filterable by client and date.
         </p>
       </div>

@@ -10,9 +10,13 @@ import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
 // client-side validation alone isn't trustworthy.
 const MAX_BASE64_LENGTH = 2 * 1024 * 1024 * 1.37;
 
+// A Web Developer - SEO receives tasks from the Web SEO managers exactly like a Web SEO
+// associate does, so both roles share these actions.
+const ALLOWED_ROLES = ['web_seo_associate', 'web_developer_seo'];
+
 async function requireWebSeoAssociate() {
   const session = await verifySession();
-  if (!session || session.role !== 'web_seo_associate') {
+  if (!session || !ALLOWED_ROLES.includes(session.role)) {
     return { error: 'Not authorized' };
   }
   return { session };
@@ -101,6 +105,7 @@ export async function submitAssociateTaskProof(taskId, description, proofImageBa
     );
 
     revalidatePath('/web-associate/manager-tasks');
+    revalidatePath('/web-developer/tasks');
 
     return { success: true, isLate };
   } catch (err) {

@@ -1167,7 +1167,7 @@ async function runMigrations(raw) {
   // for SQLite to rewrite, and every other table's existing "REFERENCES users(id)"
   // text (never touched) resolves correctly once `users` exists again.
   try {
-    const REQUIRED_ROLES = ['admin', 'seo_associate', 'writer', 'manager', 'web_seo_associate', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa'];
+    const REQUIRED_ROLES = ['admin', 'seo_associate', 'writer', 'manager', 'web_seo_associate', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa', 'web_developer_seo'];
     const currentSchema = await raw.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'");
     const currentSql = currentSchema.rows[0]?.sql || '';
     const missingRole = REQUIRED_ROLES.some(role => !currentSql.includes(`'${role}'`));
@@ -1237,7 +1237,7 @@ export async function initDb() {
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('admin','seo_associate','writer','manager','web_seo_associate','writers_manager','seo_manager','web_seo_manager')),
+      role TEXT NOT NULL CHECK(role IN ('admin','seo_associate','writer','manager','web_seo_associate','writers_manager','seo_manager','web_seo_manager','hr','qa','web_developer_seo')),
       is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       lifetime_completed_links INTEGER DEFAULT 0

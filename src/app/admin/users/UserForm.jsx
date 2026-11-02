@@ -46,6 +46,7 @@ export default function UserForm({ mode = 'create', initialData = null, onSucces
             <option value="web_seo_manager">Web SEO Associate Manager</option>
             <option value="seo_associate">SEO Associate</option>
             <option value="web_seo_associate">Web SEO Associate</option>
+            <option value="web_developer_seo">Web Developer - SEO</option>
             <option value="writer">Writer</option>
             <option value="hr">HR</option>
             <option value="qa">QA</option>

@@ -7,7 +7,9 @@ import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
 import { createNotificationsForUsers, getTasksLinkForRole } from '@/lib/notifications';
 import { parseUrgency } from '@/lib/taskUrgency';
 
-const ASSOCIATE_ROLE = 'web_seo_associate';
+// Web SEO associates and the Web Developer - SEO both receive tasks from the Web SEO managers.
+const ASSOCIATE_ROLES = ['web_seo_associate', 'web_developer_seo'];
+const ROLE_PLACEHOLDERS = ASSOCIATE_ROLES.map(() => '?').join(',');
 const BASE_PATH = '/web-seo-manager/associate-tasks';
 
 async function requireWebSeoManager() {
@@ -46,8 +48,8 @@ export async function createAssociateTask(formData) {
     const db = await getDb();
     const placeholders = assigneeIds.map(() => '?').join(',');
     const valid = await db.prepare(`
-      SELECT id FROM users WHERE id IN (${placeholders}) AND role = ? AND is_active = 1
-    `).all(...assigneeIds, ASSOCIATE_ROLE);
+      SELECT id, role FROM users WHERE id IN (${placeholders}) AND role IN (${ROLE_PLACEHOLDERS}) AND is_active = 1
+    `).all(...assigneeIds, ...ASSOCIATE_ROLES);
     if (valid.length === 0) return { error: 'None of the selected associates are valid' };
 
     const create = db.transaction(async (tx) => {
@@ -63,11 +65,16 @@ export async function createAssociateTask(formData) {
     });
     await create();
 
-    await createNotificationsForUsers(db, valid.map((u) => u.id), {
-      title: 'New Task from Manager',
-      message: `${taskText.slice(0, 140)} — due ${dueDate} ${dueTime}`,
-      link: getTasksLinkForRole(ASSOCIATE_ROLE),
-    });
+    // Each role's Tasks page lives in a different portal, so notify per role.
+    for (const role of ASSOCIATE_ROLES) {
+      const ids = valid.filter((u) => u.role === role).map((u) => u.id);
+      if (ids.length === 0) continue;
+      await createNotificationsForUsers(db, ids, {
+        title: 'New Task from Manager',
+        message: `${taskText.slice(0, 140)} — due ${dueDate} ${dueTime}`,
+        link: getTasksLinkForRole(role),
+      });
+    }
 
     revalidatePath(BASE_PATH);
     return { success: true, assignedCount: valid.length };
@@ -107,8 +114,8 @@ export async function createRecurringAssociateTemplate(formData) {
     const db = await getDb();
     const placeholders = assigneeIds.map(() => '?').join(',');
     const valid = await db.prepare(`
-      SELECT id FROM users WHERE id IN (${placeholders}) AND role = ? AND is_active = 1
-    `).all(...assigneeIds, ASSOCIATE_ROLE);
+      SELECT id, role FROM users WHERE id IN (${placeholders}) AND role IN (${ROLE_PLACEHOLDERS}) AND is_active = 1
+    `).all(...assigneeIds, ...ASSOCIATE_ROLES);
     if (valid.length === 0) return { error: 'None of the selected associates are valid' };
 
     const create = db.transaction(async (tx) => {
@@ -147,8 +154,8 @@ export async function setRecurringAssociateTemplateActive(templateId, active) {
     SELECT 1 FROM associate_task_templates t
     JOIN associate_task_template_assignees ta ON ta.template_id = t.id
     JOIN users u ON u.id = ta.user_id
-    WHERE t.id = ? AND u.role = ? LIMIT 1
-  `).get(id, ASSOCIATE_ROLE);
+    WHERE t.id = ? AND u.role IN (${ROLE_PLACEHOLDERS}) LIMIT 1
+  `).get(id, ...ASSOCIATE_ROLES);
   if (!owns) return { error: 'Template not found' };
 
   await db.prepare('UPDATE associate_task_templates SET is_active = ? WHERE id = ?').run(active ? 1 : 0, id);
@@ -169,8 +176,8 @@ export async function deleteRecurringAssociateTemplate(templateId) {
     SELECT 1 FROM associate_task_templates t
     JOIN associate_task_template_assignees ta ON ta.template_id = t.id
     JOIN users u ON u.id = ta.user_id
-    WHERE t.id = ? AND u.role = ? LIMIT 1
-  `).get(id, ASSOCIATE_ROLE);
+    WHERE t.id = ? AND u.role IN (${ROLE_PLACEHOLDERS}) LIMIT 1
+  `).get(id, ...ASSOCIATE_ROLES);
   if (!owns) return { error: 'Template not found' };
 
   await db.prepare('UPDATE associate_tasks SET template_id = NULL WHERE template_id = ?').run(id);
@@ -203,8 +210,8 @@ async function reviewTaskSubmission(assigneeId, decision) {
       UPDATE associate_task_assignees
       SET approval_status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, review_seen = 0
       WHERE id = ? AND is_late = 1 AND approval_status = 'pending'
-        AND user_id IN (SELECT id FROM users WHERE role = ?)
-    `).run(decision, session.userId, id, ASSOCIATE_ROLE);
+        AND user_id IN (SELECT id FROM users WHERE role IN (${ROLE_PLACEHOLDERS}))
+    `).run(decision, session.userId, id, ...ASSOCIATE_ROLES);
 
     if (!result.changes) return { error: 'This submission is no longer pending review' };
 

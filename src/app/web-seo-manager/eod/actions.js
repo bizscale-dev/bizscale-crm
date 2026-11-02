@@ -5,9 +5,13 @@ import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { getSitePages } from '@/lib/sitemapFetch';
 
+// The Web Developer - SEO files the same daily EOD as the Web SEO managers, so both roles
+// share these actions (and the same eod_reports tables).
+const EOD_ROLES = ['web_seo_manager', 'web_developer_seo'];
+
 async function requireWebSeoManager() {
   const session = await verifySession();
-  if (!session || session.role !== 'web_seo_manager') {
+  if (!session || !EOD_ROLES.includes(session.role)) {
     return { error: 'Not authorized' };
   }
   return { session };
@@ -122,6 +126,7 @@ export async function submitEodReport(entries) {
     })));
 
     revalidatePath('/web-seo-manager/eod');
+    revalidatePath('/web-developer/eod');
 
     return { success: true, reportDate, entriesAdded: cleaned.length };
   } catch (err) {

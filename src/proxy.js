@@ -26,7 +26,8 @@ export async function proxy(req) {
     seo_manager: '/seo-manager',
     web_seo_manager: '/web-seo-manager',
     hr: '/hr',
-    qa: '/qa'
+    qa: '/qa',
+    web_developer_seo: '/web-developer'
   };
 
   if (session && path === '/login') {

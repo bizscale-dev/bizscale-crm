@@ -21,7 +21,7 @@ export async function getManagerEodReports(userId, filters = {}) {
   const db = await getDb();
 
   const manager = await db.prepare(
-    "SELECT id, name, email FROM users WHERE id = ? AND role = 'web_seo_manager'"
+    "SELECT id, name, email FROM users WHERE id = ? AND role IN ('web_seo_manager', 'seo_manager', 'writers_manager', 'web_developer_seo')"
   ).get(userId);
   if (!manager) return { error: 'Web SEO Manager not found' };
 

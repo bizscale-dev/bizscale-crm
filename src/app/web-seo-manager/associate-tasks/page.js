@@ -4,15 +4,18 @@ import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
 
 export const revalidate = 0;
 
-const ASSOCIATE_ROLE = 'web_seo_associate';
+// Web SEO associates and the Web Developer - SEO both receive tasks from the Web SEO managers.
+const ASSOCIATE_ROLES = ['web_seo_associate', 'web_developer_seo'];
+const ROLE_PLACEHOLDERS = ASSOCIATE_ROLES.map(() => '?').join(',');
+const ROLE_TAGS = { web_developer_seo: 'Web Developer' };
 
 export default async function WebSeoManagerAssociateTasksPage() {
   await ensureRecurringAssociateTasks();
   const db = await getDb();
 
   const associates = await db.prepare(`
-    SELECT id, name FROM users WHERE role = ? AND is_active = 1 ORDER BY name
-  `).all(ASSOCIATE_ROLE);
+    SELECT id, name, role FROM users WHERE role IN (${ROLE_PLACEHOLDERS}) AND is_active = 1 ORDER BY name
+  `).all(...ASSOCIATE_ROLES);
 
   const rows = await db.prepare(`
     SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency,
@@ -22,9 +25,9 @@ export default async function WebSeoManagerAssociateTasksPage() {
     FROM associate_tasks t
     JOIN associate_task_assignees a ON a.task_id = t.id
     JOIN users u ON u.id = a.user_id
-    WHERE u.role = ?
+    WHERE u.role IN (${ROLE_PLACEHOLDERS})
     ORDER BY t.created_at DESC, u.name ASC
-  `).all(ASSOCIATE_ROLE);
+  `).all(...ASSOCIATE_ROLES);
 
   const byTask = new Map();
   for (const row of rows) {
@@ -60,15 +63,15 @@ export default async function WebSeoManagerAssociateTasksPage() {
     FROM associate_task_templates t
     WHERE EXISTS (
       SELECT 1 FROM associate_task_template_assignees ta
-      JOIN users u ON u.id = ta.user_id WHERE ta.template_id = t.id AND u.role = ?
+      JOIN users u ON u.id = ta.user_id WHERE ta.template_id = t.id AND u.role IN (${ROLE_PLACEHOLDERS})
     )
     ORDER BY t.created_at DESC
-  `).all(ASSOCIATE_ROLE);
+  `).all(...ASSOCIATE_ROLES);
 
   return (
     <AssociateTasksClient
       templates={templateRows}
-      associates={associates}
+      associates={associates.map((a) => ({ id: a.id, name: ROLE_TAGS[a.role] ? `${a.name} (${ROLE_TAGS[a.role]})` : a.name }))}
       tasks={[...byTask.values()]}
     />
   );

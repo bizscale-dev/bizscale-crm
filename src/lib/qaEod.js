@@ -1,4 +1,4 @@
-export const EOD_MANAGER_ROLES = ['web_seo_manager', 'seo_manager', 'writers_manager'];
+export const EOD_MANAGER_ROLES = ['web_seo_manager', 'seo_manager', 'writers_manager', 'web_developer_seo'];
 
 /**
  * One manager's EOD reports, newest date first, optionally narrowed by web

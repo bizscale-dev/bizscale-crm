@@ -8,6 +8,7 @@ const TASKS_LINK_BY_ROLE = {
   seo_associate: '/associate/manager-tasks',
   web_seo_associate: '/web-associate/manager-tasks',
   writer: '/writer/manager-tasks',
+  web_developer_seo: '/web-developer/tasks',
 };
 
 export function getTasksLinkForRole(role) {
@@ -19,6 +20,7 @@ const REPORTS_LINK_BY_ROLE = {
   seo_manager: '/seo-manager/reports',
   web_seo_manager: '/web-seo-manager/reports',
   writers_manager: '/writers-manager/reports',
+  web_developer_seo: '/web-developer/eod',
 };
 
 export function getReportsLinkForRole(role) {

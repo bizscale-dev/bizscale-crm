@@ -16,6 +16,7 @@ export default async function Home() {
       web_seo_manager: '/web-seo-manager',
       hr: '/hr',
       qa: '/qa',
+      web_developer_seo: '/web-developer',
     };
     redirect(roleRedirects[session.role] || '/login');
   }
