@@ -41,6 +41,18 @@ export async function getActiveCampaign() {
   return row ? { ...row } : null;
 }
 
+// The campaign the Funnel pages show: the active one, or — once the active campaign has
+// been marked completed and no new one is active yet — the most recent campaign, so the
+// funnel clients and their progress stay visible. `readOnly` is true in that second case
+// (changing a completed campaign's funnel would alter its archive).
+export async function getFunnelCampaign() {
+  const db = await getDb();
+  const active = await getActiveCampaign();
+  if (active) return { campaign: active, readOnly: false };
+  const row = await db.prepare('SELECT * FROM campaigns ORDER BY id DESC LIMIT 1').get();
+  return { campaign: row ? { ...row } : null, readOnly: true };
+}
+
 export async function getActiveWriterCampaign() {
   const db = await getDb();
   const row = await db.prepare("SELECT * FROM writer_campaigns WHERE status = 'active' ORDER BY id DESC LIMIT 1").get();

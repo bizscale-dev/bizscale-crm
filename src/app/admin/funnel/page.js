@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
+import { getFunnelCampaign } from '@/lib/services';
 import { LINK_TYPES, LINK_TYPE_LABELS } from '@/lib/linkTargetConstants';
 import FunnelTemplatesClient from './FunnelTemplatesClient';
 import FunnelSettingsClient from './FunnelSettingsClient';
@@ -8,9 +8,30 @@ import FunnelHoldClientsTable from './FunnelHoldClientsTable';
 
 export const revalidate = 0;
 
+function ArchivedBanner({ campaign }) {
+  return (
+    <div className="card" style={{ border: '1px solid #f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.08)' }}>
+      <strong style={{ color: '#f59e0b' }}>Viewing {campaign.name} ({campaign.status}) — view only.</strong>
+      <p style={{ color: 'var(--text-muted)', margin: '0.35rem 0 0', fontSize: '0.85rem' }}>
+        No campaign is active right now, so the Funnel shows the latest campaign&apos;s clients and progress. Changes are
+        switched off until a new campaign is activated.
+      </p>
+    </div>
+  );
+}
+
+// Greys out and disables every button/input inside, for the view-only (completed campaign) state.
+function Editable({ readOnly, children }) {
+  return (
+    <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, opacity: readOnly ? 0.65 : 1 }}>
+      {children}
+    </fieldset>
+  );
+}
+
 export default async function FunnelPage() {
   const db = await getDb();
-  const campaign = await getActiveCampaign();
+  const { campaign, readOnly } = await getFunnelCampaign();
 
   let funnelClients = [];
   let funnelStats = null;
@@ -73,11 +94,13 @@ export default async function FunnelPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       {!campaign ? (
         <div className="card">
-          <h3>No Active Campaign</h3>
-          <p style={{ color: 'var(--text-muted)' }}>Please activate a campaign to manage the Funnel.</p>
+          <h3>No Campaign</h3>
+          <p style={{ color: 'var(--text-muted)' }}>Create and activate a campaign to manage the Funnel.</p>
         </div>
       ) : (
         <>
+          {readOnly && <ArchivedBanner campaign={campaign} />}
+
           <div>
             <h1 style={{ fontSize: '1.75rem', margin: 0, marginBottom: '0.5rem' }}>Funnel</h1>
             <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
@@ -135,7 +158,9 @@ export default async function FunnelPage() {
               one into Funnel Month 1 (optionally starting past week 1, if some of their work already happened
               outside the system) whenever you&apos;re ready.
             </p>
-            <FunnelHoldClientsTable holdClients={holdClients} campaignId={campaign.id} />
+            <Editable readOnly={readOnly}>
+              <FunnelHoldClientsTable holdClients={holdClients} campaignId={campaign.id} />
+            </Editable>
           </div>
 
           <div className="card">
@@ -144,12 +169,18 @@ export default async function FunnelPage() {
               <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{funnelClients.length} active</span>
             </div>
 
-            <FunnelClientsTable funnelClients={funnelClients} />
+            <Editable readOnly={readOnly}>
+              <FunnelClientsTable funnelClients={funnelClients} />
+            </Editable>
           </div>
 
-          <FunnelSettingsClient campaign={campaign} linkTypes={LINK_TYPES} linkTypeLabels={LINK_TYPE_LABELS} />
+          <Editable readOnly={readOnly}>
+            <FunnelSettingsClient campaign={campaign} linkTypes={LINK_TYPES} linkTypeLabels={LINK_TYPE_LABELS} />
+          </Editable>
 
-          <FunnelTemplatesClient campaign={campaign} existingTemplates={existingTemplates} />
+          <Editable readOnly={readOnly}>
+            <FunnelTemplatesClient campaign={campaign} existingTemplates={existingTemplates} />
+          </Editable>
         </>
       )}
     </div>

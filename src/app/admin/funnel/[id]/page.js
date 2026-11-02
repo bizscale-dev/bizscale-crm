@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign, LINK_TYPE_LABELS } from '@/lib/services';
+import { getFunnelCampaign, LINK_TYPE_LABELS } from '@/lib/services';
 import Link from 'next/link';
 import FunnelDetailClient from './FunnelDetailClient';
 
@@ -33,7 +33,7 @@ export default async function FunnelDetailPage({ params }) {
   const { id } = await params;
   const db = await getDb();
   const clientId = parseInt(id, 10);
-  const campaign = await getActiveCampaign();
+  const { campaign, readOnly } = await getFunnelCampaign();
 
   const client = await db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
 
@@ -147,9 +147,16 @@ export default async function FunnelDetailPage({ params }) {
       </div>
 
       {!campaign ? (
-        <div className="card"><p style={{ color: 'var(--danger)', margin: 0 }}>No active campaign.</p></div>
+        <div className="card"><p style={{ color: 'var(--danger)', margin: 0 }}>No campaign found.</p></div>
       ) : (
         <>
+          {readOnly && (
+            <div className="card" style={{ border: '1px solid #f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.08)' }}>
+              <strong style={{ color: '#f59e0b' }}>Viewing {campaign.name} ({campaign.status}) — view only.</strong>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}> Changes are switched off until a new campaign is activated.</span>
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
             <StatCard title="Current Month Tasks" value={totalTasks} color={BRAND_COLOR} />
             <StatCard title="Completed" value={completedTasks} sub={`${progressPercent}% complete`} color="var(--success)" />
@@ -304,7 +311,9 @@ export default async function FunnelDetailPage({ params }) {
             </div>
           )}
 
-          <FunnelDetailClient client={client} />
+          <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, opacity: readOnly ? 0.65 : 1 }}>
+            <FunnelDetailClient client={client} />
+          </fieldset>
         </>
       )}
     </div>
