@@ -1,10 +1,9 @@
 import { getDb } from '@/lib/db';
-import { getActiveCampaign } from '@/lib/services';
-import { getActiveWebSeoCampaign } from '@/lib/services';
 import { getSeoAssociateCards, getWebSeoAssociateCards } from '@/lib/associateStats';
 import StatCard from '@/components/ui/StatCard';
 import Badge from '@/components/ui/Badge';
 import { cardStyle } from '../hrStyles';
+import CampaignPicker from './CampaignPicker';
 
 export const revalidate = 0;
 
@@ -42,14 +41,21 @@ function Section({ title, count, note, children }) {
   );
 }
 
-export default async function HrAssociatesPage() {
-  const db = await getDb();
-  const seoCampaign = await getActiveCampaign();
-  // Web SEO campaigns are separate and can end before the next one starts — fall back
-  // to the latest one so these associates' numbers don't vanish in between.
-  const webCampaign = (await getActiveWebSeoCampaign())
-    || (await db.prepare('SELECT * FROM webseo_campaigns ORDER BY id DESC LIMIT 1').get())
+// The chosen campaign (?param=id), else the active one, else the latest.
+function pickCampaign(all, wantedId) {
+  return all.find((c) => String(c.id) === String(wantedId))
+    || all.find((c) => c.status === 'active')
+    || all[0]
     || null;
+}
+
+export default async function HrAssociatesPage({ searchParams }) {
+  const sp = (await searchParams) || {};
+  const db = await getDb();
+  const seoAll = await db.prepare('SELECT * FROM campaigns ORDER BY id DESC').all();
+  const webAll = await db.prepare('SELECT * FROM webseo_campaigns ORDER BY id DESC').all();
+  const seoCampaign = pickCampaign(seoAll, sp.seo);
+  const webCampaign = pickCampaign(webAll, sp.web);
 
   const seoAssociates = await db.prepare(
     "SELECT id, name, email FROM users WHERE role = 'seo_associate' AND is_active = 1 ORDER BY name"
@@ -70,19 +76,21 @@ export default async function HrAssociatesPage() {
       <div>
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>Associates</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-          How every associate is doing on their link targets, in the active campaign.
+          How every associate is doing on their link targets, in the active campaign, or any past one you pick.
         </p>
       </div>
 
-      <Section title="SEO Associates" count={seoAssociates.length}>
+      <Section title="SEO Associates" count={seoAssociates.length} note={seoCampaign && seoCampaign.status !== 'active' ? `Showing ${seoCampaign.name} (${seoCampaign.status}).` : null}>
+        {seoCampaign && <CampaignPicker param="seo" campaigns={seoAll} selectedId={seoCampaign.id} />}
         {!seoCampaign ? (
-          <div style={cardStyle}><p style={{ color: 'var(--text-muted)', margin: 0 }}>No active SEO campaign.</p></div>
+          <div style={cardStyle}><p style={{ color: 'var(--text-muted)', margin: 0 }}>No SEO campaigns yet.</p></div>
         ) : seo.map(({ associate, stats }) => <AssociateCard key={associate.id} associate={associate} stats={stats} />)}
       </Section>
 
-      <Section title="Web SEO Associates" count={webAssociates.length} note={webCampaign && webCampaign.status !== 'active' ? `Showing the latest campaign (${webCampaign.name}, ${webCampaign.status}) — no Web SEO campaign is active right now.` : null}>
+      <Section title="Web SEO Associates" count={webAssociates.length} note={webCampaign && webCampaign.status !== 'active' ? `Showing ${webCampaign.name} (${webCampaign.status}).` : null}>
+        {webCampaign && <CampaignPicker param="web" campaigns={webAll} selectedId={webCampaign.id} />}
         {!webCampaign ? (
-          <div style={cardStyle}><p style={{ color: 'var(--text-muted)', margin: 0 }}>No active Web SEO campaign.</p></div>
+          <div style={cardStyle}><p style={{ color: 'var(--text-muted)', margin: 0 }}>No Web SEO campaigns yet.</p></div>
         ) : web.map(({ associate, stats }) => <AssociateCard key={associate.id} associate={associate} stats={stats} />)}
       </Section>
     </div>
