@@ -28,13 +28,17 @@ export async function getClientOwnership(db, managers) {
     owners.get(key).add(managerId);
   };
 
-  // Only clients currently on the sheets: active rows of the active SEO / web
-  // campaign. Clients dropped from the sheet get deactivated by the daily sync
-  // and so fall out of the roster (their old reports keep the name).
+  // Only clients currently on the sheets: active rows of the current SEO / web campaign —
+  // the active one, or, once it has been archived and no new one is active yet, the latest
+  // one (otherwise QA's client search would come up empty between campaigns). Clients
+  // dropped from the sheet get deactivated by the daily sync and so fall out of the roster
+  // (their old reports keep the name).
   const seo = await db.prepare(`
     SELECT TRIM(c.name) AS name, c.support_number FROM clients c
-    JOIN campaigns cp ON cp.id = c.campaign_id
-    WHERE cp.status = 'active' AND c.is_active = 1 AND c.name IS NOT NULL AND TRIM(c.name) != ''
+    WHERE c.campaign_id = COALESCE(
+        (SELECT id FROM campaigns WHERE status = 'active' ORDER BY id DESC LIMIT 1),
+        (SELECT id FROM campaigns ORDER BY id DESC LIMIT 1))
+      AND c.is_active = 1 AND c.name IS NOT NULL AND TRIM(c.name) != ''
   `).all();
   for (const c of seo) {
     const range = c.support_number == null ? null : SEO_SUPPORT_RANGES.find((r) => c.support_number >= r.from && c.support_number <= r.to);
@@ -43,8 +47,10 @@ export async function getClientOwnership(db, managers) {
 
   const web = await db.prepare(`
     SELECT TRIM(w.name) AS name, w.sheet_associate_name FROM web_clients w
-    JOIN webseo_campaigns wc ON wc.id = w.webseo_campaign_id
-    WHERE wc.status = 'active' AND w.is_active = 1 AND w.name IS NOT NULL AND TRIM(w.name) != ''
+    WHERE w.webseo_campaign_id = COALESCE(
+        (SELECT id FROM webseo_campaigns WHERE status = 'active' ORDER BY id DESC LIMIT 1),
+        (SELECT id FROM webseo_campaigns ORDER BY id DESC LIMIT 1))
+      AND w.is_active = 1 AND w.name IS NOT NULL AND TRIM(w.name) != ''
   `).all();
   for (const c of web) add(c.name, c.sheet_associate_name ? byName.get(norm(c.sheet_associate_name)) : null);
 
