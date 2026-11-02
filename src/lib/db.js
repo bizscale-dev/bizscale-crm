@@ -831,6 +831,25 @@ async function runMigrations(raw) {
       UNIQUE (client_id, url)
     )`,
     "CREATE INDEX IF NOT EXISTS idx_synced_client_links_task ON synced_client_links (client_id, task_date)",
+    // Frozen list of the clients in an SEO campaign and how far each got, written when
+    // the campaign is marked completed (see src/lib/campaignClients.js).
+    `CREATE TABLE IF NOT EXISTS campaign_client_archive (
+      campaign_id INTEGER NOT NULL,
+      client_id INTEGER NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      name TEXT NOT NULL,
+      website TEXT,
+      associate TEXT,
+      writer TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      tunnel_status TEXT,
+      funnel_month INTEGER,
+      target INTEGER NOT NULL DEFAULT 0,
+      completed INTEGER NOT NULL DEFAULT 0,
+      by_type TEXT,
+      archived_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (campaign_id, client_id)
+    )`,
     // Team members' Google Chat user IDs, keyed by work email, so messages posted to the
     // Google Chat space can @-mention the right person (see src/lib/googleChat.js).
     `CREATE TABLE IF NOT EXISTS chat_members (

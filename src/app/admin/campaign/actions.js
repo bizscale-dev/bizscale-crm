@@ -2,6 +2,7 @@
 
 import { getDb } from '@/lib/db';
 import { revalidatePath } from 'next/cache';
+import { snapshotCampaignClients } from '@/lib/campaignClients';
 import { redirect } from 'next/navigation';
 
 export async function createCampaign(prevState, formData) {
@@ -113,9 +114,19 @@ export async function markCampaignCompleted(id) {
   try {
     await db.prepare("UPDATE campaigns SET status = 'completed' WHERE id = ?").run(id);
 
+    // Archive the campaign's clients and their progress. A failure here must not undo
+    // the completion — the report page falls back to the live data.
+    let archived = 0;
+    try {
+      archived = await snapshotCampaignClients(db, id);
+    } catch (e) {
+      console.error('[campaign] Client archive failed:', e);
+    }
+
     revalidatePath('/admin/campaign');
+    revalidatePath(`/admin/campaign/${id}`);
     revalidatePath('/admin');
-    return { success: 'Campaign marked as completed' };
+    return { success: archived > 0 ? `Campaign marked as completed — ${archived} clients archived` : 'Campaign marked as completed' };
   } catch (err) {
     return { error: err.message };
   }

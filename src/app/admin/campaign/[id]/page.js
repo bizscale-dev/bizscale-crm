@@ -1,6 +1,9 @@
 import { getDb } from '@/lib/db';
 import Link from 'next/link';
 import SeoAssociatesTable from '@/components/team-progress/SeoAssociatesTable';
+import { LINK_TYPE_LABELS } from '@/lib/services';
+import { getArchivedCampaignClients, getLiveCampaignClients } from '@/lib/campaignClients';
+import CampaignClientsTable from './CampaignClientsTable';
 
 export const revalidate = 0;
 
@@ -55,6 +58,11 @@ export default async function CampaignDetailPage({ params }) {
     SELECT COUNT(DISTINCT aa.user_id) as c FROM associate_assignments aa WHERE aa.campaign_id = ?
   `).get(campaignId)).c || 0;
 
+  // A completed campaign shows its frozen archive of clients (see campaignClients.js);
+  // an older completed one with no archive, or a running one, shows live data.
+  const archive = campaign.status === 'completed' ? await getArchivedCampaignClients(db, campaignId) : null;
+  const campaignClients = archive ? archive.clients : await getLiveCampaignClients(db, campaignId);
+
   const seoPercent = seoStats.target > 0 ? Math.round((seoStats.completed / seoStats.target) * 100) : 0;
 
   return (
@@ -94,6 +102,8 @@ export default async function CampaignDetailPage({ params }) {
       </div>
 
       <SeoAssociatesTable campaign={campaign} basePath={`/admin/campaign/${id}/associates`} />
+
+      <CampaignClientsTable clients={campaignClients} linkTypeLabels={LINK_TYPE_LABELS} archivedAt={archive?.archivedAt || null} />
     </div>
   );
 }
