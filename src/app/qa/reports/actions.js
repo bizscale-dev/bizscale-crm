@@ -4,7 +4,7 @@ import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifications';
-import { reportSubject } from '@/lib/qaReports';
+import { reportSubject, parseResolveDays, QA_SEVERITIES } from '@/lib/qaReports';
 
 async function requireQa() {
   const session = await verifySession();
@@ -94,6 +94,69 @@ export async function rejectReportFix(reportId, reason) {
     message: `${reportSubject(r)} failed QA and is open again: ${text.slice(0, 120)}`,
     link: getReportsLinkForRole(r.manager_role),
   });
+  revalidateAll();
+  return { success: true };
+}
+
+const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+
+/**
+ * QA corrects a report after filing it. Any QA user can edit any report (QA works as a team).
+ * Editable: the note/description, the resolve-within days and — on manual reports — severity,
+ * location, issue, department and link(s). Who it's about, the client and the screenshot are
+ * fixed. The manager is told so they re-read it; editing never changes the report's status.
+ */
+export async function updateQaReport(reportId, input) {
+  const session = await requireQa();
+  if (!session) return { error: 'Not authorized' };
+  const id = parseInt(reportId, 10);
+  if (!id) return { error: 'Invalid report' };
+
+  const db = await getDb();
+  const r = await db.prepare(`
+    SELECT q.id, q.source, q.title, q.web_client_name, q.work_done, q.status, q.manager_id, m.role AS manager_role
+    FROM qa_reports q JOIN users m ON m.id = q.manager_id WHERE q.id = ?
+  `).get(id);
+  if (!r) return { error: 'Report not found' };
+
+  const isManual = r.source === 'manual';
+  const note = clean(input?.note, isManual ? 3000 : 2000);
+  if (!note) return { error: isManual ? 'Description is required' : 'The note can’t be empty' };
+  const resolveDays = parseResolveDays(input?.resolveDays);
+
+  if (!isManual) {
+    await db.prepare('UPDATE qa_reports SET note = ?, resolve_days = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(note, resolveDays, id);
+  } else {
+    const severity = clean(input?.severity, 10).toLowerCase();
+    if (!QA_SEVERITIES.includes(severity)) return { error: 'Pick a severity (high, medium or low)' };
+    const urls = [];
+    for (const raw of clean(input?.url, 5000).split(/[\s,]+/).filter(Boolean)) {
+      const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+      try {
+        new URL(candidate);
+      } catch {
+        return { error: `"${raw.slice(0, 60)}" doesn’t look like a valid URL` };
+      }
+      urls.push(candidate);
+    }
+    await db.prepare(`
+      UPDATE qa_reports
+      SET note = ?, resolve_days = ?, severity = ?, location = ?, issue = ?, department = ?, page_url = ?, edited_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      note, resolveDays, severity, clean(input?.location, 300) || null, clean(input?.issue, 500) || null,
+      clean(input?.department, 100) || null, urls.join('\n') || null, id
+    );
+  }
+
+  if (r.status !== 'resolved') {
+    await createNotificationsForUsers(db, [r.manager_id], {
+      title: 'QA updated a report',
+      message: `${reportSubject(r)}: ${note.slice(0, 120)} — resolve within ${resolveDays} working day${resolveDays === 1 ? '' : 's'}`,
+      link: getReportsLinkForRole(r.manager_role),
+    });
+  }
   revalidateAll();
   return { success: true };
 }

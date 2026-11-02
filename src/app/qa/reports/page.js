@@ -3,6 +3,7 @@ import Link from 'next/link';
 import Linkify from '../Linkify';
 import LinkList from '@/components/LinkList';
 import DeleteReportButton from './DeleteReportButton';
+import EditReportButton from './EditReportButton';
 import ReviewControls from './ReviewControls';
 import ReportThread from '@/components/ReportThread';
 import QaManualDetails, { SeverityBadge } from '@/components/QaManualDetails';
@@ -41,7 +42,7 @@ export default async function QaReportsPage(props = {}) {
   // QA works as a team, and this is the shared record of what's been flagged.
   const rows = await db.prepare(`
     SELECT q.id, q.source, q.title, q.location, q.issue, q.department, q.severity, q.screenshot_base64, q.client_names, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at, q.resolve_days,
-      q.resolved_at, q.resolution_note, q.rejection_count, q.confirmed_at,
+      q.resolved_at, q.resolution_note, q.rejection_count, q.confirmed_at, q.edited_at,
       m.id as manager_id, m.name as manager_name, m.role as manager_role,
       f.name as filed_by
     FROM qa_reports q
@@ -165,10 +166,16 @@ export default async function QaReportsPage(props = {}) {
                 )}
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.6rem' }}>
                   Flagged by {r.filed_by} · {new Date(r.created_at.replace(' ', 'T') + 'Z').toLocaleString()}
+                  {r.edited_at && <> · edited {new Date(r.edited_at.replace(' ', 'T') + 'Z').toLocaleString()}</>}
                 </div>
                 {!readOnly && r.status === 'pending_review' && <ReviewControls reportId={r.id} />}
                 <ReportThread reportId={r.id} comments={r.comments} canComment={!readOnly} />
-                {!readOnly && <DeleteReportButton reportId={r.id} />}
+                {!readOnly && (
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    <EditReportButton report={r} />
+                    <DeleteReportButton reportId={r.id} />
+                  </div>
+                )}
               </div>
             );
           })}

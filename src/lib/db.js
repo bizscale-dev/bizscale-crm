@@ -294,6 +294,8 @@ async function runMigrations(raw) {
     "ALTER TABLE qa_reports ADD COLUMN issue_group TEXT",
     // Working days QA gave the manager to resolve it; NULL = the 5-day default.
     "ALTER TABLE qa_reports ADD COLUMN resolve_days INTEGER",
+    // Set when QA edits a report after filing it (see updateQaReport in qa/reports/actions.js).
+    "ALTER TABLE qa_reports ADD COLUMN edited_at DATETIME",
   ];
 
   for (const sql of alterStatements) {
