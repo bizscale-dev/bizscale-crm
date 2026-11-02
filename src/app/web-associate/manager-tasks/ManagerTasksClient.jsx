@@ -4,6 +4,16 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitAssociateTaskProof } from './actions';
 import TaskBadges from '@/components/TaskBadges';
+import { TASK_URGENCIES, parseUrgency } from '@/lib/taskUrgency';
+
+// "23:45" -> "11:45 PM". Due times are stored as Pakistan wall-clock time, so this is a
+// format change only.
+function formatDue12h(dueTime) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(dueTime || '');
+  if (!m) return dueTime || '';
+  const h = parseInt(m[1], 10);
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 ? 'PM' : 'AM'}`;
+}
 
 const BRAND_COLOR = 'var(--primary)';
 const PORTAL = 'web-associate';
@@ -87,7 +97,7 @@ const APPROVAL_LABELS = {
   rejected: { text: '❌ Rejected', color: 'var(--danger)' },
 };
 
-function TaskCard({ task }) {
+function TaskCard({ task, twelveHour }) {
   const router = useRouter();
   const submitted = !!task.submitted_at;
   const overdue = !submitted && isOverdue(task);
@@ -155,7 +165,7 @@ function TaskCard({ task }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
         <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-          Due {task.due_date} {task.template_id ? '12 AM' : task.due_time}
+          Due {task.due_date} {task.template_id ? '12 AM' : (twelveHour ? formatDue12h(task.due_time) : task.due_time)}
         </div>
       </div>
 
@@ -242,19 +252,38 @@ function TaskCard({ task }) {
   );
 }
 
-export default function ManagerTasksClient({ tasks }) {
-  const pending = tasks.filter((t) => !t.submitted_at);
-  const done = tasks.filter((t) => !!t.submitted_at);
+export default function ManagerTasksClient({ tasks, urgencyFilter = false, twelveHour = false }) {
+  const [urgency, setUrgency] = useState('');
+  const visible = urgencyFilter && urgency ? tasks.filter((t) => parseUrgency(t.urgency) === urgency) : tasks;
+  const pending = visible.filter((t) => !t.submitted_at);
+  const done = visible.filter((t) => !!t.submitted_at);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      {urgencyFilter && (
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {TASK_URGENCIES.slice().reverse().map((u) => {
+            const active = urgency === u.value;
+            return (
+              <button
+                key={u.value}
+                type="button"
+                onClick={() => setUrgency(active ? '' : u.value)}
+                style={{ padding: '0.35rem 1rem', borderRadius: '2rem', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer', border: `1px solid ${u.color}`, color: active ? 'white' : u.color, backgroundColor: active ? u.color : 'transparent' }}
+              >
+                {u.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div>
         <h2 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Pending Tasks</h2>
         {pending.length === 0 ? (
           <p style={{ color: 'var(--text-muted)' }}>No pending tasks.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {pending.map((t) => <TaskCard key={t.task_id} task={t} />)}
+            {pending.map((t) => <TaskCard key={t.task_id} task={t} twelveHour={twelveHour} />)}
           </div>
         )}
       </div>
@@ -263,7 +292,7 @@ export default function ManagerTasksClient({ tasks }) {
         <div>
           <h2 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Completed Tasks</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {done.map((t) => <TaskCard key={t.task_id} task={t} />)}
+            {done.map((t) => <TaskCard key={t.task_id} task={t} twelveHour={twelveHour} />)}
           </div>
         </div>
       )}

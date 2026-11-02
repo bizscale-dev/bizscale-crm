@@ -27,5 +27,5 @@ export default async function WebDeveloperTasksPage() {
     UPDATE associate_task_assignees SET review_seen = 1 WHERE user_id = ? AND review_seen = 0
   `).run(session.userId);
 
-  return <ManagerTasksClient tasks={tasks} />;
+  return <ManagerTasksClient tasks={tasks} urgencyFilter twelveHour />;
 }
