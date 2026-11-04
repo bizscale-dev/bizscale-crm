@@ -8,7 +8,7 @@ export default function TasksClient({ tasksByClient, pendingByClient = [], avail
   const router = useRouter();
 
   const handleDateChange = (e) => {
-    router.push(`${basePath}?date=${e.target.value}`);
+    router.push(`${basePath}${basePath.includes('?') ? '&' : '?'}date=${e.target.value}`);
   };
 
   return (

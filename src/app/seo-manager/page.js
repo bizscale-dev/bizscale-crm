@@ -1,5 +1,7 @@
 import SeoAssociatesTable from '@/components/team-progress/SeoAssociatesTable';
 
-export default function SeoManagerPage() {
-  return <SeoAssociatesTable basePath="/seo-manager" />;
+export const revalidate = 0;
+
+export default function SeoManagerPage({ searchParams }) {
+  return <SeoAssociatesTable basePath="/seo-manager" searchParams={searchParams} />;
 }

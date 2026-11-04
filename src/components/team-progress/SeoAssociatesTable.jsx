@@ -1,7 +1,8 @@
 import { getDb } from '@/lib/db';
 import Link from 'next/link';
 import { expectedLinksFor } from '@/lib/seoAssociateStats';
-import { getActiveCampaign, getTotalLinksPerClient } from '@/lib/services';
+import { getTotalLinksPerClient } from '@/lib/services';
+import CampaignSelect from './CampaignSelect';
 import { LINK_TYPES } from '@/lib/linkTargetConstants';
 import { FUNNEL_BONUS_FIELDS, FUNNEL_MONTH1_WEEK_TARGETS } from '@/lib/funnelConstants';
 
@@ -17,12 +18,21 @@ import { FUNNEL_BONUS_FIELDS, FUNNEL_MONTH1_WEEK_TARGETS } from '@/lib/funnelCon
  * drill-down shows that campaign's real data even once a different one is active.
  * Pass campaign to scope to a specific one instead of always the active campaign.
  */
-export default async function SeoAssociatesTable({ basePath, campaign: campaignProp }) {
+export default async function SeoAssociatesTable({ basePath, campaign: campaignProp, searchParams }) {
   const db = await getDb();
 
   // Monthly target per client comes from the given campaign's configured link
   // targets (web2 + guestpost + pdf + profile + citation + image), not a fixed number.
-  const campaign = campaignProp || await getActiveCampaign();
+  // Without an explicit campaign: the chosen one (?campaign=id), else the active one, else
+  // the latest — so the page never goes blank between campaigns.
+  const allCampaigns = campaignProp ? [] : await db.prepare('SELECT * FROM campaigns ORDER BY id DESC').all();
+  const wanted = searchParams ? ((await searchParams) || {}).campaign : null;
+  const campaign = campaignProp
+    || allCampaigns.find((c) => String(c.id) === String(wanted))
+    || allCampaigns.find((c) => c.status === 'active')
+    || allCampaigns[0]
+    || null;
+  const detailQuery = campaignProp || (campaign?.status === 'active' && !wanted) ? '' : `?campaign=${campaign?.id}`;
   const monthlyTargetPerClient = campaign ? getTotalLinksPerClient(campaign) : 0;
 
   // A funnel Month 2/3 client's target is the campaign's Month 2 & 3 Bonus Link
@@ -90,8 +100,17 @@ export default async function SeoAssociatesTable({ basePath, campaign: campaignP
           <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{associates.length} total</span>
         </div>
 
+        {!campaignProp && campaign && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <CampaignSelect campaigns={allCampaigns} selectedId={campaign.id} />
+            {campaign.status !== 'active' && (
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>No campaign is active — showing {campaign.name} ({campaign.status}).</span>
+            )}
+          </div>
+        )}
+
         {!campaign ? (
-          <p style={{ color: 'var(--danger)', margin: 0 }}>{campaignProp ? 'Campaign not found.' : 'No active campaign.'}</p>
+          <p style={{ color: 'var(--text-muted)', margin: 0 }}>{campaignProp ? 'Campaign not found.' : 'No SEO campaigns yet.'}</p>
         ) : associates.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', margin: 0 }}>No SEO associates found.</p>
         ) : (
@@ -180,7 +199,7 @@ export default async function SeoAssociatesTable({ basePath, campaign: campaignP
                       </td>
                       {basePath && (
                         <td style={{ padding: '0.75rem 0' }}>
-                          <Link href={`${basePath}/${associate.id}`} style={{
+                          <Link href={`${basePath}/${associate.id}${detailQuery}`} style={{
                             padding: '0.4rem 0.75rem',
                             backgroundColor: 'var(--primary)',
                             color: 'white',
