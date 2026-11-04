@@ -9,6 +9,9 @@ const TASKS_LINK_BY_ROLE = {
   web_seo_associate: '/web-associate/manager-tasks',
   writer: '/writer/manager-tasks',
   web_developer_seo: '/web-developer/tasks',
+  // Admin-assigned tasks (the extra Tasks page); associate-tier tasks from the SEO managers
+  // use the shared /associate/manager-tasks page, see recurringAssociateTasks.js.
+  senior_seo_associate: '/associate/senior-tasks',
 };
 
 export function getTasksLinkForRole(role) {
@@ -21,6 +24,7 @@ const REPORTS_LINK_BY_ROLE = {
   web_seo_manager: '/web-seo-manager/reports',
   writers_manager: '/writers-manager/reports',
   web_developer_seo: '/web-developer/eod',
+  senior_seo_associate: '/associate/senior-reports',
 };
 
 export function getReportsLinkForRole(role) {

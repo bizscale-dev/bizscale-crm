@@ -2,13 +2,15 @@
 // raised on many clients only goes to the manager who actually has each one.
 //
 //  - SEO clients: the sheet's Support column (clients.support_number, 1-10).
-//    1-5 -> M Hussain, 6-10 -> Talha.
+//    1-4 -> M Hussain, 5-7 -> Hamza, 8-10 -> Mudassar (Hamza and Mudassar are Senior SEO
+//    Associates).
 //  - Web clients: the sheet's associate name (web_clients.sheet_associate_name)
 //    is the web SEO manager's name (Ammar / Sikandar).
 //  - Writers managers have every client.
 export const SEO_SUPPORT_RANGES = [
-  { managerName: 'M Hussain', from: 1, to: 5 },
-  { managerName: 'Talha', from: 6, to: 10 },
+  { managerName: 'M Hussain', from: 1, to: 4 },
+  { managerName: 'Hamza', from: 5, to: 7 },
+  { managerName: 'Mudassar', from: 8, to: 10 },
 ];
 
 const norm = (s) => String(s || '').trim().toLowerCase();

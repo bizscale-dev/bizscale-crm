@@ -42,7 +42,7 @@ export default async function SeoAssociateDetail({ id, backHref, backLabel, show
   // Guard by role too, not just existence — this component is reachable from
   // role-scoped manager portals, so a mismatched role (e.g. an admin's id) must
   // not leak that user's name/email here.
-  const associate = await db.prepare("SELECT * FROM users WHERE id = ? AND role = 'seo_associate'").get(associateId);
+  const associate = await db.prepare("SELECT * FROM users WHERE id = ? AND role IN ('seo_associate','senior_seo_associate')").get(associateId);
 
   if (!associate) {
     return (

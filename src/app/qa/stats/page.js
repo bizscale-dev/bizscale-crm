@@ -9,7 +9,7 @@ export default async function QaStatsPage() {
 
   const managers = await db.prepare(`
     SELECT id, name, role FROM users
-    WHERE role IN ('web_seo_manager', 'seo_manager', 'writers_manager') AND is_active = 1
+    WHERE role IN ('web_seo_manager', 'seo_manager', 'writers_manager', 'senior_seo_associate') AND is_active = 1
     ORDER BY role, name
   `).all();
 

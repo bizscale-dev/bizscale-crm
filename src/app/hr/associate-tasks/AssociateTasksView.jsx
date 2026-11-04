@@ -6,6 +6,7 @@ import TaskBadges from '@/components/TaskBadges';
 
 const ROLE_LABELS = {
   seo_associate: 'SEO Associate',
+  senior_seo_associate: 'Senior SEO Associate',
   web_seo_associate: 'Web SEO Associate',
   web_developer_seo: 'Web Developer - SEO',
   writer: 'Writer',

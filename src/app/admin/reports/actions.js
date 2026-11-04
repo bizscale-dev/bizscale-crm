@@ -45,7 +45,7 @@ export async function getUserActivityReport(userId, date) {
       { title: 'GBP-Off Page Tasks', rows: rows.filter(r => r.task_type === 'gbp').map(toRow) },
       { title: 'Web-Off Page Tasks', rows: rows.filter(r => r.task_type === 'weboff').map(toRow) },
     ];
-  } else if (user.role === 'seo_associate') {
+  } else if (user.role === 'seo_associate' || user.role === 'senior_seo_associate') {
     const logs = await db.prepare(`
       SELECT ll.created_at, ll.url, ll.anchor_text, ll.notes, st.link_type, c.name as client_name
       FROM link_logs ll
@@ -123,7 +123,7 @@ export async function getUserActivityReport(userId, date) {
   // a date before this feature shipped) just means nothing to show — 0/0, not an error.
   let pendingResolved = 0;
   let pendingRemaining = 0;
-  if (user.role === 'seo_associate' || user.role === 'web_seo_associate') {
+  if (user.role === 'seo_associate' || user.role === 'senior_seo_associate' || user.role === 'web_seo_associate') {
     const snapshot = await db.prepare(
       'SELECT resolved_count, remaining_count FROM daily_pending_snapshot WHERE user_id = ? AND work_date = ?'
     ).get(userId, date);

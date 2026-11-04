@@ -7,7 +7,7 @@ import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
 import { createNotificationsForUsers, getTasksLinkForRole } from '@/lib/notifications';
 import { parseUrgency } from '@/lib/taskUrgency';
 
-const ASSOCIATE_ROLE = 'seo_associate';
+const ASSOCIATE_ROLE = 'seo_associate'; // only used for the notification link — seniors share it
 const BASE_PATH = '/seo-manager/associate-tasks';
 
 async function requireSeoManager() {
@@ -46,8 +46,8 @@ export async function createAssociateTask(formData) {
     const db = await getDb();
     const placeholders = assigneeIds.map(() => '?').join(',');
     const valid = await db.prepare(`
-      SELECT id FROM users WHERE id IN (${placeholders}) AND role = ? AND is_active = 1
-    `).all(...assigneeIds, ASSOCIATE_ROLE);
+      SELECT id FROM users WHERE id IN (${placeholders}) AND role IN ('seo_associate', 'senior_seo_associate') AND is_active = 1
+    `).all(...assigneeIds);
     if (valid.length === 0) return { error: 'None of the selected associates are valid' };
 
     const create = db.transaction(async (tx) => {
@@ -107,8 +107,8 @@ export async function createRecurringAssociateTemplate(formData) {
     const db = await getDb();
     const placeholders = assigneeIds.map(() => '?').join(',');
     const valid = await db.prepare(`
-      SELECT id FROM users WHERE id IN (${placeholders}) AND role = ? AND is_active = 1
-    `).all(...assigneeIds, ASSOCIATE_ROLE);
+      SELECT id FROM users WHERE id IN (${placeholders}) AND role IN ('seo_associate', 'senior_seo_associate') AND is_active = 1
+    `).all(...assigneeIds);
     if (valid.length === 0) return { error: 'None of the selected associates are valid' };
 
     const create = db.transaction(async (tx) => {
@@ -147,8 +147,8 @@ export async function setRecurringAssociateTemplateActive(templateId, active) {
     SELECT 1 FROM associate_task_templates t
     JOIN associate_task_template_assignees ta ON ta.template_id = t.id
     JOIN users u ON u.id = ta.user_id
-    WHERE t.id = ? AND u.role = ? LIMIT 1
-  `).get(id, ASSOCIATE_ROLE);
+    WHERE t.id = ? AND u.role IN ('seo_associate', 'senior_seo_associate') LIMIT 1
+  `).get(id);
   if (!owns) return { error: 'Template not found' };
 
   await db.prepare('UPDATE associate_task_templates SET is_active = ? WHERE id = ?').run(active ? 1 : 0, id);
@@ -169,8 +169,8 @@ export async function deleteRecurringAssociateTemplate(templateId) {
     SELECT 1 FROM associate_task_templates t
     JOIN associate_task_template_assignees ta ON ta.template_id = t.id
     JOIN users u ON u.id = ta.user_id
-    WHERE t.id = ? AND u.role = ? LIMIT 1
-  `).get(id, ASSOCIATE_ROLE);
+    WHERE t.id = ? AND u.role IN ('seo_associate', 'senior_seo_associate') LIMIT 1
+  `).get(id);
   if (!owns) return { error: 'Template not found' };
 
   await db.prepare('UPDATE associate_tasks SET template_id = NULL WHERE template_id = ?').run(id);
@@ -203,8 +203,8 @@ async function reviewTaskSubmission(assigneeId, decision) {
       UPDATE associate_task_assignees
       SET approval_status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, review_seen = 0
       WHERE id = ? AND is_late = 1 AND approval_status = 'pending'
-        AND user_id IN (SELECT id FROM users WHERE role = ?)
-    `).run(decision, session.userId, id, ASSOCIATE_ROLE);
+        AND user_id IN (SELECT id FROM users WHERE role IN ('seo_associate', 'senior_seo_associate'))
+    `).run(decision, session.userId, id);
 
     if (!result.changes) return { error: 'This submission is no longer pending review' };
 

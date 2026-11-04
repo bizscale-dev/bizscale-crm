@@ -32,7 +32,7 @@ export default async function ClientsPage() {
     associates = (await db.prepare(`
       SELECT DISTINCT u.id, u.name
       FROM users u
-      WHERE u.role IN ('seo_associate', 'associate') AND u.is_active = 1
+      WHERE u.role IN ('seo_associate', 'senior_seo_associate', 'associate') AND u.is_active = 1
       AND u.id IN (SELECT DISTINCT assigned_associate_id FROM clients WHERE campaign_id = ?)
       ORDER BY u.name
     `).all(campaign.id)).map(a => ({ ...a }));

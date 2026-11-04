@@ -77,7 +77,7 @@ export default function UserList({ users, assignedAssociates, assignedWriters, h
                   {hasActiveCampaign && u.role === 'admin' && <span style={{ color: 'var(--text-muted)' }}>—</span>}
                   {hasActiveCampaign && ['manager', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa', 'web_developer_seo'].includes(u.role) && <span style={{ color: 'var(--text-muted)' }}>—</span>}
                   
-                  {hasActiveCampaign && (u.role === 'seo_associate' || u.role === 'writer') && (
+                  {hasActiveCampaign && (u.role === 'seo_associate' || u.role === 'senior_seo_associate' || u.role === 'writer') && (
                     isAssigned ? (
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                         <span style={{ color: 'var(--success)', fontSize: '0.875rem' }}>Assigned</span>
@@ -86,7 +86,7 @@ export default function UserList({ users, assignedAssociates, assignedWriters, h
                         </button>
                       </div>
                     ) : (
-                      <form action={u.role === 'seo_associate' ? assignAssociate : assignWriter} style={{ display: 'flex', gap: '0.5rem' }}>
+                      <form action={u.role === 'seo_associate' || u.role === 'senior_seo_associate' ? assignAssociate : assignWriter} style={{ display: 'flex', gap: '0.5rem' }}>
                         <input type="hidden" name="id" value={u.id} />
                         <button type="submit" className="btn" style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', backgroundColor: 'var(--primary)', color: 'white' }}>
                           Assign
@@ -151,6 +151,7 @@ function RoleBadge({ role }) {
     seo_manager: { label: 'SEO Associate Manager', tone: 'warning' },
     web_seo_manager: { label: 'Web SEO Associate Manager', tone: 'warning' },
     seo_associate: { label: 'SEO Associate', tone: 'brand' },
+    senior_seo_associate: { label: 'Senior SEO Associate', tone: 'brand' },
     web_seo_associate: { label: 'Web SEO Associate', tone: 'neutral' },
     web_developer_seo: { label: 'Web Developer - SEO', tone: 'brand' },
     writer: { label: 'Writer', tone: 'success' },

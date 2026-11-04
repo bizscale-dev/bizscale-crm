@@ -15,6 +15,7 @@ export const revalidate = 0;
 const ROLE_LABELS = {
   web_seo_manager: 'Web SEO Manager',
   seo_manager: 'SEO Manager',
+  senior_seo_associate: 'Senior SEO Associate',
   writers_manager: 'Writers Manager',
 };
 

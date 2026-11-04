@@ -12,7 +12,7 @@ const MAX_BASE64_LENGTH = 2 * 1024 * 1024 * 1.37;
 
 async function requireSeoAssociate() {
   const session = await verifySession();
-  if (!session || session.role !== 'seo_associate') {
+  if (!session || !['seo_associate', 'senior_seo_associate'].includes(session.role)) {
     return { error: 'Not authorized' };
   }
   return { session };

@@ -17,7 +17,7 @@ export default async function AdminDashboard() {
 
   const stats = {
     totalUsers: (await db.prepare("SELECT COUNT(*) as c FROM users WHERE role != 'admin'").get()).c,
-    totalAssociates: (await db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'seo_associate' AND is_active = 1").get()).c,
+    totalAssociates: (await db.prepare("SELECT COUNT(*) as c FROM users WHERE role IN ('seo_associate','senior_seo_associate') AND is_active = 1").get()).c,
     totalWriters: (await db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'writer' AND is_active = 1").get()).c,
     totalClients: campaign ? (await db.prepare('SELECT COUNT(*) as c FROM clients WHERE campaign_id = ?').get(campaign.id)).c : 0,
     totalSEOTasks: campaign ? (await db.prepare('SELECT COUNT(*) as c FROM seo_tasks WHERE campaign_id = ?').get(campaign.id)).c : 0,

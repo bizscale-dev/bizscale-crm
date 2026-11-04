@@ -57,7 +57,7 @@ export async function ensureRecurringAssociateTasks() {
       await createNotificationsForUsers(db, userIds, {
         title: 'New Task from Manager',
         message: `${t.task_text.slice(0, 140)} — due ${dueDateStr} ${t.due_time}`,
-        link: getTasksLinkForRole(role),
+        link: getTasksLinkForRole(role === 'senior_seo_associate' ? 'seo_associate' : role),
       });
     }
     spawned++;

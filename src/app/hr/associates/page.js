@@ -58,7 +58,7 @@ export default async function HrAssociatesPage({ searchParams }) {
   const webCampaign = pickCampaign(webAll, sp.web);
 
   const seoAssociates = await db.prepare(
-    "SELECT id, name, email FROM users WHERE role = 'seo_associate' AND is_active = 1 ORDER BY name"
+    "SELECT id, name, email FROM users WHERE role IN ('seo_associate','senior_seo_associate') AND is_active = 1 ORDER BY name"
   ).all();
   const webAssociates = await db.prepare(
     "SELECT id, name, email FROM users WHERE role = 'web_seo_associate' AND is_active = 1 ORDER BY name"

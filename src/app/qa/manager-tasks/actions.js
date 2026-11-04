@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifications';
 import { parseResolveDays } from '@/lib/qaReports';
 
-const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
+const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager', 'senior_seo_associate'];
 
 async function requireQa() {
   const session = await verifySession();

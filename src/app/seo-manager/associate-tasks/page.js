@@ -4,15 +4,15 @@ import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
 
 export const revalidate = 0;
 
-const ASSOCIATE_ROLE = 'seo_associate';
+const ASSOCIATE_ROLE = 'seo_associate'; // only used for the notification link — seniors share it
 
 export default async function SeoManagerAssociateTasksPage() {
   await ensureRecurringAssociateTasks();
   const db = await getDb();
 
   const associates = await db.prepare(`
-    SELECT id, name FROM users WHERE role = ? AND is_active = 1 ORDER BY name
-  `).all(ASSOCIATE_ROLE);
+    SELECT id, name FROM users WHERE role IN ('seo_associate', 'senior_seo_associate') AND is_active = 1 ORDER BY name
+  `).all();
 
   const rows = await db.prepare(`
     SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency,
@@ -22,9 +22,9 @@ export default async function SeoManagerAssociateTasksPage() {
     FROM associate_tasks t
     JOIN associate_task_assignees a ON a.task_id = t.id
     JOIN users u ON u.id = a.user_id
-    WHERE u.role = ?
+    WHERE u.role IN ('seo_associate', 'senior_seo_associate')
     ORDER BY t.created_at DESC, u.name ASC
-  `).all(ASSOCIATE_ROLE);
+  `).all();
 
   const byTask = new Map();
   for (const row of rows) {
@@ -60,10 +60,10 @@ export default async function SeoManagerAssociateTasksPage() {
     FROM associate_task_templates t
     WHERE EXISTS (
       SELECT 1 FROM associate_task_template_assignees ta
-      JOIN users u ON u.id = ta.user_id WHERE ta.template_id = t.id AND u.role = ?
+      JOIN users u ON u.id = ta.user_id WHERE ta.template_id = t.id AND u.role IN ('seo_associate', 'senior_seo_associate')
     )
     ORDER BY t.created_at DESC
-  `).all(ASSOCIATE_ROLE);
+  `).all();
 
   return (
     <AssociateTasksClient

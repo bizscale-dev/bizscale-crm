@@ -86,7 +86,7 @@ export async function POST(request) {
       for (const [associateName, clientNames] of Object.entries(associateAssignments)) {
         // Find the associate user
         const associate = await db.prepare(
-          "SELECT id FROM users WHERE role = 'seo_associate' AND name = ? AND is_active = 1"
+          "SELECT id FROM users WHERE role IN ('seo_associate','senior_seo_associate') AND name = ? AND is_active = 1"
         ).get(associateName);
 
         if (associate) {

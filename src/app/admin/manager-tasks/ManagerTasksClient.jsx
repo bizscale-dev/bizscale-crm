@@ -876,7 +876,7 @@ function OnboardingTab({ templates, webManagers }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <ChecklistEditor keyName="gbp" template={templates.gbp}>
         <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-          Created automatically for every new SEO client (daily check at 4 PM) and assigned to Talha or M Hussain by the client&apos;s Support number.
+          Created automatically for every new SEO client (daily check at 4 PM) and assigned to M Hussain, Hamza or Mudassar by the client&apos;s Support number.
         </p>
       </ChecklistEditor>
       <ChecklistEditor keyName="web" template={templates.web}>

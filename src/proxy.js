@@ -19,6 +19,7 @@ export async function proxy(req) {
   const roleMap = {
     admin: '/admin',
     seo_associate: '/associate',
+    senior_seo_associate: '/associate',
     writer: '/writer',
     manager: '/manager',
     web_seo_associate: '/web-associate',

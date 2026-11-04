@@ -9,6 +9,7 @@ import { SOURCES, bucketize, filedDate, formatDay, inRange, monthRange, statusOf
 const ROLE_LABELS = {
   web_seo_manager: 'Web SEO Managers',
   seo_manager: 'SEO Managers',
+  senior_seo_associate: 'Senior SEO Associates',
   writers_manager: 'Writers Managers',
 };
 const SEVERITY_COLORS = { high: 'var(--danger)', medium: '#f59e0b', low: 'var(--success)' };

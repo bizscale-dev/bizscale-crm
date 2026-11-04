@@ -7,6 +7,7 @@ export const revalidate = 0;
 const ROLE_LABELS = {
   web_seo_manager: 'Web SEO Managers',
   seo_manager: 'SEO Managers',
+  senior_seo_associate: 'Senior SEO Associates',
   writers_manager: 'Writers Managers',
 };
 
@@ -15,7 +16,7 @@ export default async function QaExecutivesPage() {
 
   const managers = await db.prepare(`
     SELECT id, name, role FROM users
-    WHERE role IN ('web_seo_manager', 'seo_manager', 'writers_manager') AND is_active = 1
+    WHERE role IN ('web_seo_manager', 'seo_manager', 'writers_manager', 'senior_seo_associate') AND is_active = 1
     ORDER BY role, name
   `).all();
 

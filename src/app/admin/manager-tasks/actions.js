@@ -8,7 +8,7 @@ import { createNotificationsForUsers, getTasksLinkForRole } from '@/lib/notifica
 import { parseUrgency } from '@/lib/taskUrgency';
 import { ONBOARDING_KEYS, validateSections, createOnboardingTasks } from '@/lib/onboardingChecklists';
 
-const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager'];
+const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager', 'senior_seo_associate'];
 
 async function requireAdmin() {
   const session = await verifySession();

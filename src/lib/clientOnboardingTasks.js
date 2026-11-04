@@ -3,7 +3,7 @@ import { createOnboardingTasks } from '@/lib/onboardingChecklists';
 
 /**
  * Creates the GBP onboarding task for one new SEO client, assigned to the SEO
- * manager who owns the client (Support column: 1-5 M Hussain, 6-10 Talha — see
+ * manager who owns the client (Support column: 1-4 M Hussain, 5-7 Hamza, 8-10 Mudassar — see
  * qaClientOwners.js). The checklist and its due days are edited by admin in
  * Manager Tasks → Onboarding (see onboardingChecklists.js). Does nothing when
  * the client has no Support number or its manager can't be found. Returns the
@@ -17,7 +17,7 @@ export async function createClientOnboardingTasks(db, { clientName, supportNumbe
 
   const manager = await db.prepare(`
     SELECT id, role FROM users
-    WHERE role = 'seo_manager' AND is_active = 1 AND lower(trim(name)) = ?
+    WHERE role IN ('seo_manager', 'senior_seo_associate') AND is_active = 1 AND lower(trim(name)) = ?
   `).get(range.managerName.toLowerCase());
   const admin = await db.prepare(`
     SELECT id FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY id LIMIT 1

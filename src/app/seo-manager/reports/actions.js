@@ -7,7 +7,7 @@ import { submitFixForReview } from '@/lib/qaReports';
 
 async function requireSeoManager() {
   const session = await verifySession();
-  if (!session || session.role !== 'seo_manager') {
+  if (!session || !['seo_manager', 'senior_seo_associate'].includes(session.role)) {
     return { error: 'Not authorized' };
   }
   return { session };
@@ -45,6 +45,7 @@ export async function resolveReport(reportId, note) {
   if (result.error) return result;
 
   revalidatePath('/seo-manager/reports');
+  revalidatePath('/associate/senior-reports');
   revalidatePath('/qa/reports');
   return { success: true };
 }

@@ -12,7 +12,7 @@ const MAX_BASE64_LENGTH = 2 * 1024 * 1024 * 1.37;
 
 async function requireSeoManager() {
   const session = await verifySession();
-  if (!session || session.role !== 'seo_manager') {
+  if (!session || !['seo_manager', 'senior_seo_associate'].includes(session.role)) {
     return { error: 'Not authorized' };
   }
   return { session };
@@ -114,6 +114,7 @@ export async function submitTaskProof(taskId, description, proofImageBase64, lat
     );
 
     revalidatePath('/seo-manager/tasks');
+    revalidatePath('/associate/senior-tasks');
 
     return { success: true, isLate };
   } catch (err) {

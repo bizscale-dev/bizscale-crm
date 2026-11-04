@@ -170,7 +170,7 @@ export async function importAssociatesFromSheet(prevState, formData) {
     for (const associate of associates) {
       try {
         // Check if associate already exists (by name)
-        let existing = await db.prepare("SELECT id FROM users WHERE name = ? AND role = 'seo_associate'").get(associate.name);
+        let existing = await db.prepare("SELECT id FROM users WHERE name = ? AND role IN ('seo_associate','senior_seo_associate')").get(associate.name);
         let associateId;
 
         if (existing) {
@@ -194,7 +194,7 @@ export async function importAssociatesFromSheet(prevState, formData) {
           );
 
           // Get the newly created user id
-          const newUser = await db.prepare("SELECT id FROM users WHERE name = ? AND role = 'seo_associate'").get(associate.name);
+          const newUser = await db.prepare("SELECT id FROM users WHERE name = ? AND role IN ('seo_associate','senior_seo_associate')").get(associate.name);
           associateId = newUser.id;
           createdCount++;
         }

@@ -60,7 +60,7 @@ export async function POST(request) {
       for (const [associateName, clientNames] of Object.entries(associateAssignments)) {
         // Get or create associate
         let assocUser = await db.prepare(
-          "SELECT id FROM users WHERE name = ? AND role = 'seo_associate'"
+          "SELECT id FROM users WHERE name = ? AND role IN ('seo_associate','senior_seo_associate')"
         ).get(associateName);
 
         if (!assocUser) {
@@ -76,7 +76,7 @@ export async function POST(request) {
             );
 
             assocUser = await db.prepare(
-              "SELECT id FROM users WHERE name = ? AND role = 'seo_associate'"
+              "SELECT id FROM users WHERE name = ? AND role IN ('seo_associate','senior_seo_associate')"
             ).get(associateName);
 
             console.log(`Created new SEO Associate: ${associateName}`);

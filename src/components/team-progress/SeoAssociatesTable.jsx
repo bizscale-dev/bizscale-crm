@@ -88,7 +88,7 @@ export default async function SeoAssociatesTable({ basePath, campaign: campaignP
       (SELECT COUNT(*) FROM clients WHERE assigned_associate_id = u.id AND campaign_id = ? AND is_active = 1
          AND tunnel_status = 'active' AND funnel_month = 3) as funnel_m3
     FROM users u
-    WHERE u.role IN ('seo_associate', 'associate')
+    WHERE u.role IN ('seo_associate', 'senior_seo_associate', 'associate')
     ORDER BY u.name ASC
   `).all(campaign.id, campaign.id, campaign.id, today, campaign.id, campaign.id, campaign.id, campaign.id, campaign.id) : [];
 

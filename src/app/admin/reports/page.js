@@ -8,7 +8,7 @@ export default async function ReportsPage() {
 
   const activityUsers = await db.prepare(`
     SELECT id, name, role, is_active FROM users
-    WHERE role IN ('seo_associate', 'writer', 'web_seo_associate')
+    WHERE role IN ('seo_associate', 'senior_seo_associate', 'writer', 'web_seo_associate')
     ORDER BY role, name
   `).all();
 

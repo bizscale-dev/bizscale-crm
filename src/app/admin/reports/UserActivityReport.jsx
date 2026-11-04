@@ -7,12 +7,14 @@ const BRAND_COLOR = '#16b293';
 
 const ROLE_LABELS = {
   seo_associate: 'SEO Associates',
+  senior_seo_associate: 'Senior SEO Associates',
   writer: 'Writers',
   web_seo_associate: 'Web SEO Associates',
 };
 
 const ROLE_ICONS = {
   seo_associate: '🔗',
+  senior_seo_associate: '🔗',
   writer: '✍️',
   web_seo_associate: '🌐',
 };
@@ -339,7 +341,7 @@ function SummaryBoxes({ report }) {
   const funnelPending = report.funnelPendingShortfall;
   const regularCompleted = report.totalCompleted - report.funnelCompleted;
   const regularPending = report.pendingShortfall - funnelPending;
-  const showBacklogBox = report.user.role === 'seo_associate' || report.user.role === 'web_seo_associate';
+  const showBacklogBox = report.user.role === 'seo_associate' || report.user.role === 'senior_seo_associate' || report.user.role === 'web_seo_associate';
 
   return (
     <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>

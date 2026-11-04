@@ -8,7 +8,7 @@ import { revalidatePath } from 'next/cache';
 
 async function requireAssignedAssociate() {
   const session = await verifySession();
-  if (!session || session.role !== 'seo_associate') {
+  if (!session || !['seo_associate', 'senior_seo_associate'].includes(session.role)) {
     return { error: 'Not authorized' };
   }
 
