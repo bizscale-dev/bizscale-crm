@@ -1,16 +1,23 @@
 ﻿import { getDb } from '@/lib/db';
-import { getActiveWebSeoCampaign } from '@/lib/services';
+import CampaignSelect from './CampaignSelect';
 import Link from 'next/link';
 
 const POST_TYPE_LABELS = { guestpost: 'Guest Post', web2: 'Web 2.0' };
 
-export default async function WebSeoAssociatesProgress({ basePath } = {}) {
+export default async function WebSeoAssociatesProgress({ basePath, searchParams } = {}) {
   const db = await getDb();
-  const campaign = await getActiveWebSeoCampaign();
+  const wanted = ((await searchParams) || {}).campaign;
+  // The chosen campaign, else the active one, else the latest — the page never goes blank
+  // between campaigns.
+  const all = await db.prepare('SELECT * FROM webseo_campaigns ORDER BY id DESC').all();
+  const campaign = all.find((c) => String(c.id) === String(wanted))
+    || all.find((c) => c.status === 'active')
+    || all[0];
 
   if (!campaign) {
-    return <div className="card"><p style={{ color: 'var(--danger)', margin: 0 }}>No active campaign found.</p></div>;
+    return <div className="card"><p style={{ color: 'var(--text-muted)', margin: 0 }}>No Web SEO campaigns yet.</p></div>;
   }
+  const detailQuery = campaign.status === 'active' && !wanted ? '' : `?campaign=${campaign.id}`;
 
   const associates = await db.prepare(`
     SELECT u.id, u.name, u.email,
@@ -36,6 +43,12 @@ export default async function WebSeoAssociatesProgress({ basePath } = {}) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <h2 style={{ fontSize: '1.5rem', margin: 0 }}>Web SEO Associates Progress</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <CampaignSelect campaigns={all} selectedId={campaign.id} />
+        {campaign.status !== 'active' && (
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>No campaign is active — showing {campaign.name} ({campaign.status}).</span>
+        )}
+      </div>
 
       {associateDetail.length === 0 ? (
         <div className="card"><p style={{ color: 'var(--text-muted)', margin: 0 }}>No Web SEO Associates assigned to this campaign.</p></div>
@@ -55,7 +68,7 @@ export default async function WebSeoAssociatesProgress({ basePath } = {}) {
                     <div style={{ fontSize: '0.875rem', color: pct >= 100 ? 'var(--success)' : 'var(--text-muted)' }}>{pct}% overall</div>
                   </div>
                   {basePath && (
-                    <Link href={`${basePath}/${a.id}`} style={{
+                    <Link href={`${basePath}/${a.id}${detailQuery}`} style={{
                       padding: '0.4rem 0.75rem',
                       backgroundColor: 'var(--primary)',
                       color: 'white',
