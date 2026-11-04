@@ -1,12 +1,16 @@
 // Which manager owns which client — used by QA's Executives page so an issue
 // raised on many clients only goes to the manager who actually has each one.
 //
-//  - SEO clients: the sheet's Support column (clients.support_number, 1-10).
-//    1-4 -> M Hussain, 5-7 -> Hamza, 8-10 -> Mudassar (Hamza and Mudassar are Senior SEO
-//    Associates).
+//  - SEO clients: in QA every SEO client (support 1-10, or none) belongs to M Hussain —
+//    QA_SEO_OWNER. The Support split below (1-4 M Hussain, 5-7 Hamza, 8-10 Mudassar, the
+//    latter two being Senior SEO Associates) is only for the onboarding tasks.
 //  - Web clients: the sheet's associate name (web_clients.sheet_associate_name)
 //    is the web SEO manager's name (Ammar / Sikandar).
 //  - Writers managers have every client.
+// Who QA reports on SEO clients go to.
+export const QA_SEO_OWNER = 'M Hussain';
+
+// Support-number ownership — used for client onboarding tasks (clientOnboardingTasks.js), not QA.
 export const SEO_SUPPORT_RANGES = [
   { managerName: 'M Hussain', from: 1, to: 4 },
   { managerName: 'Hamza', from: 5, to: 7 },
@@ -36,15 +40,14 @@ export async function getClientOwnership(db, managers) {
   // dropped from the sheet get deactivated by the daily sync and so fall out of the roster
   // (their old reports keep the name).
   const seo = await db.prepare(`
-    SELECT TRIM(c.name) AS name, c.support_number FROM clients c
+    SELECT TRIM(c.name) AS name FROM clients c
     WHERE c.campaign_id = COALESCE(
         (SELECT id FROM campaigns WHERE status = 'active' ORDER BY id DESC LIMIT 1),
         (SELECT id FROM campaigns ORDER BY id DESC LIMIT 1))
       AND c.is_active = 1 AND c.name IS NOT NULL AND TRIM(c.name) != ''
   `).all();
   for (const c of seo) {
-    const range = c.support_number == null ? null : SEO_SUPPORT_RANGES.find((r) => c.support_number >= r.from && c.support_number <= r.to);
-    add(c.name, range ? byName.get(norm(range.managerName)) : null);
+    add(c.name, byName.get(norm(QA_SEO_OWNER)));
   }
 
   const web = await db.prepare(`
