@@ -5,7 +5,6 @@ import { addFunnelTemplate, deleteFunnelTemplate } from './actions';
 
 const BRAND_COLOR = '#16b293';
 const CATEGORIES = ['Citations', 'Profiles', 'Web 2.0', 'Image Submission', 'PDF Submission'];
-const WEEKS = [1, 2, 3, 4];
 
 export default function FunnelTemplatesClient({ campaign, existingTemplates }) {
   const [loading, setLoading] = useState(false);
@@ -128,7 +127,7 @@ export default function FunnelTemplatesClient({ campaign, existingTemplates }) {
                   fontSize: '0.875rem'
                 }}
               >
-                {WEEKS.map(w => <option key={w} value={w}>Week {w}</option>)}
+                {Array.from({ length: campaign?.funnel_month1_weeks === 2 ? 2 : 4 }, (_, i) => i + 1).map(w => <option key={w} value={w}>Week {w}</option>)}
               </select>
             </div>
 
@@ -254,7 +253,7 @@ export default function FunnelTemplatesClient({ campaign, existingTemplates }) {
           <p style={{ color: 'var(--text-muted)' }}>No reference platforms configured yet. Click &quot;Edit Checklist&quot; to add some.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            {WEEKS.map(week => {
+            {Array.from({ length: campaign?.funnel_month1_weeks === 2 ? 2 : 4 }, (_, i) => i + 1).map(week => {
               const categoriesForWeek = groupedTemplates[week] || {};
               if (Object.keys(categoriesForWeek).length === 0) return null;
 

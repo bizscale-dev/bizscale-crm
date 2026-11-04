@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/db';
 import { getFunnelCampaign } from '@/lib/services';
 import { LINK_TYPES, LINK_TYPE_LABELS } from '@/lib/linkTargetConstants';
+import { month1Weeks } from '@/lib/funnelConstants';
 import FunnelTemplatesClient from './FunnelTemplatesClient';
 import FunnelSettingsClient from './FunnelSettingsClient';
 import FunnelClientsTable from './FunnelClientsTable';
@@ -159,7 +160,7 @@ export default async function FunnelPage() {
               outside the system) whenever you&apos;re ready.
             </p>
             <Editable readOnly={readOnly}>
-              <FunnelHoldClientsTable holdClients={holdClients} campaignId={campaign.id} />
+              <FunnelHoldClientsTable holdClients={holdClients} campaignId={campaign.id} weeks={month1Weeks(campaign)} />
             </Editable>
           </div>
 
@@ -170,7 +171,7 @@ export default async function FunnelPage() {
             </div>
 
             <Editable readOnly={readOnly}>
-              <FunnelClientsTable funnelClients={funnelClients} />
+              <FunnelClientsTable funnelClients={funnelClients} weeks={month1Weeks(campaign)} />
             </Editable>
           </div>
 

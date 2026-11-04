@@ -62,6 +62,23 @@ export const FUNNEL_MONTH1_WEEK_TARGETS = {
   4: { web2: 5 },
 };
 
+// Campaigns created from now on run Month 1 over 2 weeks (10 working days) instead of 4. The
+// client's 38 links are unchanged — 20 in week 1, the other 18 in week 2. Campaigns that already
+// exist keep funnel_month1_weeks = 4 and the table above, so no current funnel data changes.
+export const FUNNEL_MONTH1_WEEK_TARGETS_2W = {
+  1: { citation: 8, profile: 5, image: 3, pdf: 2, web2: 2 },
+  2: { citation: 7, profile: 5, image: 2, pdf: 1, web2: 3 },
+};
+
+// How many weeks Month 1 lasts for this campaign (2 for new campaigns, 4 for older ones).
+export function month1Weeks(campaign) {
+  return campaign?.funnel_month1_weeks === 2 ? 2 : 4;
+}
+
+export function month1WeekTargets(campaign) {
+  return month1Weeks(campaign) === 2 ? FUNNEL_MONTH1_WEEK_TARGETS_2W : FUNNEL_MONTH1_WEEK_TARGETS;
+}
+
 // Maps each LINK_TYPES entry to the campaigns column holding its funnel-month bonus count.
 export const FUNNEL_BONUS_FIELDS = {
   web2: 'funnel_bonus_web2',

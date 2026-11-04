@@ -2,7 +2,7 @@ import moment from 'moment';
 import { getDb } from './db';
 import { LINK_TYPES } from './services';
 import { getOffDaysSet, getWorkingDays } from './offDays';
-import { FUNNEL_BONUS_FIELDS, FUNNEL_MONTH1_WEEK_TARGETS } from './funnelConstants';
+import { FUNNEL_BONUS_FIELDS, month1Weeks, month1WeekTargets } from './funnelConstants';
 
 // A funnel client in Month 2 or 3 is tracked through this same seo_tasks pipeline
 // (day-distributed, Google Sheet-synced) — their target for each link type is ONLY the
@@ -288,7 +288,10 @@ export async function generateSEOTasks(campaignId, pinThroughDate = null) {
       const week4WorkingDay = sortedWorkingDays[sortedWorkingDays.length - 1];
       const remainingWorkingDays = sortedWorkingDays.slice(0, -1);
 
-      const bucketCount = 3;
+      // Weeks 1..N-1 get a chunk of working days each; the last working day is week N
+      // (N = 4 for older campaigns, 2 for campaigns created from now on).
+      const m1Weeks = month1Weeks(campaign);
+      const bucketCount = m1Weeks - 1;
       const baseSize = Math.floor(remainingWorkingDays.length / bucketCount);
       const remainder = remainingWorkingDays.length % bucketCount;
       const weekBuckets = [];
@@ -308,7 +311,7 @@ export async function generateSEOTasks(campaignId, pinThroughDate = null) {
           occurrences.push({ dayNumber: day.dayNumber, dateStr: day.dateStr, week: weekIdx + 1 });
         });
         if (week4WorkingDay) {
-          occurrences.push({ dayNumber: week4WorkingDay.dayNumber, dateStr: week4WorkingDay.dateStr, week: 4 });
+          occurrences.push({ dayNumber: week4WorkingDay.dayNumber, dateStr: week4WorkingDay.dateStr, week: m1Weeks });
         }
         clientOccurrenceDays.set(client.id, occurrences);
       });
@@ -461,7 +464,7 @@ export async function generateSEOTasks(campaignId, pinThroughDate = null) {
 
         for (const [week, weekOccurrences] of occurrencesByWeek.entries()) {
           if (week < month1StartWeek || week > month1CurrentWeek) continue;
-          const weekTargets = FUNNEL_MONTH1_WEEK_TARGETS[week] || {};
+          const weekTargets = month1WeekTargets(campaign)[week] || {};
 
           for (const linkType of LINK_TYPES) {
             const weekTarget = weekTargets[linkType] || 0;

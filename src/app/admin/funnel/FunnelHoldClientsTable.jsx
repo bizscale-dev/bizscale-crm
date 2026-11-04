@@ -31,7 +31,7 @@ const inputStyle = {
 // src/lib/funnel.js) — each row lets the admin place that client into Funnel
 // Month 1 (optionally starting at a later week), skip straight to Month 2/3, or
 // bypass the Funnel entirely into the normal client list.
-export default function FunnelHoldClientsTable({ holdClients, campaignId }) {
+export default function FunnelHoldClientsTable({ holdClients, campaignId, weeks = 4 }) {
   const router = useRouter();
   const [startWeekByClient, setStartWeekByClient] = useState({});
   const [isPending, startTransition] = useTransition();
@@ -128,10 +128,7 @@ export default function FunnelHoldClientsTable({ holdClients, campaignId }) {
                     onChange={(e) => setStartWeekByClient(current => ({ ...current, [client.id]: parseInt(e.target.value, 10) }))}
                     style={{ ...inputStyle, cursor: 'pointer' }}
                   >
-                    <option value={1}>Week 1</option>
-                    <option value={2}>Week 2</option>
-                    <option value={3}>Week 3</option>
-                    <option value={4}>Week 4</option>
+                    {Array.from({ length: weeks }, (_, i) => i + 1).map((w) => <option key={w} value={w}>Week {w}</option>)}
                   </select>
                 </td>
                 <td style={{ padding: '0.75rem 0' }}>

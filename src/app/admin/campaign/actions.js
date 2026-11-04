@@ -29,8 +29,8 @@ export async function createCampaign(prevState, formData) {
       INSERT INTO campaigns (name, total_days, start_date, clients_per_day,
         links_per_client, web2_target, guestpost_target, pdf_target,
         profile_target, citation_target, image_target,
-        writer_approach, writers_daily_target, posts_per_client, writer_clients_per_day, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+        writer_approach, writers_daily_target, posts_per_client, writer_clients_per_day, status, funnel_month1_weeks)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 2)
     `).run(
       name, total_days, start_date, clients_per_day,
       links_per_client, web2_target, guestpost_target,

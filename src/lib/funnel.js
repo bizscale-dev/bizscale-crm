@@ -1,5 +1,5 @@
 import { getDb } from './db';
-import { FUNNEL_MONTH1_ITEMS } from './funnelConstants';
+import { FUNNEL_MONTH1_ITEMS, month1Weeks } from './funnelConstants';
 import { computeFunnelMonth1Window, computeFunnelNextMonthWindow } from './campaign-cycle';
 import { generateSEOTasks } from './taskService';
 import { getOffDaysSet, getWorkingDays } from './offDays';
@@ -27,17 +27,21 @@ export async function seedMonth1TemplatesIfMissing(campaignId) {
 
   await db.prepare('DELETE FROM tunnel_templates WHERE campaign_id = ? AND week_number = 0').run(campaignId);
 
+  // A 2-week campaign folds the 4-week reference list: weeks 1-2 -> week 1, weeks 3-4 -> week 2.
+  const campaignRow = await db.prepare('SELECT funnel_month1_weeks FROM campaigns WHERE id = ?').get(campaignId);
+  const weekOf = (w) => (month1Weeks(campaignRow) === 2 ? (w <= 2 ? 1 : 2) : w);
+
   const insertSql = `
     INSERT INTO tunnel_templates (campaign_id, week_number, category, platform, url, note, order_in_week)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
   const orderCounters = {};
   await db.batch(FUNNEL_MONTH1_ITEMS.map((item) => {
-    const key = `${item.week_number}|${item.category}`;
+    const key = `${weekOf(item.week_number)}|${item.category}`;
     orderCounters[key] = (orderCounters[key] || 0) + 1;
     return {
       sql: insertSql,
-      args: [campaignId, item.week_number, item.category, item.platform, item.url, item.note, orderCounters[key] - 1],
+      args: [campaignId, weekOf(item.week_number), item.category, item.platform, item.url, item.note, orderCounters[key] - 1],
     };
   }));
 
@@ -58,12 +62,12 @@ export async function seedMonth1TemplatesIfMissing(campaignId) {
 export async function enrollClientInFunnel(clientId, campaignId, enrollDate = todayStr(), startWeek = 1) {
   const db = await getDb();
 
-  const week = [1, 2, 3, 4].includes(startWeek) ? startWeek : 1;
-
   await seedMonth1TemplatesIfMissing(campaignId);
 
   const campaign = await db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
   if (!campaign) throw new Error('Campaign not found');
+
+  const week = Number.isInteger(startWeek) && startWeek >= 1 && startWeek <= month1Weeks(campaign) ? startWeek : 1;
 
   const { monthEndDate, cycleIndexAtEnroll } = computeFunnelMonth1Window(campaign.start_date, enrollDate);
 
@@ -100,9 +104,11 @@ export async function advanceMonth1Week(clientId) {
     return { advanced: false, error: 'Client is not currently on Month 1 of the funnel' };
   }
 
+  const campaignRow = await db.prepare('SELECT funnel_month1_weeks FROM campaigns WHERE id = ?').get(client.campaign_id);
+  const lastWeek = month1Weeks(campaignRow);
   const currentWeek = client.funnel_month1_current_week || client.funnel_month1_start_week || 1;
-  if (currentWeek >= 4) {
-    return { advanced: false, error: 'Already at week 4 — use "Move to Month 2" instead' };
+  if (currentWeek >= lastWeek) {
+    return { advanced: false, error: `Already at week ${lastWeek} — use "Move to Month 2" instead` };
   }
 
   const nextWeek = currentWeek + 1;
@@ -169,6 +175,7 @@ export async function autoAdvanceMonth1Weeks(campaignId) {
   const db = await getDb();
   const today = todayStr();
   const offDays = await getOffDaysSet(campaignId);
+  const lastWeek = month1Weeks(await db.prepare('SELECT funnel_month1_weeks FROM campaigns WHERE id = ?').get(campaignId));
 
   const clients = await db.prepare(`
     SELECT id, funnel_month1_start_week s, funnel_month1_current_week c, funnel_month1_week_started_on started
@@ -184,7 +191,7 @@ export async function autoAdvanceMonth1Weeks(campaignId) {
         .run(getWorkingDays(today, 1, offDays)[0]?.dateStr || today, cl.id);
       continue;
     }
-    if (week >= 4) continue;
+    if (week >= lastWeek) continue;
 
     const fifth = getWorkingDays(cl.started, 5, offDays)[4];
     if (!fifth || today <= fifth.dateStr) continue; // week's 5th working day not over yet

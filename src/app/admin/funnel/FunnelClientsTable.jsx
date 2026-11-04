@@ -19,7 +19,7 @@ function formatDateOnly(dateStr) {
   return `${d} ${MONTH_NAMES[m - 1]} ${y}`;
 }
 
-export default function FunnelClientsTable({ funnelClients }) {
+export default function FunnelClientsTable({ funnelClients, weeks = 4 }) {
   const router = useRouter();
   const [selected, setSelected] = useState([]);
   const [isPending, startTransition] = useTransition();
@@ -198,7 +198,7 @@ export default function FunnelClientsTable({ funnelClients }) {
                       fontWeight: '600'
                     }}>
                       Month {client.funnel_month} of 3
-                      {client.funnel_month === 1 && ` — Week ${client.funnel_month1_current_week || client.funnel_month1_start_week || 1} of 4`}
+                      {client.funnel_month === 1 && ` — Week ${client.funnel_month1_current_week || client.funnel_month1_start_week || 1} of ${weeks}`}
                     </span>
                   </td>
                   <td style={{ padding: '0.75rem 0' }}>
@@ -225,7 +225,7 @@ export default function FunnelClientsTable({ funnelClients }) {
                       }}>
                         View Details
                       </Link>
-                      {client.funnel_month === 1 && (client.funnel_month1_current_week || client.funnel_month1_start_week || 1) < 4 && (
+                      {client.funnel_month === 1 && (client.funnel_month1_current_week || client.funnel_month1_start_week || 1) < weeks && (
                         <button
                           type="button"
                           onClick={() => handleAdvanceWeek(client.id, client.name, (client.funnel_month1_current_week || client.funnel_month1_start_week || 1) + 1)}
