@@ -1,5 +1,6 @@
 import { createClient } from '@libsql/client';
 import bcrypt from 'bcryptjs';
+import { createHash } from 'crypto';
 import { getDbConfig } from '@/lib/dbConfig';
 
 let rawClient;
@@ -84,7 +85,32 @@ function makeDb(raw) {
   };
 }
 
+// runMigrations is ~250 sequential statements (every ALTER/CREATE, each one a network round trip),
+// and it used to run on EVERY serverless cold start. With the database on a VPS that is tens of
+// seconds of queries per cold start. So: fingerprint this function's own source (which contains
+// every statement and migration step), store it in `settings` after a successful run, and skip the
+// whole thing while the fingerprint is unchanged. Any edit to the migrations changes the
+// fingerprint, so the next process to start still applies them — one query instead of ~250.
 async function runMigrations(raw) {
+  const signature = createHash('sha1').update(runMigrationsBody.toString()).digest('hex');
+  try {
+    const row = await raw.execute({ sql: "SELECT value FROM settings WHERE key = 'migration_signature'" });
+    if (row.rows[0]?.value === signature) return;
+  } catch {
+    // settings table missing (brand-new database): fall through and run everything.
+  }
+  await runMigrationsBody(raw);
+  try {
+    await raw.execute({
+      sql: "INSERT INTO settings (key, value) VALUES ('migration_signature', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP",
+      args: [signature],
+    });
+  } catch {
+    // Not fatal — the next start just runs the migrations again.
+  }
+}
+
+async function runMigrationsBody(raw) {
   // Idempotent schema evolution: each ALTER TABLE/CREATE TABLE runs against whatever
   // schema state Turso currently has. try/catch per-statement because SQLite has no
   // "ADD COLUMN IF NOT EXISTS" — a failure here just means the column/table already exists.
