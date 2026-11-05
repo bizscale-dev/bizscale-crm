@@ -2,6 +2,7 @@
 
 import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
+import { generateSEOTasks } from '@/lib/taskService';
 import bcrypt from 'bcryptjs';
 import { revalidatePath } from 'next/cache';
 
@@ -91,17 +92,31 @@ export async function assignAssociate(formData) {
   const campaign = await getActiveCampaign();
   if (!campaign) return { error: 'No active campaign' };
 
-  const client_group_start = parseInt(formData.get('client_group_start')) || 1;
-  const client_group_end = parseInt(formData.get('client_group_end')) || 20;
-  const daily_link_target = parseInt(formData.get('daily_link_target')) || 63;
+  // Default to the same client group / daily target the campaign's other associates have
+  // (everyone works the whole client list), not a hardcoded 1-20.
+  const peer = await db.prepare(
+    'SELECT client_group_start, client_group_end, daily_link_target FROM associate_assignments WHERE campaign_id = ? ORDER BY id DESC LIMIT 1'
+  ).get(campaign.id);
+  const client_group_start = parseInt(formData.get('client_group_start')) || peer?.client_group_start || 1;
+  const client_group_end = parseInt(formData.get('client_group_end')) || peer?.client_group_end || 20;
+  const daily_link_target = parseInt(formData.get('daily_link_target')) || peer?.daily_link_target || 63;
 
   try {
     await db.prepare(`
       INSERT OR REPLACE INTO associate_assignments (campaign_id, user_id, client_group_start, client_group_end, daily_link_target)
       VALUES (?, ?, ?, ?, ?)
     `).run(campaign.id, id, client_group_start, client_group_end, daily_link_target);
+    // Build the associate's tasks now so they show up straight away.
+    let note = '';
+    try {
+      const count = await generateSEOTasks(campaign.id);
+      note = ` — ${count} tasks generated`;
+    } catch (genErr) {
+      note = ` — assigned, but task generation failed: ${genErr.message}`;
+    }
     revalidatePath('/admin/users');
-    return { success: 'Associate assigned to campaign' };
+    revalidatePath('/admin/tasks');
+    return { success: 'Associate assigned to campaign' + note };
   } catch (err) {
     return { error: err.message };
   }
