@@ -25,8 +25,10 @@ export function parseSheetLinks(cell) {
 
 // Loads what is already stored: { isFirstRun, known: Map<clientId, Set<url>>,
 // unattached: Map<clientId, url[]> }.
-export async function loadStoredLinks(db) {
-  const rows = await db.prepare('SELECT client_id, url, seeded, task_date, link_type FROM synced_client_links').all();
+// `table` is synced_client_links (SEO clients) or synced_web_client_links (web clients);
+// `firstRun` overrides the "table is empty" check for sheets whose link columns start out empty.
+export async function loadStoredLinks(db, table = 'synced_client_links', firstRun = null) {
+  const rows = await db.prepare(`SELECT client_id, url, seeded, task_date, link_type FROM ${table}`).all();
   const known = new Map();
   const unattached = new Map();
   for (const r of rows) {
@@ -38,7 +40,7 @@ export async function loadStoredLinks(db) {
       unattached.get(key).push(r.url);
     }
   }
-  return { isFirstRun: rows.length === 0, known, unattached };
+  return { isFirstRun: firstRun ?? rows.length === 0, known, unattached, table };
 }
 
 /**
@@ -47,13 +49,14 @@ export async function loadStoredLinks(db) {
  */
 export function buildLinkWrites({ stored, clientId, linkType, urls, credited, fallback = null }) {
   const writes = [];
+  const table = stored.table || 'synced_client_links';
   const known = stored.known.get(clientId) || new Set();
   const fresh = urls.filter((u) => !known.has(u));
 
   if (stored.isFirstRun) {
     for (const url of fresh) {
       writes.push({
-        sql: 'INSERT OR IGNORE INTO synced_client_links (client_id, url, seeded, link_type) VALUES (?, ?, 1, ?)',
+        sql: `INSERT OR IGNORE INTO ${table} (client_id, url, seeded, link_type) VALUES (?, ?, 1, ?)`,
         args: [clientId, url, linkType || null],
       });
     }
@@ -69,17 +72,17 @@ export function buildLinkWrites({ stored, clientId, linkType, urls, credited, fa
   let cursor = 0;
   for (const slot of slots) {
     for (let n = 0; n < slot.applied && cursor < queue.length; n++, cursor++) {
-      writes.push(attach(clientId, queue[cursor], slot, known));
+      writes.push(attach(table, clientId, queue[cursor], slot, known));
     }
   }
   // More links than credited units: the rest ride along with the last credited task.
   if (slots.length > 0) {
     const last = slots[slots.length - 1];
-    for (; cursor < queue.length; cursor++) writes.push(attach(clientId, queue[cursor], last, known));
+    for (; cursor < queue.length; cursor++) writes.push(attach(table, clientId, queue[cursor], last, known));
   } else {
     for (const url of fresh) {
       writes.push({
-        sql: 'INSERT OR IGNORE INTO synced_client_links (client_id, url, seeded, link_type) VALUES (?, ?, 0, ?)',
+        sql: `INSERT OR IGNORE INTO ${table} (client_id, url, seeded, link_type) VALUES (?, ?, 0, ?)`,
         args: [clientId, url, linkType || null],
       });
     }
@@ -87,15 +90,15 @@ export function buildLinkWrites({ stored, clientId, linkType, urls, credited, fa
   return writes;
 }
 
-function attach(clientId, url, slot, known) {
+function attach(table, clientId, url, slot, known) {
   if (known.has(url)) {
     return {
-      sql: 'UPDATE synced_client_links SET task_date = ?, link_type = ? WHERE client_id = ? AND url = ?',
+      sql: `UPDATE ${table} SET task_date = ?, link_type = ? WHERE client_id = ? AND url = ?`,
       args: [slot.task_date, slot.link_type, clientId, url],
     };
   }
   return {
-    sql: 'INSERT OR IGNORE INTO synced_client_links (client_id, url, seeded, task_date, link_type) VALUES (?, ?, 0, ?, ?)',
+    sql: `INSERT OR IGNORE INTO ${table} (client_id, url, seeded, task_date, link_type) VALUES (?, ?, 0, ?, ?)`,
     args: [clientId, url, slot.task_date, slot.link_type],
   };
 }
@@ -123,5 +126,31 @@ export async function attachSyncedLinks(db, tasks) {
     byKey.get(key).push(l.url);
   }
   for (const t of tasks) t.links = byKey.get(`${t.client_id}|${t.task_date}|${t.link_type}`) || [];
+  return tasks;
+}
+
+// Same as attachSyncedLinks for web_seo tasks (webseo_tasks rows, keyed by post_type): sets
+// task.links from synced_web_client_links.
+export async function attachSyncedWebLinks(db, tasks) {
+  const rows = tasks.filter((t) => t.completed_count > 0);
+  if (rows.length === 0) {
+    tasks.forEach((t) => { t.links = []; });
+    return tasks;
+  }
+  const clientIds = [...new Set(rows.map((t) => t.client_id))];
+  const dates = [...new Set(rows.map((t) => t.task_date))];
+  const found = await db.prepare(`
+    SELECT client_id, url, task_date, link_type FROM synced_web_client_links
+    WHERE client_id IN (${clientIds.map(() => '?').join(',')})
+      AND task_date IN (${dates.map(() => '?').join(',')})
+    ORDER BY id
+  `).all(...clientIds, ...dates);
+  const byKey = new Map();
+  for (const l of found) {
+    const key = `${l.client_id}|${l.task_date}|${l.link_type}`;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(l.url);
+  }
+  for (const t of tasks) t.links = byKey.get(`${t.client_id}|${t.task_date}|${t.post_type}`) || [];
   return tasks;
 }

@@ -1,5 +1,7 @@
 ﻿import { getDb } from '@/lib/db';
 import { getActiveWebSeoCampaign } from '@/lib/services';
+import TaskLinks from '@/components/TaskLinks';
+import { attachSyncedWebLinks } from '@/lib/syncedClientLinks';
 import { getAccurateWebSeoDailyStats } from '@/lib/dailyStats';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
@@ -74,6 +76,9 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
         AND wt.task_date < ? AND wt.completed_count < wt.target_count
       ORDER BY wt.task_date DESC, c.business_name, wt.post_type
     `).all(associateId, campaign.id, today);
+
+    await attachSyncedWebLinks(db, todayTasks);
+    await attachSyncedWebLinks(db, pendingTasks);
   }
 
   const tasksByClient = {};
@@ -182,6 +187,7 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
                           <span style={{ fontWeight: '500' }}>{POST_TYPE_LABELS[task.post_type] || task.post_type}</span>
                           <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>{task.completed_count}/{task.target_count}</span>
                           <span style={{ marginLeft: '0.5rem', color: '#f59e0b', fontSize: '0.75rem' }}>Due {task.task_date}</span>
+                          <TaskLinks links={task.links} />
                         </div>
                       ))}
                     </div>
@@ -209,6 +215,7 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
                           <span style={{ marginLeft: '0.5rem', color: task.completed_count >= task.target_count ? 'var(--success)' : 'var(--text-muted)' }}>
                             {task.completed_count}/{task.target_count}
                           </span>
+                          <TaskLinks links={task.links} />
                         </div>
                       ))}
                     </div>

@@ -837,6 +837,19 @@ async function runMigrations(raw) {
       UNIQUE (client_id, url)
     )`,
     "CREATE INDEX IF NOT EXISTS idx_synced_client_links_task ON synced_client_links (client_id, task_date)",
+    // Same as synced_client_links, for web clients (the Web SEO Completed Links sheet's
+    // "Web2.0 Links" / "Guest Post Links" columns). link_type is the post type.
+    `CREATE TABLE IF NOT EXISTS synced_web_client_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER NOT NULL,
+      url TEXT NOT NULL,
+      seeded INTEGER NOT NULL DEFAULT 0,
+      task_date DATE,
+      link_type TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (client_id, url)
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_synced_web_client_links_task ON synced_web_client_links (client_id, task_date)",
     // Frozen list of the clients in an SEO campaign and how far each got, written when
     // the campaign is marked completed (see src/lib/campaignClients.js).
     `CREATE TABLE IF NOT EXISTS campaign_client_archive (

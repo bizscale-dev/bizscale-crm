@@ -3,6 +3,8 @@ import { getActiveWebSeoCampaign } from '@/lib/services';
 import { verifySession } from '@/lib/session';
 import StatCard from '@/components/ui/StatCard';
 import PageHeader from '@/components/ui/PageHeader';
+import TaskLinks from '@/components/TaskLinks';
+import { attachSyncedWebLinks } from '@/lib/syncedClientLinks';
 
 export const revalidate = 0;
 
@@ -34,6 +36,9 @@ export default async function WebAssociateDashboard() {
         AND wt.task_date < ? AND wt.completed_count < wt.target_count
       ORDER BY wt.task_date DESC, c.business_name, wt.post_type
     `).all(userId, campaign.id, today);
+
+    await attachSyncedWebLinks(db, todayTasks);
+    await attachSyncedWebLinks(db, pendingTasks);
 
     overallStats = await db.prepare(`
       SELECT SUM(target_count) as target, SUM(completed_count) as completed
@@ -97,6 +102,7 @@ export default async function WebAssociateDashboard() {
                           <span style={{ fontWeight: '500' }}>{task.post_type === 'guestpost' ? 'Guest Post' : 'Web 2.0'}</span>
                           <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>{task.completed_count}/{task.target_count}</span>
                           <span style={{ marginLeft: '0.5rem', color: '#f59e0b', fontSize: '0.75rem' }}>Due {task.task_date}</span>
+                          <TaskLinks links={task.links} />
                         </div>
                       ))}
                     </div>
@@ -130,6 +136,7 @@ export default async function WebAssociateDashboard() {
                           <span style={{ marginLeft: '0.5rem', color: task.completed_count >= task.target_count ? 'var(--success)' : 'var(--text-muted)' }}>
                             {task.completed_count}/{task.target_count}
                           </span>
+                          <TaskLinks links={task.links} />
                         </div>
                       ))}
                     </div>
