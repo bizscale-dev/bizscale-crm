@@ -122,6 +122,8 @@ async function runMigrations(raw) {
     // the import sheet gets deactivated (history/webseo_tasks preserved) rather than
     // deleted, matching the regular clients table's existing is_active pattern.
     "ALTER TABLE web_clients ADD COLUMN is_active INTEGER DEFAULT 1",
+    // 1 = an admin turned this client off by hand; the sheet import must not reactivate it.
+    "ALTER TABLE web_clients ADD COLUMN manually_deactivated INTEGER DEFAULT 0",
     // Which Web SEO Associate a writer mirrors — set only for writers doing "Web Tasks"
     // (writing the actual posts for a Web SEO Associate's client roster). Null for
     // writers not doing this.

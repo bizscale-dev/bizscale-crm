@@ -112,7 +112,7 @@ export default async function WebClientsPage() {
             </div>
             <div className="card" style={{ borderLeft: '4px solid var(--text-muted)' }}>
               <h3 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                Removed (from sheet)
+                Inactive
               </h3>
               <div style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--foreground)' }}>
                 {webClients.filter(c => !c.is_active).length}

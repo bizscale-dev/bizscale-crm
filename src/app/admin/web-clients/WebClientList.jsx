@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { assignWebAssociate } from './actions';
+import { assignWebAssociate, deactivateWebClient, activateWebClient } from './actions';
 import Badge from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 
@@ -53,6 +53,17 @@ export default function WebClientList({ webClients, webAssociates, campaign }) {
     } catch (error) {
       alert('Error assigning associate: ' + error.message);
     }
+  };
+
+  const handleToggleActive = async (client) => {
+    const turningOff = !!client.is_active;
+    const message = turningOff
+      ? `Deactivate "${client.business_name}"? Its future tasks are removed and it won't be counted until reactivated.`
+      : `Activate "${client.business_name}"? It will be counted again.`;
+    if (!confirm(message)) return;
+    const result = turningOff ? await deactivateWebClient(client.id) : await activateWebClient(client.id);
+    if (result?.error) alert('Error: ' + result.error);
+    else router.refresh();
   };
 
   if (webClients.length === 0) {
@@ -134,7 +145,7 @@ export default function WebClientList({ webClients, webAssociates, campaign }) {
                   <td style={{ padding: '0.75rem 0', color: 'var(--text-muted)' }}>{client.name}</td>
                   <td style={{ padding: '0.75rem 0' }}>
                     <Badge tone={client.is_active ? 'success' : 'neutral'}>
-                      {client.is_active ? 'Active' : 'Removed from sheet'}
+                      {client.is_active ? 'Active' : (client.manually_deactivated ? 'Deactivated' : 'Removed from sheet')}
                     </Badge>
                   </td>
                   <td style={{ padding: '0.75rem 0' }}>
@@ -208,6 +219,23 @@ export default function WebClientList({ webClients, webAssociates, campaign }) {
                         }}
                       >
                         {client.assigned_associate_name ? 'Change' : 'Assign'}
+                      </button>
+                    )}
+                    {assigningId !== client.id && (
+                      <button
+                        onClick={() => handleToggleActive(client)}
+                        className="btn"
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '0.25rem 0.5rem',
+                          marginLeft: '0.5rem',
+                          backgroundColor: client.is_active ? 'var(--warning)' : 'var(--success)',
+                          color: 'white',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {client.is_active ? 'Deactivate' : 'Activate'}
                       </button>
                     )}
                   </td>

@@ -171,7 +171,7 @@ export async function runWebClientsImport(sheetUrl) {
     seenClientNames.add(clientName);
     try {
       const existing = await db.prepare(`
-        SELECT id, is_active FROM web_clients
+        SELECT id, is_active, manually_deactivated FROM web_clients
         WHERE webseo_campaign_id = ? AND name = ?
       `).get(campaign.id, clientName);
 
@@ -191,7 +191,8 @@ export async function runWebClientsImport(sheetUrl) {
         console.log(`[runWebClientsImport] Imported (${rowLabel}): ${clientName}`);
       } else {
         clientId = existing.id;
-        if (!existing.is_active) {
+        // A client an admin deactivated by hand stays off even though it's still on the sheet.
+        if (!existing.is_active && !existing.manually_deactivated) {
           await db.prepare('UPDATE web_clients SET is_active = 1 WHERE id = ?').run(clientId);
           reactivatedCount++;
           console.log(`[runWebClientsImport] Reactivated (${rowLabel}): ${clientName}`);

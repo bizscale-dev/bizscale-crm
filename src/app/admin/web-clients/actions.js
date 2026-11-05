@@ -207,3 +207,43 @@ export async function assignWebAssociate(clientId, associateId) {
     return { error: error.message };
   }
 }
+
+// Turns a web client off by hand. Like the SEO Clients page: the client's future tasks are
+// removed (today and past stay, so history and counts are kept) and the sheet import won't
+// switch it back on. Other clients' schedules are not regenerated, so nothing else shifts.
+export async function deactivateWebClient(clientId) {
+  try {
+    const db = await getDb();
+    const client = await db.prepare('SELECT id, webseo_campaign_id FROM web_clients WHERE id = ?').get(clientId);
+    if (!client) return { error: 'Client not found' };
+
+    await db.prepare('UPDATE web_clients SET is_active = 0, manually_deactivated = 1 WHERE id = ?').run(clientId);
+    const today = new Date().toISOString().split('T')[0];
+    await db.prepare('DELETE FROM webseo_tasks WHERE client_id = ? AND webseo_campaign_id = ? AND task_date > ?')
+      .run(clientId, client.webseo_campaign_id, today);
+
+    revalidatePath('/admin/web-clients');
+    revalidatePath('/web-associate');
+    return { success: true };
+  } catch (err) {
+    console.error('[deactivateWebClient]', err.message);
+    return { error: err.message };
+  }
+}
+
+// Turns it back on and lets the sheet import manage it again; its tasks come back the next
+// time the web task schedule is generated (the nightly sync, or any assignment change).
+export async function activateWebClient(clientId) {
+  try {
+    const db = await getDb();
+    const result = await db.prepare('UPDATE web_clients SET is_active = 1, manually_deactivated = 0 WHERE id = ?').run(clientId);
+    if (!result.changes) return { error: 'Client not found' };
+
+    revalidatePath('/admin/web-clients');
+    revalidatePath('/web-associate');
+    return { success: true };
+  } catch (err) {
+    console.error('[activateWebClient]', err.message);
+    return { error: err.message };
+  }
+}
