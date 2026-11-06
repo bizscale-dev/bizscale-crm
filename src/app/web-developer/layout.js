@@ -26,7 +26,7 @@ export default function WebDeveloperLayout({ children }) {
   ];
 
   return (
-    <RoleLayoutShell navItems={navItems} portalLabel="Web Developer - SEO" headerTitle="Web Developer - SEO Portal">
+    <RoleLayoutShell navItems={navItems} headerTitle="Web Developer - SEO Portal">
       {children}
     </RoleLayoutShell>
   );
