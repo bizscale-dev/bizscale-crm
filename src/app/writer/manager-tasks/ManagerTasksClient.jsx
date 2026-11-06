@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitAssociateTaskProof } from './actions';
 import TaskBadges from '@/components/TaskBadges';
-import { formatPkt } from '@/lib/formatTime';
+import { formatPkt, pktDay, dayLabel } from '@/lib/formatTime';
 
 const BRAND_COLOR = 'var(--primary)';
 const PORTAL = 'writer';
@@ -90,6 +90,7 @@ const APPROVAL_LABELS = {
 
 function TaskCard({ task }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const submitted = !!task.submitted_at;
   const overdue = !submitted && isOverdue(task);
   const [description, setDescription] = useState(() => submitted ? '' : readDraft(task.task_id));
@@ -153,14 +154,22 @@ function TaskCard({ task }) {
       padding: '1.25rem',
       backgroundColor: 'var(--card-bg)',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
-        <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); } }}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: open ? '0.75rem' : 0, cursor: 'pointer' }}
+      >
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: '1.4rem', flexShrink: 0 }}>{open ? '▾' : '▸'}</span>
+        <div style={{ fontSize: '0.95rem', flex: 1, minWidth: 0, ...(open ? { whiteSpace: 'pre-wrap' } : { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }) }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
           Due {task.due_date} {task.template_id ? '12 AM' : task.due_time}
         </div>
       </div>
 
-      {submitted ? (
+      {!open ? null : submitted ? (
         <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: '600', marginBottom: '0.5rem' }}>
             ✅ Submitted {formatPkt(task.submitted_at)}
@@ -243,9 +252,23 @@ function TaskCard({ task }) {
   );
 }
 
+// Completed tasks grouped by the Pakistan day they were submitted, newest day (and newest task) first.
+function groupByDay(done) {
+  const sorted = [...done].sort((a, b) => String(b.submitted_at).localeCompare(String(a.submitted_at)));
+  const groups = [];
+  for (const t of sorted) {
+    const day = pktDay(t.submitted_at);
+    const last = groups[groups.length - 1];
+    if (last && last.day === day) last.tasks.push(t);
+    else groups.push({ day, tasks: [t] });
+  }
+  return groups;
+}
+
 export default function ManagerTasksClient({ tasks }) {
-  const pending = tasks.filter((t) => !t.submitted_at);
-  const done = tasks.filter((t) => !!t.submitted_at);
+  // New tasks on top, then completed ones grouped by day (today, yesterday, ...).
+  const pending = tasks.filter((t) => !t.submitted_at).sort((a, b) => b.task_id - a.task_id);
+  const doneGroups = groupByDay(tasks.filter((t) => !!t.submitted_at));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -260,11 +283,20 @@ export default function ManagerTasksClient({ tasks }) {
         )}
       </div>
 
-      {done.length > 0 && (
+      {doneGroups.length > 0 && (
         <div>
           <h2 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Completed Tasks</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {done.map((t) => <TaskCard key={t.task_id} task={t} />)}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {doneGroups.map((g) => (
+              <div key={g.day}>
+                <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '0.6rem' }}>
+                  {dayLabel(g.day)} · {g.tasks.length}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {g.tasks.map((t) => <TaskCard key={t.task_id} task={t} />)}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
