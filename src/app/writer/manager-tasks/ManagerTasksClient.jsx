@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitAssociateTaskProof } from './actions';
 import TaskBadges from '@/components/TaskBadges';
+import { formatPkt } from '@/lib/formatTime';
 
 const BRAND_COLOR = 'var(--primary)';
 const PORTAL = 'writer';
@@ -162,7 +163,7 @@ function TaskCard({ task }) {
       {submitted ? (
         <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: '600', marginBottom: '0.5rem' }}>
-            ✅ Submitted {new Date(task.submitted_at).toLocaleString()}
+            ✅ Submitted {formatPkt(task.submitted_at)}
           </div>
           {!!task.is_late && (
             <div style={{ marginBottom: '0.75rem' }}>

@@ -9,6 +9,7 @@ import {
   createRecurringTemplate, setRecurringTemplateActive, deleteRecurringTemplate, extendTaskDeadline,
   saveOnboardingChecklist, assignWebOnboarding,
 } from './actions';
+import { formatPkt } from '@/lib/formatTime';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const PAGE_SIZE = 15;
@@ -261,7 +262,7 @@ function AssigneeStatus({ assignee }) {
         <div style={{ marginTop: '0.7rem', paddingTop: '0.7rem', borderTop: '1px solid var(--border)' }}>
           {isLate && (
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.6rem' }}>
-              Submitted late: {new Date(assignee.submitted_at).toLocaleString()}
+              Submitted late: {formatPkt(assignee.submitted_at)}
               {assignee.late_reason && <><br />Reason: {assignee.late_reason}</>}
             </div>
           )}

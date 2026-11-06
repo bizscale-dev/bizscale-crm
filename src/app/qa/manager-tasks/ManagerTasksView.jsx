@@ -6,6 +6,7 @@ import Linkify from '../Linkify';
 import { reportManagerTask } from './actions';
 import ResolveDaysInput from '@/components/ResolveDaysInput';
 import TaskBadges from '@/components/TaskBadges';
+import { formatPkt } from '@/lib/formatTime';
 
 const ROLE_LABELS = {
   seo_manager: 'SEO Manager',
@@ -203,7 +204,7 @@ function TaskCard({ row, flagCount, onReported }) {
       {canExpand && expanded && (
         <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-            Submitted {new Date(row.submitted_at).toLocaleString()}
+            Submitted {formatPkt(row.submitted_at)}
             {row.is_late && row.late_reason && <><br />Late reason: {row.late_reason}</>}
           </div>
           <div style={{ fontSize: '0.85rem', marginBottom: '0.75rem', whiteSpace: 'pre-wrap' }}><Linkify text={row.submission_description} /></div>

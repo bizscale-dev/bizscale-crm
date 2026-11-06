@@ -8,6 +8,7 @@ import {
 } from './actions';
 import TaskBadges from '@/components/TaskBadges';
 import UrgencySelect from '@/components/UrgencySelect';
+import { formatPkt } from '@/lib/formatTime';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -115,7 +116,7 @@ function AssigneeStatus({ assignee }) {
           <span style={{ fontSize: '0.8rem', fontWeight: '600', color: isLate ? (REVIEW_LABELS[assignee.approval_status]?.color || '#f59e0b') : 'var(--success)' }}>
             {isLate
               ? (REVIEW_LABELS[assignee.approval_status]?.text || REVIEW_LABELS.pending.text)
-              : `✅ Submitted ${new Date(assignee.submitted_at).toLocaleString()}`}
+              : `✅ Submitted ${formatPkt(assignee.submitted_at)}`}
           </span>
         ) : (
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>
@@ -128,7 +129,7 @@ function AssigneeStatus({ assignee }) {
         <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
           {isLate && (
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-              Submitted late: {new Date(assignee.submitted_at).toLocaleString()}
+              Submitted late: {formatPkt(assignee.submitted_at)}
               {assignee.late_reason && <><br />Reason: {assignee.late_reason}</>}
             </div>
           )}

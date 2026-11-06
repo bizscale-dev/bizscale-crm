@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { submitAssociateTaskProof } from './actions';
 import TaskBadges from '@/components/TaskBadges';
 import { TASK_URGENCIES, parseUrgency } from '@/lib/taskUrgency';
+import { formatPkt } from '@/lib/formatTime';
 
 // "23:45" -> "11:45 PM". Due times are stored as Pakistan wall-clock time, so this is a
 // format change only.
@@ -172,7 +173,7 @@ function TaskCard({ task, twelveHour }) {
       {submitted ? (
         <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: '600', marginBottom: '0.5rem' }}>
-            ✅ Submitted {new Date(task.submitted_at).toLocaleString()}
+            ✅ Submitted {formatPkt(task.submitted_at)}
           </div>
           {!!task.is_late && (
             <div style={{ marginBottom: '0.75rem' }}>
