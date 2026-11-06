@@ -26,7 +26,7 @@ export default function QaManualDetails({ report }) {
   const clientList = (report.client_names || '').split('\n').filter(Boolean);
   const showClients = clientList.length > 1;
 
-  if (fields.length === 0 && !report.screenshot_base64 && !showClients) return null;
+  if (fields.length === 0 && !report.has_screenshot && !showClients) return null;
 
   return (
     <>
@@ -48,10 +48,10 @@ export default function QaManualDetails({ report }) {
           ))}
         </div>
       )}
-      {report.screenshot_base64 && (
+      {report.has_screenshot && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={report.screenshot_base64}
+          src={`/api/qa-report-screenshot/${report.id}`}
           alt="Screenshot"
           style={{ maxWidth: '100%', maxHeight: '340px', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: '0.75rem', display: 'block' }}
         />
