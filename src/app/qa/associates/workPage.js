@@ -8,8 +8,18 @@ import AssociateWorkView from './AssociateWorkView';
 export async function renderAssociateWorkPage(kind, searchParams) {
   const sp = (await searchParams) || {};
   const today = pakistanDate(0);
-  const date = isIsoDate(sp.date) && sp.date <= today ? sp.date : pakistanDate(-1);
   const db = await getDb();
+  // Default: the last working day before today that has completed links (yesterday is a weekend
+  // on Mondays, when nothing is worked).
+  let date = isIsoDate(sp.date) && sp.date <= today ? sp.date : null;
+  if (!date) {
+    const last = await db.prepare(
+      kind === 'web'
+        ? 'SELECT MAX(task_date) AS d FROM webseo_tasks WHERE completed_count > 0 AND task_date < ?'
+        : 'SELECT MAX(task_date) AS d FROM seo_tasks WHERE completed_count > 0 AND task_date < ?'
+    ).get(today);
+    date = last?.d || pakistanDate(-1);
+  }
   const associates = await loadAssociateWork(db, kind, date);
   const title = kind === 'web' ? 'Web SEO Associates' : 'SEO Associates';
 
@@ -18,11 +28,11 @@ export async function renderAssociateWorkPage(kind, searchParams) {
       <div>
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>{title}</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-          What each associate completed on {date}{date === pakistanDate(-1) ? ' (yesterday)' : ''}, by client and link type with the links. Check it, then use Report on the associate&apos;s card —
-          it goes to the manager who owns that client.
+          What each associate completed on {date}{date === pakistanDate(-1) ? ' (yesterday)' : date === today ? ' (today)' : ''}, by client and link type with the links. Check each link: mark it Pass or Fail, or hit Report on it —
+          the associate and the manager who owns that client are notified.
         </p>
       </div>
-      <AssociateWorkView associates={associates} date={date} today={today} />
+      <AssociateWorkView kind={kind} associates={associates} date={date} today={today} />
     </div>
   );
 }

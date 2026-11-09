@@ -326,6 +326,9 @@ async function runMigrationsBody(raw) {
     "ALTER TABLE qa_reports ADD COLUMN resolve_days INTEGER",
     // Set when QA edits a report after filing it (see updateQaReport in qa/reports/actions.js).
     "ALTER TABLE qa_reports ADD COLUMN edited_at DATETIME",
+    // The SEO / Web SEO associate whose link a report is about (QA's per-link Report button), for
+    // the per-associate issue stats.
+    "ALTER TABLE qa_reports ADD COLUMN associate_id INTEGER",
   ];
 
   for (const sql of alterStatements) {
@@ -876,6 +879,18 @@ async function runMigrationsBody(raw) {
       UNIQUE (client_id, url)
     )`,
     "CREATE INDEX IF NOT EXISTS idx_synced_web_client_links_task ON synced_web_client_links (client_id, task_date)",
+    // QA's Pass / Fail mark on one link (kind 'seo' = clients, 'web' = web_clients).
+    `CREATE TABLE IF NOT EXISTS qa_link_checks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      client_id INTEGER NOT NULL,
+      url TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pass','fail')),
+      checked_by INTEGER,
+      checked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (kind, client_id, url)
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_qa_reports_associate ON qa_reports (associate_id)",
     // Frozen list of the clients in an SEO campaign and how far each got, written when
     // the campaign is marked completed (see src/lib/campaignClients.js).
     `CREATE TABLE IF NOT EXISTS campaign_client_archive (

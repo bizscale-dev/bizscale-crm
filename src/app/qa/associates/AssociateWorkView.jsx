@@ -2,111 +2,124 @@
 
 import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { submitAssociateReport } from './actions';
+import { setLinkStatus, submitLinkReport } from './actions';
 
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const SEVERITIES = [
-  { value: 'high', label: 'High', color: 'var(--danger)' },
-  { value: 'medium', label: 'Medium', color: '#f59e0b' },
-  { value: 'low', label: 'Low', color: 'var(--success)' },
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
 ];
 const TYPE_LABELS = { web2: 'Web 2.0', guestpost: 'Guest Post', pdf: 'PDF', profile: 'Profile', citation: 'Citation', image: 'Image' };
 const typeLabel = (t) => TYPE_LABELS[t] || t;
 
 const cardStyle = { backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' };
 const inputStyle = { width: '100%', padding: '0.55rem 0.8rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--foreground)', fontSize: '0.875rem', boxSizing: 'border-box', fontFamily: 'inherit' };
-const labelStyle = { display: 'block', marginBottom: '0.35rem', fontSize: '0.72rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' };
+const ghostBtn = { fontSize: '0.75rem', padding: '0.25rem 0.65rem', backgroundColor: 'transparent', border: '1px solid var(--border)', color: 'var(--foreground)', cursor: 'pointer', borderRadius: '0.4rem', fontWeight: '600' };
 
-function ReportForm({ associate, date, onDone }) {
-  const [client, setClient] = useState('');
-  const [link, setLink] = useState(''); // "<type>||<url>" or ''
-  const [description, setDescription] = useState('');
-  const [severity, setSeverity] = useState('');
-  const [screenshot, setScreenshot] = useState(null);
-  const [fileKey, setFileKey] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState(null);
-
-  const chosen = associate.clients.find((c) => c.name === client);
-  const linkOptions = chosen ? chosen.types.flatMap((t) => (t.links.length ? t.links.map((u) => ({ type: t.type, url: u })) : [{ type: t.type, url: '' }])) : [];
-
-  const onFile = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return setScreenshot(null);
-    if (f.size > MAX_IMAGE_BYTES) { setMessage({ error: true, text: 'Image is too large — max 2MB.' }); e.target.value = ''; return; }
-    const reader = new FileReader();
-    reader.onload = () => setScreenshot(reader.result);
-    reader.readAsDataURL(f);
-  };
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setMessage(null);
-    const [linkType = '', linkUrl = ''] = link ? link.split('||') : [];
-    const res = await submitAssociateReport({ associateId: associate.id, client, linkType, linkUrl, description, severity, date, screenshot });
-    setBusy(false);
-    if (res?.error) return setMessage({ error: true, text: res.error });
-    setMessage({ text: `Report sent to ${res.sentTo.join(', ')} (${res.resolveDays} working days to resolve).` });
-    setClient(''); setLink(''); setDescription(''); setSeverity(''); setScreenshot(null); setFileKey((k) => k + 1);
-    onDone?.();
-  };
-
+function StatChip({ label, value, color }) {
   return (
-    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-      <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>Report {associate.name}</div>
-      {message && (
-        <div style={{ padding: '0.6rem 0.85rem', borderRadius: '0.5rem', fontSize: '0.825rem', backgroundColor: message.error ? 'rgba(220,38,38,0.1)' : 'rgba(22,178,147,0.1)', color: message.error ? 'var(--danger)' : 'var(--success)' }}>{message.text}</div>
-      )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
-        <div>
-          <label style={labelStyle}>Client</label>
-          <select value={client} onChange={(e) => { setClient(e.target.value); setLink(''); }} style={inputStyle} required>
-            <option value="">Pick a client…</option>
-            {associate.clients.map((c) => <option key={c.clientId} value={c.name}>{c.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Link (optional)</label>
-          <select value={link} onChange={(e) => setLink(e.target.value)} style={inputStyle} disabled={!chosen}>
-            <option value="">{chosen ? 'Whole client / no specific link' : 'Pick a client first'}</option>
-            {linkOptions.map((o, i) => (
-              <option key={i} value={`${o.type}||${o.url}`}>{typeLabel(o.type)}{o.url ? ` — ${o.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60)}` : ''}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <div>
-        <label style={labelStyle}>What is wrong</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} placeholder="e.g. link is dead / wrong anchor / not the client's niche…" required />
-      </div>
-      <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div>
-          <label style={labelStyle}>Severity</label>
-          <div style={{ display: 'flex', gap: '0.4rem' }}>
-            {SEVERITIES.map((s) => (
-              <button key={s.value} type="button" onClick={() => setSeverity(s.value)}
-                style={{ padding: '0.35rem 0.9rem', borderRadius: '2rem', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer', border: `1px solid ${s.color}`, color: severity === s.value ? 'white' : s.color, backgroundColor: severity === s.value ? s.color : 'transparent' }}>
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label style={labelStyle}>Screenshot (optional)</label>
-          <input key={fileKey} type="file" accept="image/*" onChange={onFile} />
-        </div>
-        <button type="submit" disabled={busy} className="btn" style={{ marginLeft: 'auto', padding: '0.55rem 1.25rem', backgroundColor: 'var(--primary)', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-          {busy ? 'Sending…' : 'Send report'}
-        </button>
-      </div>
-    </form>
+    <div style={{ padding: '0.35rem 0.8rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--background)', minWidth: '84px' }}>
+      <div style={{ fontSize: '1.05rem', fontWeight: '700', color }}>{value}</div>
+      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</div>
+    </div>
   );
 }
 
-function AssociateCard({ associate, date }) {
-  const [open, setOpen] = useState(false);
+// One link: the URL, a Pass / Fail mark and a Report button that opens a tiny comment form.
+function LinkRow({ kind, associate, client, type, link, date, status, onStatus, onReported }) {
+  const url = link?.url || '';
   const [reporting, setReporting] = useState(false);
+  const [comment, setComment] = useState('');
+  const [severity, setSeverity] = useState('medium');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const mark = async (next) => {
+    const value = status === next ? '' : next; // clicking the active mark clears it
+    onStatus(value);
+    const res = await setLinkStatus({ kind, clientId: client.clientId, url, status: value });
+    if (res?.error) { onStatus(status); setMessage({ error: true, text: res.error }); }
+  };
+
+  const send = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    const res = await submitLinkReport({ kind, associateId: associate.id, clientId: client.clientId, linkType: type, linkUrl: url, comment, severity, date });
+    setBusy(false);
+    if (res?.error) return setMessage({ error: true, text: res.error });
+    setMessage({ text: `Reported — ${res.associate} and ${res.sentTo.join(', ')} notified.` });
+    setReporting(false);
+    setComment('');
+    if (url) onStatus('fail');
+    onReported();
+  };
+
+  const pass = status === 'pass';
+  const fail = status === 'fail';
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+        {url ? (
+          <a href={url} target="_blank" rel="noopener noreferrer" title={url} style={{ flex: '1 1 220px', minWidth: 0, fontSize: '0.8rem', color: 'var(--primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            🔗 {url.replace(/^https?:\/\/(www\.)?/, '')}
+          </a>
+        ) : (
+          <span style={{ flex: '1 1 220px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>no link recorded</span>
+        )}
+        {url && (
+          <>
+            <button type="button" onClick={() => mark('pass')} style={{ ...ghostBtn, ...(pass ? { backgroundColor: 'var(--success)', borderColor: 'var(--success)', color: 'white' } : { color: 'var(--success)', borderColor: 'var(--success)' }) }}>
+              ✓ Pass
+            </button>
+            <button type="button" onClick={() => mark('fail')} style={{ ...ghostBtn, ...(fail ? { backgroundColor: 'var(--danger)', borderColor: 'var(--danger)', color: 'white' } : { color: 'var(--danger)', borderColor: 'var(--danger)' }) }}>
+              ✕ Fail
+            </button>
+          </>
+        )}
+        <button type="button" onClick={() => setReporting(!reporting)} style={{ ...ghostBtn, ...(reporting ? { backgroundColor: 'var(--primary)', borderColor: 'var(--primary)', color: 'white' } : {}) }}>
+          {reporting ? 'Cancel' : 'Report'}
+        </button>
+      </div>
+      {message && (
+        <div style={{ marginTop: '0.35rem', fontSize: '0.75rem', color: message.error ? 'var(--danger)' : 'var(--success)' }}>{message.text}</div>
+      )}
+      {reporting && (
+        <form onSubmit={send} style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '0.5rem', backgroundColor: 'var(--background)' }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            {client.name} · {typeLabel(type)} · {associate.name}
+          </div>
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Comment (optional) — where exactly the issue is…" />
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <select value={severity} onChange={(e) => setSeverity(e.target.value)} style={{ ...inputStyle, width: 'auto' }} aria-label="Severity">
+              {SEVERITIES.map((s) => <option key={s.value} value={s.value}>{s.label} severity</option>)}
+            </select>
+            <button type="submit" disabled={busy} className="btn" style={{ marginLeft: 'auto', padding: '0.45rem 1.1rem', backgroundColor: 'var(--primary)', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+              {busy ? 'Sending…' : 'Send report'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function AssociateCard({ kind, associate, date }) {
+  const [open, setOpen] = useState(false);
+  const [stats, setStats] = useState(associate.stats);
+  // `${clientId}|${url}` -> 'pass' | 'fail'
+  const [statuses, setStatuses] = useState(() => {
+    const m = {};
+    for (const c of associate.clients) for (const t of c.types) for (const l of t.links) if (l.status) m[`${c.clientId}|${l.url}`] = l.status;
+    return m;
+  });
+  const setStatus = (key) => (value) => setStatuses((prev) => {
+    const next = { ...prev };
+    if (value) next[key] = value; else delete next[key];
+    return next;
+  });
+  const reported = () => setStats((s) => ({ ...s, total: s.total + 1, pending: s.pending + 1 }));
+
   return (
     <div style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
@@ -116,16 +129,14 @@ function AssociateCard({ associate, date }) {
             {associate.total} link{associate.total === 1 ? '' : 's'} on {associate.clients.length} client{associate.clients.length === 1 ? '' : 's'}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button type="button" onClick={() => setOpen(!open)} className="btn" style={{ fontSize: '0.8rem', padding: '0.4rem 0.9rem', backgroundColor: 'transparent', border: '1px solid var(--border)', color: 'var(--foreground)', cursor: 'pointer', borderRadius: '0.5rem' }}>
-            {open ? 'Hide work' : 'Show work'}
-          </button>
-          {associate.total > 0 && (
-            <button type="button" onClick={() => { setOpen(true); setReporting(!reporting); }} className="btn" style={{ fontSize: '0.8rem', padding: '0.4rem 0.9rem', backgroundColor: 'var(--primary)', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '0.5rem' }}>
-              {reporting ? 'Close report' : 'Report'}
-            </button>
-          )}
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <StatChip label="Total issues" value={stats.total} color="var(--primary)" />
+          <StatChip label="Resolved" value={stats.resolved} color="var(--success)" />
+          <StatChip label="Pending" value={stats.pending} color="#f59e0b" />
         </div>
+        <button type="button" onClick={() => setOpen(!open)} className="btn" style={{ ...ghostBtn, fontSize: '0.8rem', padding: '0.4rem 0.9rem' }}>
+          {open ? 'Hide work' : 'Show work'}
+        </button>
       </div>
 
       {open && (
@@ -135,30 +146,36 @@ function AssociateCard({ associate, date }) {
           ) : associate.clients.map((c) => (
             <div key={c.clientId} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.8rem 1rem' }}>
               <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{c.name}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                 {c.types.map((t) => (
                   <div key={t.type}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)' }}>{typeLabel(t.type)} · {t.count}</div>
-                    {t.links.length === 0 ? (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>no link recorded</div>
-                    ) : t.links.map((u) => (
-                      <a key={u} href={u} target="_blank" rel="noopener noreferrer" title={u} style={{ display: 'block', fontSize: '0.8rem', color: 'var(--primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        🔗 {u.replace(/^https?:\/\/(www\.)?/, '')}
-                      </a>
-                    ))}
+                    <div style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>{typeLabel(t.type)} · {t.count}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                      {(t.links.length ? t.links : [null]).map((l, i) => {
+                        const key = l ? `${c.clientId}|${l.url}` : null;
+                        return (
+                          <LinkRow
+                            key={l ? l.url : `none-${i}`}
+                            kind={kind} associate={associate} client={c} type={t.type} link={l} date={date}
+                            status={key ? statuses[key] || '' : ''}
+                            onStatus={key ? setStatus(key) : () => {}}
+                            onReported={reported}
+                          />
+                        );
+                      })}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           ))}
-          {reporting && associate.total > 0 && <ReportForm associate={associate} date={date} />}
         </div>
       )}
     </div>
   );
 }
 
-export default function AssociateWorkView({ associates, date, today }) {
+export default function AssociateWorkView({ kind, associates, date, today }) {
   const router = useRouter();
   const pathname = usePathname();
   const go = (d) => router.push(`${pathname}?date=${d}`);
@@ -179,7 +196,7 @@ export default function AssociateWorkView({ associates, date, today }) {
       </div>
       {associates.length === 0 ? (
         <div style={cardStyle}><p style={{ margin: 0, color: 'var(--text-muted)' }}>No associates.</p></div>
-      ) : associates.map((a) => <AssociateCard key={a.id} associate={a} date={date} />)}
+      ) : associates.map((a) => <AssociateCard key={`${a.id}-${date}`} kind={kind} associate={a} date={date} />)}
     </div>
   );
 }
