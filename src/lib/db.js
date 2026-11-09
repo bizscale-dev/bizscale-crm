@@ -891,6 +891,32 @@ async function runMigrationsBody(raw) {
       UNIQUE (kind, client_id, url)
     )`,
     "CREATE INDEX IF NOT EXISTS idx_qa_reports_associate ON qa_reports (associate_id)",
+    // Web Developer / Graphic Designer Executives check the tasks the Web Developer (SEO) and the
+    // Graphics Designers submit: a Pass / Fail mark per task, and reports against a task.
+    `CREATE TABLE IF NOT EXISTS task_checks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pass','fail')),
+      checked_by INTEGER,
+      checked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (task_id, user_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS task_check_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      created_by INTEGER NOT NULL,
+      task_text TEXT,
+      comment TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      resolution_note TEXT,
+      resolved_at DATETIME,
+      confirmed_at DATETIME,
+      rejection_count INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_task_check_reports_user ON task_check_reports (user_id, status)",
     // Frozen list of the clients in an SEO campaign and how far each got, written when
     // the campaign is marked completed (see src/lib/campaignClients.js).
     `CREATE TABLE IF NOT EXISTS campaign_client_archive (
@@ -1227,7 +1253,7 @@ async function runMigrationsBody(raw) {
   // for SQLite to rewrite, and every other table's existing "REFERENCES users(id)"
   // text (never touched) resolves correctly once `users` exists again.
   try {
-    const REQUIRED_ROLES = ['admin', 'seo_associate', 'writer', 'manager', 'web_seo_associate', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa', 'web_developer_seo', 'senior_seo_associate'];
+    const REQUIRED_ROLES = ['admin', 'seo_associate', 'writer', 'manager', 'web_seo_associate', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa', 'web_developer_seo', 'senior_seo_associate', 'web_developer_executive', 'graphic_designer', 'graphic_designer_executive'];
     const currentSchema = await raw.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'");
     const currentSql = currentSchema.rows[0]?.sql || '';
     const missingRole = REQUIRED_ROLES.some(role => !currentSql.includes(`'${role}'`));
@@ -1297,7 +1323,7 @@ export async function initDb() {
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('admin','seo_associate','writer','manager','web_seo_associate','writers_manager','seo_manager','web_seo_manager','hr','qa','web_developer_seo','senior_seo_associate')),
+      role TEXT NOT NULL CHECK(role IN ('admin','seo_associate','writer','manager','web_seo_associate','writers_manager','seo_manager','web_seo_manager','hr','qa','web_developer_seo','senior_seo_associate','web_developer_executive','graphic_designer','graphic_designer_executive')),
       is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       lifetime_completed_links INTEGER DEFAULT 0

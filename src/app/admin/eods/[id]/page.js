@@ -10,7 +10,7 @@ export default async function AdminEodManagerPage({ params }) {
   const managerId = parseInt(id, 10);
 
   const manager = await db.prepare(
-    "SELECT id, name, email FROM users WHERE id = ? AND role IN ('web_seo_manager', 'seo_manager', 'writers_manager', 'web_developer_seo')"
+    "SELECT id, name, email FROM users WHERE id = ? AND role IN ('web_seo_manager', 'seo_manager', 'writers_manager', 'web_developer_seo', 'graphic_designer')"
   ).get(managerId);
 
   if (!manager) {

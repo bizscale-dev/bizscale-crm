@@ -1,33 +1,26 @@
-'use client';
+import { verifySession } from '@/lib/session';
+import { redirect } from 'next/navigation';
+import PortalLayout from '@/components/taskcheck/PortalLayout';
 
-import { useState, useEffect } from 'react';
-import RoleLayoutShell from '@/components/RoleLayoutShell';
-// The Web Developer - SEO receives tasks from the Web SEO managers the same way a Web SEO
-// associate does, so the task count comes from the same action.
-import { getUnsubmittedAssociateTaskCount } from '../web-associate/manager-tasks/actions';
+const ITEMS = [
+  {
+    "href": "/web-developer/tasks",
+    "label": "My Tasks",
+    "badge": "tasks"
+  },
+  {
+    "href": "/web-developer/eod",
+    "label": "EOD Report"
+  },
+  {
+    "href": "/web-developer/reports",
+    "label": "Reports",
+    "badge": "reports"
+  }
+];
 
-export default function WebDeveloperLayout({ children }) {
-  const [pendingTaskCount, setPendingTaskCount] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    const poll = async () => {
-      const count = await getUnsubmittedAssociateTaskCount();
-      if (!cancelled) setPendingTaskCount(count);
-    };
-    poll();
-    const interval = setInterval(poll, 60000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
-
-  const navItems = [
-    { href: '/web-developer/tasks', label: 'My Tasks', badgeCount: pendingTaskCount },
-    { href: '/web-developer/eod', label: 'EOD Report' },
-  ];
-
-  return (
-    <RoleLayoutShell navItems={navItems} headerTitle="Web Developer - SEO Portal">
-      {children}
-    </RoleLayoutShell>
-  );
+export default async function Layout({ children }) {
+  const session = await verifySession();
+  if (!session || session.role !== 'web_developer_seo') redirect('/login');
+  return <PortalLayout items={ITEMS} headerTitle="Web Developer - SEO Portal">{children}</PortalLayout>;
 }

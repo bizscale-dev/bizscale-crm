@@ -18,6 +18,9 @@ export default async function Home() {
       hr: '/hr',
       qa: '/qa',
       web_developer_seo: '/web-developer',
+      web_developer_executive: '/web-dev-executive',
+      graphic_designer: '/graphic-designer',
+      graphic_designer_executive: '/graphic-executive',
     };
     redirect(roleRedirects[session.role] || '/login');
   }

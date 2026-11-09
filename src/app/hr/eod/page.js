@@ -8,6 +8,7 @@ const ROLE_LABELS = {
   web_seo_manager: 'Web SEO Manager',
   writers_manager: 'Writers Manager',
   web_developer_seo: 'Web Developer - SEO',
+  graphic_designer: 'Graphics Designer',
 };
 
 export default async function HrEodPage() {

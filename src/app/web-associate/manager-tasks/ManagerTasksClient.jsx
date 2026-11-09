@@ -174,8 +174,9 @@ function TaskCard({ task, twelveHour }) {
       >
         <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: '1.4rem', flexShrink: 0 }}>{open ? '▾' : '▸'}</span>
         <div style={{ fontSize: '0.95rem', flex: 1, minWidth: 0, ...(open ? { whiteSpace: 'pre-wrap' } : { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }) }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', textAlign: 'right' }}>
           Due {task.due_date} {task.template_id ? '12 AM' : (twelveHour ? formatDue12h(task.due_time) : task.due_time)}
+          {task.assigned_by && <div style={{ marginTop: '0.2rem' }}>Assigned by <strong style={{ color: 'var(--foreground)' }}>{task.assigned_by}</strong></div>}
         </div>
       </div>
 

@@ -7,7 +7,7 @@ import { getSitePages } from '@/lib/sitemapFetch';
 
 // The Web Developer - SEO files the same daily EOD as the Web SEO managers, so both roles
 // share these actions (and the same eod_reports tables).
-const EOD_ROLES = ['web_seo_manager', 'web_developer_seo'];
+const EOD_ROLES = ['web_seo_manager', 'web_developer_seo', 'graphic_designer'];
 
 async function requireWebSeoManager() {
   const session = await verifySession();

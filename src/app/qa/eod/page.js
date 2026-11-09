@@ -9,6 +9,7 @@ const ROLE_LABELS = {
   seo_manager: 'SEO Manager',
   writers_manager: 'Writers Manager',
   web_developer_seo: 'Web Developer - SEO',
+  graphic_designer: 'Graphics Designer',
 };
 
 export default async function QaEodPage() {
@@ -22,7 +23,7 @@ export default async function QaEodPage() {
       (SELECT MAX(r.report_date) FROM eod_reports r WHERE r.user_id = u.id) as last_report_date,
       (SELECT COUNT(*) FROM qa_reports q WHERE q.manager_id = u.id) as flagged_count
     FROM users u
-    WHERE u.role IN ('web_seo_manager', 'seo_manager', 'writers_manager', 'web_developer_seo')
+    WHERE u.role IN ('web_seo_manager', 'seo_manager', 'writers_manager', 'web_developer_seo', 'graphic_designer')
     ORDER BY u.role, u.name
   `).all();
 

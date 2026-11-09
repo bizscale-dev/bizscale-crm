@@ -10,6 +10,7 @@ const ROLE_LABELS = {
   senior_seo_associate: 'Senior SEO Associate',
   web_seo_associate: 'Web SEO Associate',
   web_developer_seo: 'Web Developer - SEO',
+  graphic_designer: 'Graphics Designer',
   writer: 'Writer',
 };
 

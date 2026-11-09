@@ -12,6 +12,7 @@ const TASKS_LINK_BY_ROLE = {
   // Admin-assigned tasks (the extra Tasks page); associate-tier tasks from the SEO managers
   // use the shared /associate/manager-tasks page, see recurringAssociateTasks.js.
   senior_seo_associate: '/associate/senior-tasks',
+  graphic_designer: '/graphic-designer/tasks',
 };
 
 export function getTasksLinkForRole(role) {
@@ -29,6 +30,19 @@ const REPORTS_LINK_BY_ROLE = {
 
 export function getReportsLinkForRole(role) {
   return REPORTS_LINK_BY_ROLE[role] || '/';
+}
+
+// Where the Pass/Fail task-check reports live (Web Developer / Graphic Designer Executives report
+// the tasks their team submitted): the reported person fixes it, the Executive confirms.
+const CHECK_REPORTS_LINK_BY_ROLE = {
+  web_developer_seo: '/web-developer/reports',
+  graphic_designer: '/graphic-designer/reports',
+  web_developer_executive: '/web-dev-executive/reports',
+  graphic_designer_executive: '/graphic-executive/reports',
+};
+
+export function getCheckReportsLinkForRole(role) {
+  return CHECK_REPORTS_LINK_BY_ROLE[role] || '/';
 }
 
 /**

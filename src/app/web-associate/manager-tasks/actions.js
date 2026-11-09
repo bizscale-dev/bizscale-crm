@@ -12,7 +12,7 @@ const MAX_BASE64_LENGTH = 2 * 1024 * 1024 * 1.37;
 
 // A Web Developer - SEO receives tasks from the Web SEO managers exactly like a Web SEO
 // associate does, so both roles share these actions.
-const ALLOWED_ROLES = ['web_seo_associate', 'web_developer_seo'];
+const ALLOWED_ROLES = ['web_seo_associate', 'web_developer_seo', 'graphic_designer'];
 
 async function requireWebSeoAssociate() {
   const session = await verifySession();

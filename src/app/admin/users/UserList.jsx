@@ -75,7 +75,7 @@ export default function UserList({ users, assignedAssociates, assignedWriters, h
                 <td style={{ padding: '1rem 0' }}>
                   {!hasActiveCampaign && <span style={{ color: 'var(--text-muted)' }}>No Active Campaign</span>}
                   {hasActiveCampaign && u.role === 'admin' && <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                  {hasActiveCampaign && ['manager', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa', 'web_developer_seo'].includes(u.role) && <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  {hasActiveCampaign && ['manager', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa', 'web_developer_seo', 'web_developer_executive', 'graphic_designer', 'graphic_designer_executive'].includes(u.role) && <span style={{ color: 'var(--text-muted)' }}>—</span>}
                   
                   {hasActiveCampaign && (u.role === 'seo_associate' || u.role === 'senior_seo_associate' || u.role === 'writer') && (
                     isAssigned ? (
@@ -154,6 +154,9 @@ function RoleBadge({ role }) {
     senior_seo_associate: { label: 'Senior SEO Associate', tone: 'brand' },
     web_seo_associate: { label: 'Web SEO Associate', tone: 'neutral' },
     web_developer_seo: { label: 'Web Developer - SEO', tone: 'brand' },
+    web_developer_executive: { label: 'Web Developer Executive', tone: 'brand' },
+    graphic_designer: { label: 'Graphics Designer', tone: 'brand' },
+    graphic_designer_executive: { label: 'Graphic Designer Executive', tone: 'brand' },
     writer: { label: 'Writer', tone: 'success' },
     hr: { label: 'HR', tone: 'neutral' },
     qa: { label: 'QA', tone: 'neutral' },
