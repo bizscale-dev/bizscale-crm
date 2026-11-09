@@ -8,6 +8,10 @@ const ITEMS = [
     "label": "Task Checks"
   },
   {
+    "href": "/web-dev-executive/eod",
+    "label": "EOD"
+  },
+  {
     "href": "/web-dev-executive/reports",
     "label": "Reports",
     "badge": "reports"

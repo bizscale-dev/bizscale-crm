@@ -12,6 +12,10 @@ const ITEMS = [
     "label": "Assign Tasks"
   },
   {
+    "href": "/graphic-executive/eod",
+    "label": "EOD"
+  },
+  {
     "href": "/graphic-executive/reports",
     "label": "Reports",
     "badge": "reports"

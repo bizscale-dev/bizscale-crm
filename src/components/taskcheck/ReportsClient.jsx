@@ -13,6 +13,9 @@ const STATUS = {
 const btn = { fontSize: '0.8rem', padding: '0.4rem 1rem', border: 'none', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', color: 'white' };
 const area = { width: '100%', padding: '0.55rem 0.8rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--foreground)', fontSize: '0.875rem', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' };
 
+const ROLE_LABEL = { web_developer_executive: 'Web Developer Executive', graphic_designer_executive: 'Graphic Designer Executive', qa: 'QA', admin: 'Admin' };
+const by = (r) => `${r.reporter_name}${ROLE_LABEL[r.reporter_role] ? ` (${ROLE_LABEL[r.reporter_role]})` : ''}`;
+
 function ReportCard({ report, mode }) {
   const router = useRouter();
   const [text, setText] = useState('');
@@ -36,7 +39,7 @@ function ReportCard({ report, mode }) {
     <div style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.1rem 1.25rem', backgroundColor: 'var(--card-bg)', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-          {mode === 'exec' ? <>Task by <strong style={{ color: 'var(--foreground)' }}>{report.assignee_name}</strong> · reported by {report.reporter_name}</> : <>Reported by {report.reporter_name}</>} · {formatPkt(report.created_at)}
+          {mode === 'exec' ? <>Task by <strong style={{ color: 'var(--foreground)' }}>{report.assignee_name}</strong> · reported by <strong style={{ color: 'var(--foreground)' }}>{by(report)}</strong></> : <>Reported by <strong style={{ color: 'var(--foreground)' }}>{by(report)}</strong></>} · {formatPkt(report.created_at)}
           {report.rejection_count > 0 ? ` · failed re-check ${report.rejection_count}×` : ''}
         </div>
         <span style={{ fontSize: '0.72rem', fontWeight: '600', color: st.color, backgroundColor: st.bg, padding: '0.2rem 0.6rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>{st.label}</span>

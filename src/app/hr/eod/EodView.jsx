@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { cardStyle, selectStyle, formatMonth, StatPill, BRAND_COLOR } from '../hrStyles';
 
-export default function EodView({ reports }) {
+export default function EodView({ reports, description = 'End-of-day reports filed by SEO, Web SEO, and Writers Managers.' }) {
   const people = useMemo(() => {
     const seen = new Map();
     for (const r of reports) seen.set(r.manager_id, r.manager_name);
@@ -34,7 +34,7 @@ export default function EodView({ reports }) {
       <div>
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>EOD Reports</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-          End-of-day reports filed by SEO, Web SEO, and Writers Managers.
+          {description}
         </p>
       </div>
 

@@ -24,7 +24,7 @@ const REPORTS_LINK_BY_ROLE = {
   seo_manager: '/seo-manager/reports',
   web_seo_manager: '/web-seo-manager/reports',
   writers_manager: '/writers-manager/reports',
-  web_developer_seo: '/web-developer/eod',
+  web_developer_seo: '/web-developer/reports',
   senior_seo_associate: '/associate/senior-reports',
 };
 

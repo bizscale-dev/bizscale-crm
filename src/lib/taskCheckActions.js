@@ -5,6 +5,7 @@ import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { createNotificationsForUsers, getCheckReportsLinkForRole } from '@/lib/notifications';
 import { CHECK_TARGETS, CHECKED_ROLES } from '@/lib/taskCheck';
+import { submitFixForReview } from '@/lib/qaReports';
 
 const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
@@ -170,4 +171,17 @@ export async function getTaskCheckBadgeCount() {
     WHERE r.status = 'pending_review' AND u.role = ?
   `).get(cfg.targetRole);
   return row?.c || 0;
+}
+
+/** The reported person submits a fix for a QA report on their own list (goes to QA for review). */
+export async function resolveQaReport(reportId, note) {
+  const session = await verifySession();
+  if (!session || !CHECKED_ROLES.includes(session.role)) return { error: 'Not authorized' };
+  const db = await getDb();
+  const result = await submitFixForReview(db, session, reportId, note);
+  if (result.error) return result;
+  revalidatePath('/web-developer/reports');
+  revalidatePath('/graphic-designer/reports');
+  revalidatePath('/qa/reports');
+  return { success: true };
 }
