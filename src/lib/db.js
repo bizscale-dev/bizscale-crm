@@ -261,6 +261,8 @@ async function runMigrationsBody(raw) {
     "ALTER TABLE manager_task_templates ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
     "ALTER TABLE associate_tasks ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
     "ALTER TABLE associate_task_templates ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
+    // Optional image a manager attaches when assigning a task (served by /api/task-attachment/[taskId]).
+    "ALTER TABLE associate_tasks ADD COLUMN attachment_base64 TEXT",
     // First working day of a Month 1 client's CURRENT week — the 5-working-day
     // clock that drives automatic week advancement (see autoAdvanceMonth1Weeks
     // in src/lib/funnel.js). NULL until the clock is first started.

@@ -319,8 +319,25 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
   const [dueTime, setDueTime] = useState('');
   const [urgency, setUrgency] = useState('moderate');
   const [selectedIds, setSelectedIds] = useState([]);
+  const [image, setImage] = useState(null); // optional attachment, as a data URL
+  const [imageKey, setImageKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
+
+  const handleImage = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) { setImage(null); return; }
+    if (file.size > 2 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'Image is too large — max 2MB.' });
+      e.target.value = '';
+      setImage(null);
+      return;
+    }
+    setMessage(null);
+    const reader = new FileReader();
+    reader.onload = () => setImage(reader.result);
+    reader.readAsDataURL(file);
+  };
 
   const toggleAssociate = (id) => {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -336,6 +353,7 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
     formData.set('due_date', dueDate);
     formData.set('due_time', dueTime);
     formData.set('urgency', urgency);
+    if (image) formData.set('attachment', image);
     selectedIds.forEach((id) => formData.append('assignee_ids', id));
 
     const result = await createAssociateTask(formData);
@@ -347,6 +365,8 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
     }
 
     setMessage({ type: 'success', text: `Task assigned to ${result.assignedCount} associate(s).` });
+    setImage(null);
+    setImageKey((k) => k + 1);
     setTaskText('');
     setDueDate('');
     setDueTime('');
@@ -411,6 +431,18 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
           <UrgencySelect value={urgency} onChange={setUrgency} labelStyle={labelStyle} inputStyle={inputStyle} />
 
           <div>
+            <label style={labelStyle}>Image (optional)</label>
+            <input key={imageKey} type="file" accept="image/*" onChange={handleImage} />
+            {image && (
+              <div style={{ marginTop: '0.5rem' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={image} alt="Attachment preview" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block' }} />
+                <button type="button" onClick={() => { setImage(null); setImageKey((k) => k + 1); }} style={{ marginTop: '0.4rem', background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}>Remove image</button>
+              </div>
+            )}
+          </div>
+
+          <div>
             <label style={labelStyle}>Assign To</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
               {associates.map((a) => (
@@ -454,6 +486,12 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
                     Due {task.due_date} {task.template_id ? '(12 AM)' : task.due_time}
                   </div>
                 </div>
+                {task.has_attachment && (
+                  <a href={`/api/task-attachment/${task.id}`} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginBottom: '0.75rem' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/api/task-attachment/${task.id}`} alt="Task attachment" loading="lazy" style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block' }} />
+                  </a>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem' }}>
                   {task.assignees.map((a) => (
                     <AssigneeStatus key={a.id} assignee={a} />

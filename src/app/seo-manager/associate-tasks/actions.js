@@ -33,11 +33,17 @@ export async function createAssociateTask(formData) {
   const dueDate = (formData.get('due_date') || '').toString().trim();
   const dueTime = (formData.get('due_time') || '').toString().trim();
   const urgency = parseUrgency(formData.get('urgency'));
+  // Optional image (a data URL), up to ~2MB — re-validated here, the browser check alone isn't trusted.
+  const attachment = (formData.get('attachment') || '').toString();
   const assigneeIds = formData.getAll('assignee_ids')
     .map((v) => parseInt(v, 10))
     .filter((n) => !Number.isNaN(n));
 
   if (!taskText) return { error: 'Task description is required' };
+  if (attachment) {
+    if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(attachment)) return { error: 'The image looks invalid — try attaching it again' };
+    if (attachment.length > 2 * 1024 * 1024 * 1.37) return { error: 'The image is too large (max 2MB)' };
+  }
   if (!dueDate) return { error: 'Due date is required' };
   if (!dueTime) return { error: 'Due time is required' };
   if (assigneeIds.length === 0) return { error: 'Select at least one associate to assign this task to' };
@@ -52,9 +58,9 @@ export async function createAssociateTask(formData) {
 
     const create = db.transaction(async (tx) => {
       const result = await tx.prepare(`
-        INSERT INTO associate_tasks (task_text, due_date, due_time, created_by, urgency)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(taskText, dueDate, dueTime, session.userId, urgency);
+        INSERT INTO associate_tasks (task_text, due_date, due_time, created_by, urgency, attachment_base64)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(taskText, dueDate, dueTime, session.userId, urgency, attachment || null);
       for (const u of valid) {
         await tx.prepare(`
           INSERT INTO associate_task_assignees (task_id, user_id) VALUES (?, ?)
