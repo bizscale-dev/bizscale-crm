@@ -7,11 +7,12 @@ import Link from 'next/link';
 import Logo from '@/components/Logo';
 import Badge from '@/components/ui/Badge';
 import StatCard from '@/components/ui/StatCard';
+import WebDateSelect from './WebDateSelect';
 
 const BRAND_COLOR = 'var(--primary)';
 const POST_TYPE_LABELS = { web2: 'Web 2.0', guestpost: 'Guest Post' };
 
-export default async function WebSeoAssociateDetail({ id, backHref, backLabel, campaign: campaignProp }) {
+export default async function WebSeoAssociateDetail({ id, backHref, backLabel, campaign: campaignProp, basePath, selectedDate }) {
   const db = await getDb();
   const associateId = parseInt(id, 10);
   // Pass campaign to scope this dashboard to a specific (possibly past/completed)
@@ -19,6 +20,8 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
   // per-campaign report (src/app/admin/web-clients/campaigns/[id]/associates/[associateId]/page.js).
   const campaign = campaignProp || await getActiveWebSeoCampaign();
   const today = new Date().toISOString().split('T')[0];
+  // The day the Tasks card shows (the Select Date dropdown, like the SEO associate pages); today by default.
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(selectedDate || '') ? selectedDate : today;
 
   // Guard by role too, not just existence — this component is reachable from
   // role-scoped manager portals, so a mismatched role must not leak that user's
@@ -33,8 +36,7 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
     );
   }
 
-  let todayTasks = [], pendingTasks = [], upcomingDays = [], dailySummary = [];
-  let cumulativeByClientType = {};
+  let todayTasks = [], dateTasks = [], availableDates = [], pendingTasks = [], upcomingDays = [], dailySummary = [];
 
   if (campaign) {
 
@@ -46,19 +48,18 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
       ORDER BY c.business_name, wt.post_type
     `).all(associateId, campaign.id, today);
 
-    // Cumulative target/completed per client+post_type, from campaign start through
-    // today — so the numbers on each client's card grow day over day instead of
-    // repeating the same day-only slice, which otherwise looks unchanged and confusing.
-    const cumulativeRows = await db.prepare(`
-      SELECT client_id, post_type, SUM(target_count) as target, SUM(completed_count) as completed
-      FROM webseo_tasks
-      WHERE associate_id = ? AND webseo_campaign_id = ? AND task_date <= ?
-      GROUP BY client_id, post_type
-    `).all(associateId, campaign.id, today);
-    for (const row of cumulativeRows) {
-      if (!cumulativeByClientType[row.client_id]) cumulativeByClientType[row.client_id] = {};
-      cumulativeByClientType[row.client_id][row.post_type] = { target: row.target, completed: row.completed };
-    }
+    // The selected day's own tasks (single day, not cumulative) + every day that has tasks, for the dropdown.
+    dateTasks = await db.prepare(`
+      SELECT wt.*, c.business_name as client_name
+      FROM webseo_tasks wt
+      JOIN web_clients c ON c.id = wt.client_id
+      WHERE wt.associate_id = ? AND wt.webseo_campaign_id = ? AND wt.task_date = ?
+      ORDER BY c.business_name, wt.post_type
+    `).all(associateId, campaign.id, date);
+    availableDates = await db.prepare(`
+      SELECT DISTINCT task_date, day_number FROM webseo_tasks
+      WHERE associate_id = ? AND webseo_campaign_id = ? ORDER BY task_date
+    `).all(associateId, campaign.id);
 
     // Every day this associate has ever had (or will have) webseo_tasks for, past
     // and future alike — past days carry accurate, backlog-creep-immune numbers
@@ -77,21 +78,16 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
       ORDER BY wt.task_date DESC, c.business_name, wt.post_type
     `).all(associateId, campaign.id, today);
 
-    await attachSyncedWebLinks(db, todayTasks);
+    await attachSyncedWebLinks(db, dateTasks);
     await attachSyncedWebLinks(db, pendingTasks);
   }
 
   const tasksByClient = {};
-  todayTasks.forEach(t => {
+  dateTasks.forEach(t => {
     if (!tasksByClient[t.client_id]) {
       tasksByClient[t.client_id] = { client_id: t.client_id, client_name: t.client_name, tasks: [] };
     }
-    const cumulative = cumulativeByClientType[t.client_id]?.[t.post_type];
-    tasksByClient[t.client_id].tasks.push({
-      ...t,
-      target_count: cumulative?.target ?? t.target_count,
-      completed_count: cumulative?.completed ?? t.completed_count,
-    });
+    tasksByClient[t.client_id].tasks.push(t);
   });
 
   const pendingByClient = {};
@@ -198,11 +194,18 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
           )}
 
           <div className="card">
-            <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-              Today&apos;s Tasks — {today}
+            <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+              Tasks — {date}{date === today ? ' (Today)' : ''}
             </h2>
+            {basePath && availableDates.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+                <label style={{ fontWeight: '500' }}>Select Date:</label>
+                <WebDateSelect availableDates={availableDates} selectedDate={date} today={today} basePath={basePath} />
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{Object.values(tasksByClient).length} client(s) scheduled</span>
+              </div>
+            )}
             {Object.values(tasksByClient).length === 0 ? (
-              <p style={{ color: 'var(--text-muted)' }}>No tasks scheduled for today.</p>
+              <p style={{ color: 'var(--text-muted)' }}>No tasks scheduled for {date}.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 {Object.values(tasksByClient).map(client => (
@@ -262,6 +265,60 @@ export default async function WebSeoAssociateDetail({ id, backHref, backLabel, c
                                 <div style={{ width: `${pct}%`, height: '100%', backgroundColor: BRAND_COLOR }}></div>
                               </div>
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{pct}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Daily Summary — every day this associate has had tasks for, past and future, same as the SEO
+              associate page: each day's own target vs. what was done against it (see src/lib/dailyStats.js). */}
+          <div className="card">
+            <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+              Daily Summary
+            </h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.75rem 0 1rem 0' }}>
+              Each day&apos;s own assigned target vs. what was done against it specifically, not blended
+              with backlog caught up from other days.
+            </p>
+            {dailySummary.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)' }}>No tasks scheduled.</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                      <th style={{ padding: '0.75rem 0' }}>Day</th>
+                      <th style={{ padding: '0.75rem 0' }}>Date</th>
+                      <th style={{ padding: '0.75rem 0' }}>Clients</th>
+                      <th style={{ padding: '0.75rem 0' }}>Links Target</th>
+                      <th style={{ padding: '0.75rem 0' }}>Progress</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dailySummary.map(d => {
+                      // Capped at 100% for display only; dayCompleted/target are shown uncapped beside it.
+                      const rawPct = d.target > 0 ? Math.round((d.dayCompleted / d.target) * 100) : 0;
+                      const pct = Math.min(100, rawPct);
+                      const isToday = d.task_date === today;
+                      const isPast = d.task_date < today;
+                      return (
+                        <tr key={d.task_date} style={{ borderBottom: '1px solid var(--border)', backgroundColor: isToday ? 'rgba(22, 178, 147, 0.05)' : 'transparent', opacity: isPast ? 0.85 : 1 }}>
+                          <td style={{ padding: '0.75rem 0', fontWeight: isToday ? '600' : 'normal' }}>Day {d.day_number} {isToday && <span style={{ color: BRAND_COLOR, marginLeft: '0.25rem' }}>(Today)</span>}</td>
+                          <td style={{ padding: '0.75rem 0' }}>{d.task_date}</td>
+                          <td style={{ padding: '0.75rem 0' }}>{d.clients}</td>
+                          <td style={{ padding: '0.75rem 0', fontWeight: '600', color: BRAND_COLOR }}>{d.target}</td>
+                          <td style={{ padding: '0.75rem 0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <div style={{ flex: 1, height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ width: `${pct}%`, height: '100%', backgroundColor: BRAND_COLOR }}></div>
+                              </div>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{d.dayCompleted}/{d.target} ({pct}%)</span>
                             </div>
                           </td>
                         </tr>

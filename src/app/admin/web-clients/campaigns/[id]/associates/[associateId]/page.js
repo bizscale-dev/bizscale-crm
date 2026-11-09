@@ -12,8 +12,9 @@ export const revalidate = 0;
  * "whichever campaign is active") so this still shows a past/completed
  * campaign's real numbers correctly, even once a different one is active.
  */
-export default async function WebSeoCampaignAssociateDashboardPage({ params }) {
+export default async function WebSeoCampaignAssociateDashboardPage({ params, searchParams }) {
   const { id, associateId } = await params;
+  const sp = (await searchParams) || {};
   const db = await getDb();
   const campaignId = parseInt(id, 10);
 
@@ -34,6 +35,8 @@ export default async function WebSeoCampaignAssociateDashboardPage({ params }) {
       campaign={campaign}
       backHref={`/admin/web-clients/campaigns/${id}`}
       backLabel={campaign.name}
+      basePath={`/admin/web-clients/campaigns/${id}/associates/${associateId}`}
+      selectedDate={sp.date}
     />
   );
 }
