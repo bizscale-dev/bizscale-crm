@@ -143,7 +143,7 @@ export async function renderMyReportsPage() {
       <ReportsClient reports={reports} mode="mine" />
       {qaReports.length > 0 && (
         <>
-          <Heading title="QA Reports">Issues QA flagged on your work. Fix them and submit the fix — QA confirms it.</Heading>
+          <Heading title="QA Reports">Issues QA flagged on your work. Fix them and submit the fix â€” QA confirms it.</Heading>
           <ManagerQaReports reports={qaReports} resolveAction={resolveQaReport} resolveDays={QA_RESOLVE_DAYS} />
         </>
       )}
