@@ -221,7 +221,10 @@ export default function QaEodReports({ managerId, webClients, initialReports, in
             {reports.map((report) => (
               <div key={report.id}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                  <h3 style={{ margin: 0, fontSize: '0.95rem', color: BRAND_COLOR }}>{report.report_date}</h3>
+                  <h3 style={{ margin: 0, fontSize: '0.95rem', color: BRAND_COLOR, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    {report.report_date}
+                    {report.entries.length > 0 && report.entries.every((en) => checks[en.id]) && <span style={{ fontSize: '0.68rem', fontWeight: '700', color: 'var(--success)', backgroundColor: 'rgba(34, 197, 94, 0.12)', padding: '0.15rem 0.55rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>✓ Checked</span>}
+                  </h3>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                     {report.entries.length} {report.entries.length === 1 ? 'entry' : 'entries'}
                     {' · '}<span style={{ color: 'var(--success)' }}>✓ {report.entries.filter((e) => checks[e.id] === 'pass').length}</span>

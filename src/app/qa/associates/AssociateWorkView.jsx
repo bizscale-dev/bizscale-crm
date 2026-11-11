@@ -194,13 +194,23 @@ function AssociateCard({ kind, associate, date }) {
     for (const u of urls) next[`${clientId}|${u}`] = 'pass';
     return next;
   });
+  // Every link of this associate has a Pass / Fail mark -> tag the card as Checked.
+  const allKeys = associate.clients.flatMap((c) => c.types.flatMap((t) => t.links.map((l) => `${c.clientId}|${l.url}`)));
+  const unchecked = allKeys.filter((k) => !statuses[k]).length;
+  const fullyChecked = allKeys.length > 0 && unchecked === 0;
   const reported = () => setStats((s) => ({ ...s, total: s.total + 1, pending: s.pending + 1 }));
 
   return (
     <div style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: '1.05rem', fontWeight: '600' }}>{associate.name}</div>
+          <div style={{ fontSize: '1.05rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+            {associate.name}
+            {fullyChecked && <span style={{ fontSize: '0.68rem', fontWeight: '700', color: 'var(--success)', backgroundColor: 'rgba(34, 197, 94, 0.12)', padding: '0.15rem 0.55rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>✓ Checked</span>}
+            {!fullyChecked && allKeys.length > 0 && unchecked < allKeys.length && (
+              <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.12)', padding: '0.15rem 0.55rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>{unchecked} left to check</span>
+            )}
+          </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
             {associate.total} link{associate.total === 1 ? '' : 's'} on {associate.clients.length} client{associate.clients.length === 1 ? '' : 's'}
           </div>
