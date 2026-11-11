@@ -33,7 +33,7 @@ export default async function QaEodManagerPage({ params }) {
     ORDER BY e.web_client_name
   `).all(managerId);
 
-  const { reports, reportCounts } = await fetchManagerEodReports(db, managerId);
+  const { reports, reportCounts, checks } = await fetchManagerEodReports(db, managerId);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -50,6 +50,7 @@ export default async function QaEodManagerPage({ params }) {
         webClients={webClients}
         initialReports={reports}
         initialReportCounts={reportCounts}
+        initialChecks={checks}
       />
     </div>
   );

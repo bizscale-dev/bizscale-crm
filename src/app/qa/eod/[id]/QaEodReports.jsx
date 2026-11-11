@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { getQaManagerEodReports, reportEodEntry } from '../actions';
+import { getQaManagerEodReports, reportEodEntry, setEodEntryCheck } from '../actions';
 import Linkify from '../../Linkify';
 import ResolveDaysInput from '@/components/ResolveDaysInput';
 
@@ -33,6 +33,8 @@ function groupEntriesForDisplay(entries) {
   return clientGroups;
 }
 
+const checkBtn = { background: 'none', border: '1px solid var(--border)', borderRadius: '0.4rem', padding: '0.2rem 0.55rem', fontSize: '0.7rem', fontWeight: '600', cursor: 'pointer' };
+
 const labelStyle = {
   display: 'block',
   marginBottom: '0.4rem',
@@ -54,11 +56,13 @@ const inputStyle = {
   boxSizing: 'border-box',
 };
 
-export default function QaEodReports({ managerId, webClients, initialReports, initialReportCounts }) {
+export default function QaEodReports({ managerId, webClients, initialReports, initialReportCounts, initialChecks = {} }) {
   const [webClientId, setWebClientId] = useState('');
   const [date, setDate] = useState('');
   const [reports, setReports] = useState(initialReports);
   const [reportCounts, setReportCounts] = useState(initialReportCounts);
+  const [checks, setChecks] = useState(initialChecks);
+  const [checkError, setCheckError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -82,6 +86,7 @@ export default function QaEodReports({ managerId, webClients, initialReports, in
       } else {
         setReports(result.reports);
         setReportCounts(result.reportCounts);
+        setChecks(result.checks || {});
       }
     } catch (err) {
       setError(err.message);
@@ -107,6 +112,19 @@ export default function QaEodReports({ managerId, webClients, initialReports, in
     runQuery('', '');
   };
 
+  // Pass / Fail on one entry; clicking the active mark clears it.
+  const mark = async (entryId, next) => {
+    const before = checks[entryId] || '';
+    const value = before === next ? '' : next;
+    setChecks((prev) => ({ ...prev, [entryId]: value }));
+    setCheckError(null);
+    const res = await setEodEntryCheck(entryId, value);
+    if (res?.error) {
+      setChecks((prev) => ({ ...prev, [entryId]: before }));
+      setCheckError(res.error);
+    }
+  };
+
   const openReportForm = (entryId) => {
     setReportingId(entryId);
     setNote('');
@@ -124,6 +142,7 @@ export default function QaEodReports({ managerId, webClients, initialReports, in
       return;
     }
     setReportCounts((prev) => ({ ...prev, [reportingId]: (prev[reportingId] || 0) + 1 }));
+    setChecks((prev) => ({ ...prev, [reportingId]: 'fail' }));
     setReportingId(null);
     setNote('');
   };
@@ -171,6 +190,12 @@ export default function QaEodReports({ managerId, webClients, initialReports, in
         </div>
       </div>
 
+      {checkError && (
+        <div className="card">
+          <p style={{ color: 'var(--danger)', margin: 0 }}>{checkError}</p>
+        </div>
+      )}
+
       {error && (
         <div className="card">
           <p style={{ color: 'var(--danger)', margin: 0 }}>{error}</p>
@@ -199,6 +224,9 @@ export default function QaEodReports({ managerId, webClients, initialReports, in
                   <h3 style={{ margin: 0, fontSize: '0.95rem', color: BRAND_COLOR }}>{report.report_date}</h3>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                     {report.entries.length} {report.entries.length === 1 ? 'entry' : 'entries'}
+                    {' · '}<span style={{ color: 'var(--success)' }}>✓ {report.entries.filter((e) => checks[e.id] === 'pass').length}</span>
+                    {' · '}<span style={{ color: 'var(--danger)' }}>✕ {report.entries.filter((e) => checks[e.id] === 'fail').length}</span>
+                    {' · '}{report.entries.filter((e) => !checks[e.id]).length} unchecked
                   </span>
                 </div>
 
@@ -226,6 +254,14 @@ export default function QaEodReports({ managerId, webClients, initialReports, in
                                           ⚑ Flagged{reportCounts[entry.id] > 1 ? ` ×${reportCounts[entry.id]}` : ''}
                                         </span>
                                       )}
+                                      <button type="button" onClick={() => mark(entry.id, 'pass')}
+                                        style={{ ...checkBtn, ...(checks[entry.id] === 'pass' ? { backgroundColor: 'var(--success)', borderColor: 'var(--success)', color: 'white' } : { color: 'var(--success)', borderColor: 'var(--success)' }) }}>
+                                        ✓ Pass
+                                      </button>
+                                      <button type="button" onClick={() => mark(entry.id, 'fail')}
+                                        style={{ ...checkBtn, ...(checks[entry.id] === 'fail' ? { backgroundColor: 'var(--danger)', borderColor: 'var(--danger)', color: 'white' } : { color: 'var(--danger)', borderColor: 'var(--danger)' }) }}>
+                                        ✕ Fail
+                                      </button>
                                       <button
                                         type="button"
                                         onClick={() => openReportForm(entry.id)}

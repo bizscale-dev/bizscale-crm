@@ -892,6 +892,13 @@ async function runMigrationsBody(raw) {
       checked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE (kind, client_id, url)
     )`,
+    // QA's Pass / Fail mark on one EOD entry (one page / link a manager listed).
+    `CREATE TABLE IF NOT EXISTS eod_entry_checks (
+      entry_id INTEGER PRIMARY KEY,
+      status TEXT NOT NULL CHECK(status IN ('pass','fail')),
+      checked_by INTEGER,
+      checked_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
     "CREATE INDEX IF NOT EXISTS idx_qa_reports_associate ON qa_reports (associate_id)",
     // Web Developer / Graphic Designer Executives check the tasks the Web Developer (SEO) and the
     // Graphics Designers submit: a Pass / Fail mark per task, and reports against a task.

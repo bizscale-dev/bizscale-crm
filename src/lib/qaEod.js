@@ -64,5 +64,14 @@ export async function fetchManagerEodReports(db, managerId, filters = {}) {
   const reportCounts = {};
   for (const c of counts) reportCounts[c.eod_entry_id] = c.c;
 
-  return { reports: [...byReport.values()], reportCounts };
+  // QA's Pass / Fail mark per entry: { [entryId]: 'pass' | 'fail' }.
+  const checkRows = await db.prepare(`
+    SELECT k.entry_id, k.status FROM eod_entry_checks k
+    JOIN eod_report_entries e ON e.id = k.entry_id
+    JOIN eod_reports r ON r.id = e.report_id WHERE r.user_id = ?
+  `).all(managerId);
+  const checks = {};
+  for (const k of checkRows) checks[k.entry_id] = k.status;
+
+  return { reports: [...byReport.values()], reportCounts, checks };
 }

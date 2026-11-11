@@ -31,6 +31,33 @@ export async function getQaManagerEodReports(managerId, filters = {}) {
   return fetchManagerEodReports(db, managerId, filters);
 }
 
+/** QA's Pass / Fail mark on one EOD entry (status '' clears it). */
+export async function setEodEntryCheck(entryId, status) {
+  const { session, error } = await requireQa();
+  if (error) return { error };
+  const id = parseInt(entryId, 10);
+  if (!id) return { error: 'Invalid entry' };
+  if (!['pass', 'fail', ''].includes(status)) return { error: 'Invalid status' };
+  const db = await getDb();
+  const placeholders = EOD_MANAGER_ROLES.map(() => '?').join(',');
+  const entry = await db.prepare(`
+    SELECT e.id FROM eod_report_entries e
+    JOIN eod_reports r ON r.id = e.report_id
+    JOIN users m ON m.id = r.user_id
+    WHERE e.id = ? AND m.role IN (${placeholders})
+  `).get(id, ...EOD_MANAGER_ROLES);
+  if (!entry) return { error: 'EOD entry not found' };
+  if (status === '') {
+    await db.prepare('DELETE FROM eod_entry_checks WHERE entry_id = ?').run(id);
+  } else {
+    await db.prepare(`
+      INSERT INTO eod_entry_checks (entry_id, status, checked_by) VALUES (?, ?, ?)
+      ON CONFLICT(entry_id) DO UPDATE SET status = excluded.status, checked_by = excluded.checked_by, checked_at = CURRENT_TIMESTAMP
+    `).run(id, status, session.userId);
+  }
+  return { success: true };
+}
+
 /**
  * QA flags one EOD entry as unsatisfactory, with a note. Looks the entry up
  * server-side (never trusts client-supplied manager/date/link values) and
@@ -77,6 +104,11 @@ export async function reportEodEntry(entryId, note, resolveDaysInput) {
     message: `${entry.web_client_name} (EOD ${entry.report_date}): ${cleanNote.slice(0, 120)} — resolve within ${resolveDays} working day${resolveDays === 1 ? '' : 's'}`,
     link: getReportsLinkForRole(entry.manager_role),
   });
+
+  await db.prepare(`
+    INSERT INTO eod_entry_checks (entry_id, status, checked_by) VALUES (?, 'fail', ?)
+    ON CONFLICT(entry_id) DO UPDATE SET status = 'fail', checked_by = excluded.checked_by, checked_at = CURRENT_TIMESTAMP
+  `).run(entry.id, session.userId);
 
   revalidatePath('/qa/reports');
   return { success: true };
