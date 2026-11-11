@@ -72,7 +72,7 @@ export async function ensureRecurringAssociateTasks() {
 /**
  * One occurrence of a monthly "check every client" template: appears from spawn_day of the month and is
  * due on month_day. Every active SEO / Senior SEO associate assigned to the active campaign gets it with
- * their own client list (the clients in their assigned range). Idempotent: (template_id, due_date) is unique,
+ * their own client list (the clients they have SEO tasks for). Idempotent: (template_id, due_date) is unique,
  * so repeat calls on later days of the window do nothing.
  */
 async function spawnMonthlyClientTask(db, t, today) {
@@ -89,18 +89,21 @@ async function spawnMonthlyClientTask(db, t, today) {
   if (!campaign?.id) return false;
 
   const people = await db.prepare(`
-    SELECT u.id, u.role, a.client_group_start, a.client_group_end
+    SELECT u.id, u.role
     FROM users u JOIN associate_assignments a ON a.user_id = u.id AND a.campaign_id = ?
     WHERE u.is_active = 1 AND u.role IN ('seo_associate', 'senior_seo_associate')
   `).all(campaign.id);
 
   const rows = [];
   for (const p of people) {
+    // The clients this associate actually works on: the ones they have SEO tasks for in the active
+    // campaign (their assigned range alone covers every client, so it cannot tell them apart).
     const clients = await db.prepare(`
-      SELECT TRIM(name) AS name FROM clients
-      WHERE campaign_id = ? AND sort_order >= ? AND sort_order <= ? AND is_active = 1
-      ORDER BY sort_order, id
-    `).all(campaign.id, p.client_group_start, p.client_group_end);
+      SELECT TRIM(c.name) AS name FROM clients c
+      WHERE c.campaign_id = ? AND c.is_active = 1
+        AND c.id IN (SELECT DISTINCT client_id FROM seo_tasks WHERE campaign_id = ? AND associate_id = ?)
+      ORDER BY c.sort_order, c.id
+    `).all(campaign.id, campaign.id, p.id);
     if (clients.length > 0) rows.push({ ...p, checklist: JSON.stringify(clients.map((c) => c.name)) });
   }
   if (rows.length === 0) return false;
