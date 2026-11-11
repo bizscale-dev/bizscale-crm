@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 
 /**
  * Saves (or clears, with an empty url) the blog link of one client on a "blog link per client" task for
- * the signed-in Web SEO manager. When every client has a link the task submits itself: the description
+ * the signed-in Web SEO manager. Passing 'paused' instead of a link marks the client as on hold, which also counts as done. When every client has a link the task submits itself: the description
  * lists "Client: link" per line, and a task finished after its due time goes to admin approval like any
  * other late submission.
  */
@@ -16,9 +16,11 @@ export async function setClientBlogLink(taskId, index, url) {
 
   const id = parseInt(taskId, 10);
   const idx = parseInt(index, 10);
+  // 'paused' = this client's blogs are on hold, which counts as done for the task.
   const link = typeof url === 'string' ? url.trim() : '';
+  const paused = link === 'paused';
   if (!id || Number.isNaN(idx) || idx < 0) return { error: 'Invalid item' };
-  if (link) {
+  if (link && !paused) {
     if (link.length > 2000 || !/^https?:\/\/[^\s]+\.[^\s]+$/i.test(link)) return { error: 'Paste the full link of the blog (starting with https://)' };
   }
 
@@ -46,7 +48,7 @@ export async function setClientBlogLink(taskId, index, url) {
 
     let submitted = false;
     if (doneIdx.length === clients.length && clients.length > 0) {
-      const description = clients.map((name, i) => `${name}: ${links[i]}`).join('\n');
+      const description = clients.map((name, i) => `${name}: ${links[i] === 'paused' ? 'paused (blogs on hold)' : links[i]}`).join('\n');
       const dueAt = new Date(`${row.due_date}T${row.due_time}:00`);
       const isLate = Number.isNaN(dueAt.getTime()) ? false : new Date() > dueAt;
       await db.prepare(`

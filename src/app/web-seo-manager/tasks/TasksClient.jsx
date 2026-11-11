@@ -142,12 +142,16 @@ function BlogLinksTask({ task }) {
             const draft = drafts[i] ?? '';
             return (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-                <span style={{ flex: '0 0 190px', fontSize: '0.85rem', fontWeight: '600' }}>{saved ? '✓ ' : ''}{name}</span>
+                <span style={{ flex: '0 0 190px', fontSize: '0.85rem', fontWeight: '600' }}>{saved ? (saved === 'paused' ? '⏸ ' : '✓ ') : ''}{name}</span>
                 {saved && (submitted || drafts[i] === undefined) ? (
                   <>
-                    <a href={saved} target="_blank" rel="noopener noreferrer" style={{ flex: '1 1 200px', minWidth: 0, fontSize: '0.8rem', color: 'var(--primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{saved}</a>
+                    {saved === 'paused' ? (
+                      <span style={{ flex: '1 1 200px', fontSize: '0.8rem', fontWeight: '600', color: '#f59e0b' }}>⏸ Paused — blogs on hold</span>
+                    ) : (
+                      <a href={saved} target="_blank" rel="noopener noreferrer" style={{ flex: '1 1 200px', minWidth: 0, fontSize: '0.8rem', color: 'var(--primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{saved}</a>
+                    )}
                     {!submitted && (
-                      <button type="button" onClick={() => setDrafts((p) => ({ ...p, [i]: saved }))} style={{ ...primaryButtonStyle, padding: '0.25rem 0.7rem', fontSize: '0.75rem', backgroundColor: 'transparent', color: 'var(--foreground)', border: '1px solid var(--border)' }}>Edit</button>
+                      <button type="button" onClick={() => setDrafts((p) => ({ ...p, [i]: saved === 'paused' ? '' : saved }))} style={{ ...primaryButtonStyle, padding: '0.25rem 0.7rem', fontSize: '0.75rem', backgroundColor: 'transparent', color: 'var(--foreground)', border: '1px solid var(--border)' }}>{saved === 'paused' ? 'Change' : 'Edit'}</button>
                     )}
                   </>
                 ) : (
@@ -157,6 +161,10 @@ function BlogLinksTask({ task }) {
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save(i, draft); } }} />
                     <button type="button" disabled={busy === i || !draft.trim()} onClick={() => save(i, draft)} style={{ ...primaryButtonStyle, padding: '0.35rem 0.9rem', fontSize: '0.8rem', opacity: busy === i || !draft.trim() ? 0.5 : 1 }}>
                       {busy === i ? 'Saving…' : 'Save link'}
+                    </button>
+                    <button type="button" disabled={busy === i} onClick={() => save(i, 'paused')} title="This client's blogs are paused — counts as done"
+                      style={{ ...primaryButtonStyle, padding: '0.35rem 0.9rem', fontSize: '0.8rem', backgroundColor: 'transparent', color: '#f59e0b', border: '1px solid #f59e0b', opacity: busy === i ? 0.5 : 1 }}>
+                      ⏸ Paused
                     </button>
                   </>
                 )}
@@ -171,7 +179,7 @@ function BlogLinksTask({ task }) {
           {!!task.is_late && <span style={{ color: APPROVAL_LABELS[task.approval_status]?.color || '#f59e0b' }}> · {APPROVAL_LABELS[task.approval_status]?.text || '⏳ Pending admin approval'} — submitted late</span>}
         </div>
       ) : (
-        <div style={{ paddingTop: '0.6rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>The task is done as soon as every client has a link.</div>
+        <div style={{ paddingTop: '0.6rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>The task is done as soon as every client has a link — or is marked Paused if its blogs are on hold.</div>
       )}
     </div>
   );
