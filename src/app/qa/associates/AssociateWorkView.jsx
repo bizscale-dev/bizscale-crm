@@ -35,10 +35,13 @@ function LinkRow({ kind, associate, client, type, link, date, status, onStatus, 
   const [message, setMessage] = useState(null);
 
   const mark = async (next) => {
-    const value = status === next ? '' : next; // clicking the active mark clears it
-    onStatus(value);
+    // Every link is Pass by default; QA only has to Fail the bad ones. Clicking Fail again puts it back to Pass.
+    if (next === 'pass' && status === 'pass') return;
+    const value = next === 'fail' && status === 'fail' ? 'pass' : next;
+    const keep = status === 'pass' ? '' : status;
+    onStatus(value === 'pass' ? '' : value);
     const res = await setLinkStatus({ kind, clientId: client.clientId, url, status: value });
-    if (res?.error) { onStatus(status); setMessage({ error: true, text: res.error }); }
+    if (res?.error) { onStatus(keep); setMessage({ error: true, text: res.error }); }
   };
 
   const send = async (e) => {
@@ -148,7 +151,7 @@ function AssociateCard({ kind, associate, date }) {
   // `${clientId}|${url}` -> 'pass' | 'fail'
   const [statuses, setStatuses] = useState(() => {
     const m = {};
-    for (const c of associate.clients) for (const t of c.types) for (const l of t.links) if (l.status) m[`${c.clientId}|${l.url}`] = l.status;
+    for (const c of associate.clients) for (const t of c.types) for (const l of t.links) if (l.status === 'fail') m[`${c.clientId}|${l.url}`] = l.status;
     return m;
   });
   const setStatus = (key) => (value) => setStatuses((prev) => {
@@ -198,7 +201,7 @@ function AssociateCard({ kind, associate, date }) {
                           <LinkRow
                             key={l ? l.url : `none-${i}`}
                             kind={kind} associate={associate} client={c} type={t.type} link={l} date={date}
-                            status={key ? statuses[key] || '' : ''}
+                            status={key ? statuses[key] || 'pass' : ''}
                             onStatus={key ? setStatus(key) : () => {}}
                             onReported={reported}
                           />

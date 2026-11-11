@@ -28,7 +28,8 @@ export async function setLinkStatus({ kind, clientId, url, status }) {
   if (!['pass', 'fail', ''].includes(status)) return { error: 'Invalid status' };
 
   const db = await getDb();
-  if (status === '') {
+  // Pass is the default for every link, so only Fail is stored; Pass (or '') clears the mark.
+  if (status === '' || status === 'pass') {
     await db.prepare('DELETE FROM qa_link_checks WHERE kind = ? AND client_id = ? AND url = ?').run(kind, cid, link);
   } else {
     await db.prepare(`
