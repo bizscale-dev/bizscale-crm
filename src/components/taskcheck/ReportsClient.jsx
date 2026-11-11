@@ -13,7 +13,7 @@ const STATUS = {
 const btn = { fontSize: '0.8rem', padding: '0.4rem 1rem', border: 'none', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', color: 'white' };
 const area = { width: '100%', padding: '0.55rem 0.8rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--foreground)', fontSize: '0.875rem', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' };
 
-const ROLE_LABEL = { web_developer_executive: 'Web Developer Executive', graphic_designer_executive: 'Graphic Designer Executive', qa: 'QA', admin: 'Admin' };
+const ROLE_LABEL = { web_developer_executive: 'Web Developer Executive', web_seo_manager: 'Web SEO Manager', graphic_designer_executive: 'Graphic Designer Executive', qa: 'QA', admin: 'Admin' };
 const by = (r) => `${r.reporter_name}${ROLE_LABEL[r.reporter_role] ? ` (${ROLE_LABEL[r.reporter_role]})` : ''}`;
 
 function ReportCard({ report, mode }) {

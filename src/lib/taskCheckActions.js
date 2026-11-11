@@ -77,8 +77,8 @@ export async function reportTask({ taskId, userId, comment }) {
     link: getCheckReportsLinkForRole(row.user_role),
   });
 
-  revalidatePath(`${ctx.cfg.base}/checks`);
-  revalidatePath(`${ctx.cfg.base}/reports`);
+  revalidatePath(ctx.cfg.checksPath);
+  revalidatePath(ctx.cfg.reportsPath);
   return { success: true, name: row.user_name };
 }
 
@@ -128,7 +128,7 @@ export async function confirmTaskReportFix(reportId) {
     message: r.task_text.slice(0, 160),
     link: getCheckReportsLinkForRole(r.user_role),
   });
-  revalidatePath(`${ctx.cfg.base}/reports`);
+  revalidatePath(ctx.cfg.reportsPath);
   return { success: true };
 }
 
@@ -151,7 +151,7 @@ export async function rejectTaskReportFix(reportId, reason) {
     message: `${r.task_text.slice(0, 100)} — "${why.slice(0, 160)}"`,
     link: getCheckReportsLinkForRole(r.user_role),
   });
-  revalidatePath(`${ctx.cfg.base}/reports`);
+  revalidatePath(ctx.cfg.reportsPath);
   return { success: true };
 }
 

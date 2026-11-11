@@ -40,6 +40,7 @@ const CHECK_REPORTS_LINK_BY_ROLE = {
   web_developer_seo: '/web-developer/reports',
   graphic_designer: '/graphic-designer/reports',
   web_developer_executive: '/web-dev-executive/reports',
+  web_seo_manager: '/web-seo-manager/developer-reports',
   graphic_designer_executive: '/graphic-executive/reports',
 };
 
