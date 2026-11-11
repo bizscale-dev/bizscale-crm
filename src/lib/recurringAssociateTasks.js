@@ -20,12 +20,16 @@ export async function ensureRecurringAssociateTasks() {
   const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
 
   const templates = await db.prepare(`
-    SELECT id, task_text, weekdays, duration_days, due_time, created_by, urgency
+    SELECT id, task_text, weekdays, duration_days, due_time, created_by, urgency, kind, month_day, spawn_day
     FROM associate_task_templates WHERE is_active = 1
   `).all();
 
   let spawned = 0;
   for (const t of templates) {
+    if (t.kind === 'monthly_clients') {
+      if (await spawnMonthlyClientTask(db, t, today)) spawned++;
+      continue;
+    }
     const startWeekday = parseInt(String(t.weekdays).split(',')[0], 10);
     if (startWeekday !== weekday) continue;
 
@@ -63,4 +67,59 @@ export async function ensureRecurringAssociateTasks() {
     spawned++;
   }
   return spawned;
+}
+
+/**
+ * One occurrence of a monthly "check every client" template: appears from spawn_day of the month and is
+ * due on month_day. Every active SEO / Senior SEO associate assigned to the active campaign gets it with
+ * their own client list (the clients in their assigned range). Idempotent: (template_id, due_date) is unique,
+ * so repeat calls on later days of the window do nothing.
+ */
+async function spawnMonthlyClientTask(db, t, today) {
+  const day = parseInt(today.slice(8, 10), 10);
+  const dueDay = t.month_day || 1;
+  if (day < (t.spawn_day || 1) || day > dueDay) return false;
+  const dueDateStr = `${today.slice(0, 8)}${String(dueDay).padStart(2, '0')}`;
+
+  const campaign = await db.prepare(`
+    SELECT COALESCE(
+      (SELECT id FROM campaigns WHERE status = 'active' ORDER BY id DESC LIMIT 1),
+      (SELECT id FROM campaigns ORDER BY id DESC LIMIT 1)) AS id
+  `).get();
+  if (!campaign?.id) return false;
+
+  const people = await db.prepare(`
+    SELECT u.id, u.role, a.client_group_start, a.client_group_end
+    FROM users u JOIN associate_assignments a ON a.user_id = u.id AND a.campaign_id = ?
+    WHERE u.is_active = 1 AND u.role IN ('seo_associate', 'senior_seo_associate')
+  `).all(campaign.id);
+
+  const rows = [];
+  for (const p of people) {
+    const clients = await db.prepare(`
+      SELECT TRIM(name) AS name FROM clients
+      WHERE campaign_id = ? AND sort_order >= ? AND sort_order <= ? AND is_active = 1
+      ORDER BY sort_order, id
+    `).all(campaign.id, p.client_group_start, p.client_group_end);
+    if (clients.length > 0) rows.push({ ...p, checklist: JSON.stringify(clients.map((c) => c.name)) });
+  }
+  if (rows.length === 0) return false;
+
+  const result = await db.prepare(`
+    INSERT OR IGNORE INTO associate_tasks (task_text, due_date, due_time, created_by, template_id, urgency, kind)
+    VALUES (?, ?, ?, ?, ?, ?, 'monthly_clients')
+  `).run(t.task_text, dueDateStr, t.due_time, t.created_by, t.id, t.urgency || 'moderate');
+  if (!result.changes) return false;
+
+  const taskId = result.lastInsertRowid;
+  for (const p of rows) {
+    await db.prepare('INSERT OR IGNORE INTO associate_task_assignees (task_id, user_id, checklist) VALUES (?, ?, ?)')
+      .run(taskId, p.id, p.checklist);
+  }
+  await createNotificationsForUsers(db, rows.map((p) => p.id), {
+    title: 'New Task from Manager',
+    message: `${t.task_text.slice(0, 140)} — due ${dueDateStr} ${t.due_time}`,
+    link: getTasksLinkForRole('seo_associate'),
+  });
+  return true;
 }

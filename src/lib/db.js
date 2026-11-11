@@ -269,6 +269,16 @@ async function runMigrationsBody(raw) {
     "ALTER TABLE associate_task_templates ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
     // Optional image a manager attaches when assigning a task (served by /api/task-attachment/[taskId]).
     "ALTER TABLE associate_tasks ADD COLUMN attachment_base64 TEXT",
+    // "Check every client" monthly tasks (kind = 'monthly_clients', e.g. the ranking checks): the template
+    // repeats on month_day of every month (appearing from spawn_day), and each assignee gets their OWN
+    // client list in associate_task_assignees.checklist (JSON array of names) with the ticked indexes in
+    // checklist_done. The task submits itself once every client is ticked.
+    "ALTER TABLE associate_task_templates ADD COLUMN kind TEXT",
+    "ALTER TABLE associate_task_templates ADD COLUMN month_day INTEGER",
+    "ALTER TABLE associate_task_templates ADD COLUMN spawn_day INTEGER",
+    "ALTER TABLE associate_tasks ADD COLUMN kind TEXT",
+    "ALTER TABLE associate_task_assignees ADD COLUMN checklist TEXT",
+    "ALTER TABLE associate_task_assignees ADD COLUMN checklist_done TEXT",
     // First working day of a Month 1 client's CURRENT week — the 5-working-day
     // clock that drives automatic week advancement (see autoAdvanceMonth1Weeks
     // in src/lib/funnel.js). NULL until the clock is first started.
