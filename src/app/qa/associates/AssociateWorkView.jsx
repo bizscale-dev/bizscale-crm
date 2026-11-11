@@ -104,6 +104,44 @@ function LinkRow({ kind, associate, client, type, link, date, status, onStatus, 
   );
 }
 
+// Copies every link of one client (all link types, one URL per line) to the clipboard.
+function CopyLinksButton({ client }) {
+  const [state, setState] = useState('');
+  const urls = client.types.flatMap((t) => t.links.map((l) => l.url));
+  if (urls.length === 0) return null;
+
+  const copy = async () => {
+    const text = urls.join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Fallback for browsers / contexts without the async clipboard API.
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (!ok) { setState('failed'); setTimeout(() => setState(''), 2000); return; }
+    }
+    setState('copied');
+    setTimeout(() => setState(''), 2000);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={`Copy all ${urls.length} link${urls.length === 1 ? '' : 's'} of ${client.name}`}
+      style={{ ...ghostBtn, fontSize: '0.75rem', padding: '0.25rem 0.7rem', whiteSpace: 'nowrap', ...(state === 'copied' ? { color: 'var(--success)', borderColor: 'var(--success)' } : state === 'failed' ? { color: 'var(--danger)', borderColor: 'var(--danger)' } : {}) }}
+    >
+      {state === 'copied' ? `✓ Copied ${urls.length}` : state === 'failed' ? 'Copy failed' : `Copy ${urls.length} link${urls.length === 1 ? '' : 's'}`}
+    </button>
+  );
+}
+
 function AssociateCard({ kind, associate, date }) {
   const [open, setOpen] = useState(false);
   const [stats, setStats] = useState(associate.stats);
@@ -145,7 +183,10 @@ function AssociateCard({ kind, associate, date }) {
             <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.85rem' }}>Nothing completed on this day.</p>
           ) : associate.clients.map((c) => (
             <div key={c.clientId} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.8rem 1rem' }}>
-              <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{c.name}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{c.name}</div>
+                <CopyLinksButton client={c} />
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                 {c.types.map((t) => (
                   <div key={t.type}>
