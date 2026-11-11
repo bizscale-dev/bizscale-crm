@@ -4,15 +4,11 @@ import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifications';
-import { getClientOwnership, clientsForManager } from '@/lib/qaClientOwners';
 import { parseResolveDays, QA_SEVERITIES } from '@/lib/qaReports';
 
-const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager', 'senior_seo_associate'];
 const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const KINDS = ['seo', 'web'];
 const TYPE_LABELS = { web2: 'Web 2.0', guestpost: 'Guest Post', pdf: 'PDF', profile: 'Profile', citation: 'Citation', image: 'Image' };
-// Where an associate lands when they open the notification (they have no Reports page).
-const ASSOCIATE_HOME = { seo_associate: '/associate', senior_seo_associate: '/associate', web_seo_associate: '/web-associate' };
 
 async function requireQa() {
   const session = await verifySession();
@@ -49,9 +45,10 @@ export async function setLinkStatus({ kind, clientId, url, status }) {
  * default medium) is typed.
  *
  *  - The report goes through the same qa_reports pipeline as every other QA report (resolve deadline,
- *    QA's Reports page, Resolved), to the manager who owns that client (SEO clients: QA_SEO_OWNER,
- *    web clients: their web SEO manager), tagged with the associate (associate_id) for the stats.
- *  - The associate who did the link is notified with the client name and the link.
+ *    QA's Reports page, Resolved), but ONLY to the associate who did the link: they are the report's
+ *    owner (manager_id = associate), fix it on their own Reports page and send it back to QA. No manager
+ *    gets it. associate_id tags it for the per-associate stats.
+ *  - The associate is notified with the client name and the link.
  *  - Reporting also marks the link Fail.
  */
 export async function submitLinkReport(input) {
@@ -83,14 +80,8 @@ export async function submitLinkReport(input) {
   const clientRow = await db.prepare(isWeb ? 'SELECT TRIM(name) AS name FROM web_clients WHERE id = ?' : 'SELECT TRIM(name) AS name FROM clients WHERE id = ?').get(clientId);
   if (!clientRow?.name) return { error: 'Client not found' };
 
-  const placeholders = MANAGER_ROLES.map(() => '?').join(',');
-  const managers = await db.prepare(`SELECT id, name, role FROM users WHERE role IN (${placeholders}) AND is_active = 1`).all(...MANAGER_ROLES);
-  const { clientNames, owners } = await getClientOwnership(db, managers);
-  const clientName = clientNames.find((n) => n.toLowerCase() === clientRow.name.toLowerCase());
-  if (!clientName) return { error: 'That client is not on the current roster' };
-
-  const targets = managers.filter((m) => m.role !== 'writers_manager' && clientsForManager(m, [clientName], owners).length > 0);
-  if (targets.length === 0) return { error: `No manager owns ${clientName}, so there is nobody to send this to.` };
+  const clientName = clientRow.name;
+  const targets = [associate];
 
   const typeLabel = TYPE_LABELS[linkType] || linkType || 'Link';
   const note = [
@@ -116,20 +107,12 @@ export async function submitLinkReport(input) {
     ],
   })));
 
-  // The associate: exactly which client and link.
+  // The associate (the only recipient): exactly which client and link.
   await createNotificationsForUsers(db, [associate.id], {
     title: 'QA flagged one of your links',
     message: `${clientName} — ${typeLabel}${linkUrl ? `: ${linkUrl}` : ''}${comment ? ` — "${comment.slice(0, 120)}"` : ''}`,
-    link: ASSOCIATE_HOME[associate.role] || '/',
+    link: getReportsLinkForRole(associate.role),
   });
-  // The manager who has to get it fixed.
-  for (const manager of targets) {
-    await createNotificationsForUsers(db, [manager.id], {
-      title: `New ${severity} severity QA report`,
-      message: `${clientName} (${associate.name}) — ${typeLabel}${linkUrl ? `: ${linkUrl}` : ''}${comment ? ` — ${comment.slice(0, 100)}` : ''} — resolve within ${resolveDays} working day${resolveDays === 1 ? '' : 's'}`,
-      link: getReportsLinkForRole(manager.role),
-    });
-  }
 
   if (linkUrl) {
     await db.prepare(`

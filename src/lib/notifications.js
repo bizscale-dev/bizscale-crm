@@ -26,6 +26,8 @@ const REPORTS_LINK_BY_ROLE = {
   writers_manager: '/writers-manager/reports',
   web_developer_seo: '/web-developer/reports',
   senior_seo_associate: '/associate/senior-reports',
+  seo_associate: '/associate/reports',
+  web_seo_associate: '/web-associate/reports',
 };
 
 export function getReportsLinkForRole(role) {

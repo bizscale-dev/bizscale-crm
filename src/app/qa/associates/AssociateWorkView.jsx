@@ -48,7 +48,7 @@ function LinkRow({ kind, associate, client, type, link, date, status, onStatus, 
     const res = await submitLinkReport({ kind, associateId: associate.id, clientId: client.clientId, linkType: type, linkUrl: url, comment, severity, date });
     setBusy(false);
     if (res?.error) return setMessage({ error: true, text: res.error });
-    setMessage({ text: `Reported — ${res.associate} and ${res.sentTo.join(', ')} notified.` });
+    setMessage({ text: `Reported — ${res.associate} has been notified.` });
     setReporting(false);
     setComment('');
     if (url) onStatus('fail');

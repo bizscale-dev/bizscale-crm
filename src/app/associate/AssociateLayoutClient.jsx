@@ -5,6 +5,7 @@ import RoleLayoutShell from '@/components/RoleLayoutShell';
 import { getUnsubmittedAssociateTaskCount } from './manager-tasks/actions';
 import { getUnsubmittedTaskCount } from '../seo-manager/tasks/actions';
 import { getOpenReportCount } from '../seo-manager/reports/actions';
+import { getOpenAssociateReportCount } from './reports/actions';
 
 // A Senior SEO Associate gets every associate page plus two extra ones: Tasks (assigned by
 // admin, like a manager's) and Reports (QA reports on the clients they own).
@@ -12,11 +13,13 @@ export default function AssociateLayoutClient({ children, isSenior = false }) {
   const [pendingTaskCount, setPendingTaskCount] = useState(0);
   const [seniorTaskCount, setSeniorTaskCount] = useState(0);
   const [openReportCount, setOpenReportCount] = useState(0);
+  const [ownReportCount, setOwnReportCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
       const count = await getUnsubmittedAssociateTaskCount();
+      const own = await getOpenAssociateReportCount();
       const [tasks, reports] = isSenior
         ? await Promise.all([getUnsubmittedTaskCount(), getOpenReportCount()])
         : [0, 0];
@@ -24,6 +27,7 @@ export default function AssociateLayoutClient({ children, isSenior = false }) {
         setPendingTaskCount(count);
         setSeniorTaskCount(tasks);
         setOpenReportCount(reports);
+        setOwnReportCount(own);
       }
     };
     poll();
@@ -35,6 +39,7 @@ export default function AssociateLayoutClient({ children, isSenior = false }) {
     { href: '/associate', label: 'My Dashboard' },
     { href: '/associate/tasks', label: 'My Tasks' },
     { href: '/associate/manager-tasks', label: 'Manager Tasks', badgeCount: pendingTaskCount },
+    ...(isSenior ? [] : [{ href: '/associate/reports', label: 'Reports', badgeCount: ownReportCount }]),
     ...(isSenior ? [
       { href: '/associate/senior-tasks', label: 'Tasks', badgeCount: seniorTaskCount },
       { href: '/associate/senior-reports', label: 'Reports', badgeCount: openReportCount },
