@@ -62,7 +62,7 @@ function LinkRow({ kind, associate, client, type, link, date, status, onStatus, 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
         {url ? (
           <a href={url} target="_blank" rel="noopener noreferrer" title={url} style={{ flex: '1 1 220px', minWidth: 0, fontSize: '0.8rem', color: 'var(--primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            🔗 {url.replace(/^https?:\/\/(www\.)?/, '')}
+            🔗 {url}
           </a>
         ) : (
           <span style={{ flex: '1 1 220px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>no link recorded</span>
