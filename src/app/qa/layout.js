@@ -30,6 +30,7 @@ export default function QaLayout({ children }) {
     { href: '/qa/web-seo-associates', label: 'Web SEO Associates' },
     { href: '/qa/eod', label: 'EOD' },
     { href: '/qa/manager-tasks', label: 'Managers Tasks' },
+    { href: '/qa/assign-tasks', label: 'Assign Task' },
     { href: '/qa/executives', label: 'Executives' },
     { href: '/qa/reports', label: 'Reports', badgeCount: reviewCount },
     { href: '/qa/resolved', label: 'Resolved' },
