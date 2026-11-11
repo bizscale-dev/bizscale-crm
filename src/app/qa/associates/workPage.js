@@ -29,7 +29,7 @@ export async function renderAssociateWorkPage(kind, searchParams) {
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>{title}</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
           What each associate completed on {date}{date === pakistanDate(-1) ? ' (yesterday)' : date === today ? ' (today)' : ''}, by client and link type with the links. Check each link: mark it Pass or Fail, or hit Report on it —
-          the associate and the manager who owns that client are notified.
+          only the associate who did the link is notified.
         </p>
       </div>
       <AssociateWorkView kind={kind} associates={associates} date={date} today={today} />

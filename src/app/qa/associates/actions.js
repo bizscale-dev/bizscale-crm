@@ -2,7 +2,6 @@
 
 import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
-import { revalidatePath } from 'next/cache';
 import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifications';
 import { parseResolveDays, QA_SEVERITIES } from '@/lib/qaReports';
 
@@ -139,6 +138,7 @@ export async function submitLinkReport(input) {
     `).run(kind, clientId, linkUrl, session.userId);
   }
 
-  revalidatePath('/qa/reports');
+  // No revalidatePath here: it would refresh the page QA is working on and drop them out of the open card.
+  // QA's Reports page is always rendered fresh anyway (revalidate = 0).
   return { success: true, sentTo: targets.map((m) => m.name), associate: associate.name, resolveDays };
 }
