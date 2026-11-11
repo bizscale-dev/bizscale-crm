@@ -28,8 +28,7 @@ export async function setLinkStatus({ kind, clientId, url, status }) {
   if (!['pass', 'fail', ''].includes(status)) return { error: 'Invalid status' };
 
   const db = await getDb();
-  // Pass is the default for every link, so only Fail is stored; Pass (or '') clears the mark.
-  if (status === '' || status === 'pass') {
+  if (status === '') {
     await db.prepare('DELETE FROM qa_link_checks WHERE kind = ? AND client_id = ? AND url = ?').run(kind, cid, link);
   } else {
     await db.prepare(`
@@ -37,6 +36,24 @@ export async function setLinkStatus({ kind, clientId, url, status }) {
       ON CONFLICT(kind, client_id, url) DO UPDATE SET status = excluded.status, checked_by = excluded.checked_by, checked_at = CURRENT_TIMESTAMP
     `).run(kind, cid, link, status, session.userId);
   }
+  return { success: true };
+}
+
+/** "Pass all" for one client: marks every given link Pass, except the ones already marked Fail. */
+export async function setLinksPass({ kind, clientId, urls }) {
+  const session = await requireQa();
+  if (!session) return { error: 'Not authorized' };
+  const cid = parseInt(clientId, 10);
+  const list = Array.isArray(urls) ? [...new Set(urls.map((u) => clean(u, 2000)).filter(Boolean))].slice(0, 500) : [];
+  if (!KINDS.includes(kind) || !cid || list.length === 0) return { error: 'Invalid links' };
+  const db = await getDb();
+  await db.batch(list.map((url) => ({
+    sql: `
+      INSERT INTO qa_link_checks (kind, client_id, url, status, checked_by) VALUES (?, ?, ?, 'pass', ?)
+      ON CONFLICT(kind, client_id, url) DO NOTHING
+    `,
+    args: [kind, cid, url, session.userId],
+  })));
   return { success: true };
 }
 

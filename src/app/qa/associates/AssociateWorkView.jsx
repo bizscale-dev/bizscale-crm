@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { setLinkStatus, submitLinkReport } from './actions';
+import { setLinkStatus, setLinksPass, submitLinkReport } from './actions';
 
 const SEVERITIES = [
   { value: 'high', label: 'High' },
@@ -35,13 +35,10 @@ function LinkRow({ kind, associate, client, type, link, date, status, onStatus, 
   const [message, setMessage] = useState(null);
 
   const mark = async (next) => {
-    // Every link is Pass by default; QA only has to Fail the bad ones. Clicking Fail again puts it back to Pass.
-    if (next === 'pass' && status === 'pass') return;
-    const value = next === 'fail' && status === 'fail' ? 'pass' : next;
-    const keep = status === 'pass' ? '' : status;
-    onStatus(value === 'pass' ? '' : value);
+    const value = status === next ? '' : next; // clicking the active mark clears it
+    onStatus(value);
     const res = await setLinkStatus({ kind, clientId: client.clientId, url, status: value });
-    if (res?.error) { onStatus(keep); setMessage({ error: true, text: res.error }); }
+    if (res?.error) { onStatus(status); setMessage({ error: true, text: res.error }); }
   };
 
   const send = async (e) => {
@@ -145,18 +142,56 @@ function CopyLinksButton({ client }) {
   );
 }
 
+// Marks every link of one client that has no mark yet as Pass in one click (links already marked Fail stay Fail).
+function PassAllButton({ kind, client, statuses, onPassed }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const urls = client.types.flatMap((t) => t.links.map((l) => l.url));
+  const todo = urls.filter((u) => !statuses[`${client.clientId}|${u}`]);
+  if (urls.length === 0) return null;
+
+  const run = async () => {
+    setBusy(true);
+    setError('');
+    const res = await setLinksPass({ kind, clientId: client.clientId, urls: todo });
+    setBusy(false);
+    if (res?.error) return setError(res.error);
+    onPassed(todo);
+  };
+
+  return (
+    <>
+      {error && <span style={{ fontSize: '0.72rem', color: 'var(--danger)' }}>{error}</span>}
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy || todo.length === 0}
+        title={todo.length === 0 ? 'Every link of this client is already marked' : `Mark ${todo.length} unchecked link${todo.length === 1 ? '' : 's'} of ${client.name} as Pass`}
+        style={{ ...ghostBtn, fontSize: '0.75rem', padding: '0.25rem 0.7rem', whiteSpace: 'nowrap', color: 'var(--success)', borderColor: 'var(--success)', opacity: busy || todo.length === 0 ? 0.45 : 1 }}
+      >
+        {busy ? 'Saving…' : todo.length === 0 ? '✓ All marked' : `✓ Pass all (${todo.length})`}
+      </button>
+    </>
+  );
+}
+
 function AssociateCard({ kind, associate, date }) {
   const [open, setOpen] = useState(false);
   const [stats, setStats] = useState(associate.stats);
   // `${clientId}|${url}` -> 'pass' | 'fail'
   const [statuses, setStatuses] = useState(() => {
     const m = {};
-    for (const c of associate.clients) for (const t of c.types) for (const l of t.links) if (l.status === 'fail') m[`${c.clientId}|${l.url}`] = l.status;
+    for (const c of associate.clients) for (const t of c.types) for (const l of t.links) if (l.status) m[`${c.clientId}|${l.url}`] = l.status;
     return m;
   });
   const setStatus = (key) => (value) => setStatuses((prev) => {
     const next = { ...prev };
     if (value) next[key] = value; else delete next[key];
+    return next;
+  });
+  const passMany = (clientId) => (urls) => setStatuses((prev) => {
+    const next = { ...prev };
+    for (const u of urls) next[`${clientId}|${u}`] = 'pass';
     return next;
   });
   const reported = () => setStats((s) => ({ ...s, total: s.total + 1, pending: s.pending + 1 }));
@@ -188,7 +223,10 @@ function AssociateCard({ kind, associate, date }) {
             <div key={c.clientId} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.8rem 1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
                 <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{c.name}</div>
-                <CopyLinksButton client={c} />
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <PassAllButton kind={kind} client={c} statuses={statuses} onPassed={passMany(c.clientId)} />
+                  <CopyLinksButton client={c} />
+                </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                 {c.types.map((t) => (
@@ -201,7 +239,7 @@ function AssociateCard({ kind, associate, date }) {
                           <LinkRow
                             key={l ? l.url : `none-${i}`}
                             kind={kind} associate={associate} client={c} type={t.type} link={l} date={date}
-                            status={key ? statuses[key] || 'pass' : ''}
+                            status={key ? statuses[key] || '' : ''}
                             onStatus={key ? setStatus(key) : () => {}}
                             onReported={reported}
                           />
