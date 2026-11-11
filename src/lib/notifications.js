@@ -13,6 +13,7 @@ const TASKS_LINK_BY_ROLE = {
   // use the shared /associate/manager-tasks page, see recurringAssociateTasks.js.
   senior_seo_associate: '/associate/senior-tasks',
   graphic_designer: '/graphic-designer/tasks',
+  graphic_designer_executive: '/graphic-executive/my-tasks',
 };
 
 export function getTasksLinkForRole(role) {
@@ -28,6 +29,9 @@ const REPORTS_LINK_BY_ROLE = {
   senior_seo_associate: '/associate/senior-reports',
   seo_associate: '/associate/reports',
   web_seo_associate: '/web-associate/reports',
+  graphic_designer: '/graphic-designer/reports',
+  graphic_designer_executive: '/graphic-executive/reports',
+  web_developer_executive: '/web-dev-executive/reports',
 };
 
 export function getReportsLinkForRole(role) {

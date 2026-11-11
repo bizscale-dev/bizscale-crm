@@ -277,6 +277,10 @@ async function runMigrationsBody(raw) {
     "ALTER TABLE associate_task_templates ADD COLUMN month_day INTEGER",
     "ALTER TABLE associate_task_templates ADD COLUMN spawn_day INTEGER",
     "ALTER TABLE associate_tasks ADD COLUMN kind TEXT",
+    // A bug an Executive highlights by hand on one of their team (task_check_reports.task_id = 0): the
+    // description is the comment, with an optional picture and link.
+    "ALTER TABLE task_check_reports ADD COLUMN image_base64 TEXT",
+    "ALTER TABLE task_check_reports ADD COLUMN link TEXT",
     "ALTER TABLE associate_task_assignees ADD COLUMN checklist TEXT",
     "ALTER TABLE associate_task_assignees ADD COLUMN checklist_done TEXT",
     // First working day of a Month 1 client's CURRENT week — the 5-working-day
@@ -939,7 +943,9 @@ async function runMigrationsBody(raw) {
       resolved_at DATETIME,
       confirmed_at DATETIME,
       rejection_count INTEGER NOT NULL DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      image_base64 TEXT,
+      link TEXT
     )`,
     "CREATE INDEX IF NOT EXISTS idx_task_check_reports_user ON task_check_reports (user_id, status)",
     // Frozen list of the clients in an SEO campaign and how far each got, written when

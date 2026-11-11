@@ -7,7 +7,7 @@ import { createNotificationsForUsers, getReportsLinkForRole } from '@/lib/notifi
 import { getClientOwnership, clientsForManager } from '@/lib/qaClientOwners';
 import { parseResolveDays, QA_SEVERITIES, QA_MAX_SCREENSHOT_BASE64 } from '@/lib/qaReports';
 
-const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager', 'senior_seo_associate'];
+const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager', 'senior_seo_associate', 'web_developer_seo', 'graphic_designer', 'graphic_designer_executive', 'web_developer_executive'];
 
 async function requireQa() {
   const session = await verifySession();

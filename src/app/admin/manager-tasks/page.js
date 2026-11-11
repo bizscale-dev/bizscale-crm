@@ -10,6 +10,7 @@ const ROLE_LABELS = {
   senior_seo_associate: 'Senior SEO Associate',
   web_seo_manager: 'Web SEO Manager',
   writers_manager: 'Writers Manager',
+  graphic_designer_executive: 'Graphic Designer Executive',
 };
 
 export default async function ManagerTasksPage() {
@@ -18,7 +19,7 @@ export default async function ManagerTasksPage() {
 
   const managers = await db.prepare(`
     SELECT id, name, role FROM users
-    WHERE role IN ('seo_manager','web_seo_manager','writers_manager','senior_seo_associate') AND is_active = 1
+    WHERE role IN ('seo_manager','web_seo_manager','writers_manager','senior_seo_associate','graphic_designer_executive') AND is_active = 1
     ORDER BY role, name
   `).all();
 

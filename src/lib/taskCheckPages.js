@@ -8,6 +8,7 @@ import EodView from '@/app/hr/eod/EodView';
 import ManagerQaReports from '@/components/ManagerQaReports';
 import { QA_RESOLVE_DAYS, withQaDue, attachComments } from '@/lib/qaReports';
 import { resolveQaReport } from '@/lib/taskCheckActions';
+import BugReportForm from '@/components/taskcheck/BugReportForm';
 
 // Server renderers shared by the Web Developer Executive and Graphic Designer Executive portals
 // (`checks` and `reports` pages), and by the reported side's own Reports page.
@@ -26,6 +27,20 @@ function Heading({ title, children }) {
       <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>{children}</p>
     </div>
   );
+}
+
+// The QA reports filed against one person (open first, soonest deadline on top), with their threads.
+async function loadQaReports(db, userId) {
+  const qaRows = await db.prepare(`
+    SELECT q.id, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note,
+      q.source, q.title, q.location, q.issue, q.department, q.severity, (q.screenshot_base64 IS NOT NULL AND q.screenshot_base64 != '') AS has_screenshot, q.client_names,
+      q.status, q.created_at, q.resolve_days, q.resolved_at, q.resolution_note, q.rejection_count,
+      f.name AS filed_by
+    FROM qa_reports q JOIN users f ON f.id = q.qa_user_id
+    WHERE q.manager_id = ?
+    ORDER BY CASE q.status WHEN 'open' THEN 0 ELSE 1 END, CASE q.status WHEN 'open' THEN q.created_at END ASC, q.resolved_at DESC
+  `).all(userId);
+  return attachComments(db, withQaDue(qaRows));
 }
 
 /** Every task the team submitted, newest first, for Pass / Fail / Report. */
@@ -69,23 +84,31 @@ export async function renderCheckPage() {
 
 /** The Executive's view of every report on the team's tasks, to confirm or send back fixes. */
 export async function renderExecReportsPage() {
-  const { cfg } = await requireExec();
+  const { cfg, session } = await requireExec();
   const db = await getDb();
   const people = await db.prepare('SELECT id, name FROM users WHERE role = ? AND is_active = 1 ORDER BY name').all(cfg.targetRole);
   const reports = await db.prepare(`
-    SELECT r.*, u.name AS assignee_name, e.name AS reporter_name, e.role AS reporter_role
+    SELECT r.id, r.task_id, r.user_id, r.created_by, r.task_text, r.comment, r.status, r.resolution_note, r.resolved_at, r.confirmed_at, r.rejection_count, r.created_at, r.link, (r.image_base64 IS NOT NULL AND r.image_base64 != '') AS has_image, u.name AS assignee_name, e.name AS reporter_name, e.role AS reporter_role
     FROM task_check_reports r
     JOIN users u ON u.id = r.user_id AND u.role = ?
     LEFT JOIN users e ON e.id = r.created_by
     ORDER BY (r.status = 'pending_review') DESC, r.created_at DESC, r.id DESC
   `).all(cfg.targetRole);
+  const qaReports = ['web_developer_executive', 'graphic_designer_executive'].includes(session.role) ? await loadQaReports(db, session.userId) : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <Heading title="Reports">
         Tasks reported to the {cfg.targetLabel}. When they say it is fixed it waits here for your check: confirm it, or send it back.
       </Heading>
+      <BugReportForm people={people} targetLabel={cfg.targetLabel} />
       <ReportsClient reports={reports} mode="exec" people={people} />
+      {qaReports.length > 0 && (
+        <>
+          <Heading title="QA Reports">Issues QA flagged on you. Fix them and submit the fix — QA confirms it.</Heading>
+          <ManagerQaReports reports={qaReports} resolveAction={resolveQaReport} resolveDays={QA_RESOLVE_DAYS} />
+        </>
+      )}
     </div>
   );
 }
@@ -118,22 +141,13 @@ export async function renderMyReportsPage() {
   if (!session || !CHECKED_ROLES.includes(session.role)) redirect('/');
   const db = await getDb();
   const reports = await db.prepare(`
-    SELECT r.*, e.name AS reporter_name, e.role AS reporter_role FROM task_check_reports r
+    SELECT r.id, r.task_id, r.user_id, r.created_by, r.task_text, r.comment, r.status, r.resolution_note, r.resolved_at, r.confirmed_at, r.rejection_count, r.created_at, r.link, (r.image_base64 IS NOT NULL AND r.image_base64 != '') AS has_image, e.name AS reporter_name, e.role AS reporter_role FROM task_check_reports r
     LEFT JOIN users e ON e.id = r.created_by
     WHERE r.user_id = ?
     ORDER BY (r.status = 'open') DESC, r.created_at DESC, r.id DESC
   `).all(session.userId);
 
-  const qaRows = await db.prepare(`
-    SELECT q.id, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note,
-      q.source, q.title, q.location, q.issue, q.department, q.severity, (q.screenshot_base64 IS NOT NULL AND q.screenshot_base64 != '') AS has_screenshot, q.client_names,
-      q.status, q.created_at, q.resolve_days, q.resolved_at, q.resolution_note, q.rejection_count,
-      f.name AS filed_by
-    FROM qa_reports q JOIN users f ON f.id = q.qa_user_id
-    WHERE q.manager_id = ?
-    ORDER BY CASE q.status WHEN 'open' THEN 0 ELSE 1 END, CASE q.status WHEN 'open' THEN q.created_at END ASC, q.resolved_at DESC
-  `).all(session.userId);
-  const qaReports = await attachComments(db, withQaDue(qaRows));
+  const qaReports = await loadQaReports(db, session.userId);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

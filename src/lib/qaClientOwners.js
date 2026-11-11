@@ -67,6 +67,8 @@ export async function getClientOwnership(db, managers) {
 
 // Of the chosen clients, the ones this manager should get the issue for.
 export function clientsForManager(manager, clientNames, owners) {
-  if (manager.role === 'writers_manager') return clientNames;
+  // Writers managers own every client; the Web Developer, Graphics Designers and the Executives are not tied to
+  // clients, so a report on them keeps whatever clients QA picked.
+  if (['writers_manager', 'web_developer_seo', 'graphic_designer', 'graphic_designer_executive', 'web_developer_executive'].includes(manager.role)) return clientNames;
   return clientNames.filter((c) => (owners[norm(c)] || []).includes(manager.id));
 }

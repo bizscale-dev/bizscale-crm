@@ -4,6 +4,11 @@ import PortalLayout from '@/components/taskcheck/PortalLayout';
 
 const ITEMS = [
   {
+    "href": "/graphic-executive/my-tasks",
+    "label": "My Tasks",
+    "badge": "mytasks"
+  },
+  {
     "href": "/graphic-executive/checks",
     "label": "Task Checks"
   },

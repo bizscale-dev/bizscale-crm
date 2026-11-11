@@ -45,6 +45,15 @@ function ReportCard({ report, mode }) {
         <span style={{ fontSize: '0.72rem', fontWeight: '600', color: st.color, backgroundColor: st.bg, padding: '0.2rem 0.6rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>{st.label}</span>
       </div>
       <div style={{ fontSize: '0.92rem', whiteSpace: 'pre-wrap' }}>{report.task_text}</div>
+      {report.link && (
+        <a href={report.link} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.82rem', color: 'var(--primary)', wordBreak: 'break-all' }}>🔗 {report.link}</a>
+      )}
+      {!!report.has_image && (
+        <a href={`/api/task-check-report-image/${report.id}`} target="_blank" rel="noopener noreferrer" style={{ alignSelf: 'flex-start' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`/api/task-check-report-image/${report.id}`} alt="Bug" loading="lazy" style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block' }} />
+        </a>
+      )}
       {report.comment && (
         <div style={{ padding: '0.7rem 0.9rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderLeft: '3px solid #f59e0b', borderRadius: '0.5rem', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>{report.comment}</div>
       )}

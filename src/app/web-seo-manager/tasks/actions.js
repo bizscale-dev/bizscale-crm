@@ -12,7 +12,8 @@ const MAX_BASE64_LENGTH = 2 * 1024 * 1024 * 1.37;
 
 async function requireWebSeoManager() {
   const session = await verifySession();
-  if (!session || session.role !== 'web_seo_manager') {
+  // The Graphic Designer Executive receives admin tasks and submits them through this same flow.
+  if (!session || !['web_seo_manager', 'graphic_designer_executive'].includes(session.role)) {
     return { error: 'Not authorized' };
   }
   return { session };

@@ -5,7 +5,7 @@ import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { createNotificationsForUsers, getCheckReportsLinkForRole } from '@/lib/notifications';
 import { CHECK_TARGETS, CHECKED_ROLES } from '@/lib/taskCheck';
-import { submitFixForReview } from '@/lib/qaReports';
+import { submitFixForReview, QA_MAX_SCREENSHOT_BASE64 } from '@/lib/qaReports';
 
 const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
@@ -160,9 +160,10 @@ export async function getTaskCheckBadgeCount() {
   const session = await verifySession();
   if (!session) return 0;
   const db = await getDb();
+  const qaOpen = async () => (await db.prepare("SELECT COUNT(*) AS c FROM qa_reports WHERE manager_id = ? AND status = 'open'").get(session.userId))?.c || 0;
   if (CHECKED_ROLES.includes(session.role)) {
     const row = await db.prepare("SELECT COUNT(*) AS c FROM task_check_reports WHERE user_id = ? AND status = 'open'").get(session.userId);
-    return row?.c || 0;
+    return (row?.c || 0) + (await qaOpen());
   }
   const cfg = CHECK_TARGETS[session.role];
   if (!cfg) return 0;
@@ -176,12 +177,57 @@ export async function getTaskCheckBadgeCount() {
 /** The reported person submits a fix for a QA report on their own list (goes to QA for review). */
 export async function resolveQaReport(reportId, note) {
   const session = await verifySession();
-  if (!session || !CHECKED_ROLES.includes(session.role)) return { error: 'Not authorized' };
+  if (!session || ![...CHECKED_ROLES, 'web_developer_executive', 'graphic_designer_executive'].includes(session.role)) return { error: 'Not authorized' };
   const db = await getDb();
   const result = await submitFixForReview(db, session, reportId, note);
   if (result.error) return result;
   revalidatePath('/web-developer/reports');
   revalidatePath('/graphic-designer/reports');
+  revalidatePath('/web-dev-executive/reports');
+  revalidatePath('/graphic-executive/reports');
   revalidatePath('/qa/reports');
   return { success: true };
+}
+
+/**
+ * An Executive highlights a bug by hand on one of their team (no task involved): a description, plus an
+ * optional picture and link. It goes through the same fix-and-confirm flow as a task report: the person is
+ * notified, fixes it and marks it fixed, and the Executive confirms or sends it back.
+ */
+export async function reportBug({ userId, description, link, image }) {
+  const ctx = await requireExec();
+  if (!ctx) return { error: 'Not authorized' };
+  const uid = parseInt(userId, 10);
+  const text = clean(description, 3000);
+  if (!uid) return { error: `Pick the ${ctx.cfg.targetLabel}` };
+  if (!text) return { error: 'Describe the bug' };
+
+  let url = clean(link, 2000);
+  if (url) {
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    try { new URL(url); } catch { return { error: 'That link does not look valid' }; }
+  }
+  if (image) {
+    if (typeof image !== 'string' || !/^data:image\/[a-z0-9.+-]+;base64,/i.test(image)) return { error: 'The picture looks invalid — try attaching it again' };
+    if (image.length > QA_MAX_SCREENSHOT_BASE64) return { error: 'The picture is too large (max 2MB)' };
+  }
+
+  const db = await getDb();
+  const person = await db.prepare('SELECT id, name, role FROM users WHERE id = ? AND role = ? AND is_active = 1').get(uid, ctx.cfg.targetRole);
+  if (!person) return { error: `${ctx.cfg.targetLabel} not found` };
+
+  const title = `Bug: ${text.replace(/\s+/g, ' ').slice(0, 100)}`;
+  await db.prepare(`
+    INSERT INTO task_check_reports (task_id, user_id, created_by, task_text, comment, image_base64, link)
+    VALUES (0, ?, ?, ?, ?, ?, ?)
+  `).run(person.id, ctx.session.userId, title, text, image || null, url || null);
+
+  await createNotificationsForUsers(db, [person.id], {
+    title: `${ctx.cfg.execLabel} reported a bug`,
+    message: text.length > 140 ? `${text.slice(0, 140)}…` : text,
+    link: getCheckReportsLinkForRole(person.role),
+  });
+
+  revalidatePath(ctx.cfg.reportsPath);
+  return { success: true, name: person.name };
 }

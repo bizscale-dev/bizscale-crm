@@ -58,7 +58,7 @@ export default function ExecutiveReportForm({ managers, clients, owners, roleLab
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
   const selectedManagers = managers.filter((m) => managerIds.includes(m.id));
   // Each manager only gets the selected clients they own (writers managers own all).
-  const clientsOf = (m) => (m.role === 'writers_manager'
+  const clientsOf = (m) => (['writers_manager', 'web_developer_seo', 'graphic_designer', 'graphic_designer_executive', 'web_developer_executive'].includes(m.role)
     ? selectedClients
     : selectedClients.filter((c) => (owners[c.toLowerCase()] || []).includes(m.id)));
   const assignment = selectedManagers.map((m) => ({ manager: m, count: clientsOf(m).length }));

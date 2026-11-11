@@ -4,11 +4,12 @@ import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 
-const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager', 'senior_seo_associate'];
+const MANAGER_ROLES = ['seo_manager', 'web_seo_manager', 'writers_manager', 'senior_seo_associate', 'graphic_designer_executive'];
 const PORTAL_PATHS = {
   seo_manager: '/seo-manager/tasks',
   web_seo_manager: '/web-seo-manager/tasks',
   writers_manager: '/writers-manager/tasks',
+  graphic_designer_executive: '/graphic-executive/my-tasks',
 };
 
 /**
