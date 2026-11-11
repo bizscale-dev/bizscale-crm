@@ -258,6 +258,12 @@ async function runMigrationsBody(raw) {
     // assignee has ticked (e.g. the new-client onboarding task).
     "ALTER TABLE manager_tasks ADD COLUMN checklist TEXT",
     "ALTER TABLE manager_task_assignees ADD COLUMN checklist_done TEXT",
+    // "Blog link per client" tasks (kind = 'client_blog'): the checklist holds the manager's client names
+    // and manager_task_assignees.item_links the JSON object { itemIndex: url } they have uploaded. The
+    // task submits itself once every client has a link. kind on a template makes every occurrence one.
+    "ALTER TABLE manager_tasks ADD COLUMN kind TEXT",
+    "ALTER TABLE manager_task_templates ADD COLUMN kind TEXT",
+    "ALTER TABLE manager_task_assignees ADD COLUMN item_links TEXT",
     "ALTER TABLE manager_task_templates ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
     "ALTER TABLE associate_tasks ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",
     "ALTER TABLE associate_task_templates ADD COLUMN urgency TEXT NOT NULL DEFAULT 'moderate'",

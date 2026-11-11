@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { submitTaskProof } from './actions';
 import TaskBadges from '@/components/TaskBadges';
 import { setChecklistItem } from '@/app/actions/managerTaskChecklist';
+import { setClientBlogLink } from '@/app/actions/managerBlogLinks';
 import { formatPkt } from '@/lib/formatTime';
 
 const BRAND_COLOR = 'var(--primary)';
@@ -99,7 +100,89 @@ const APPROVAL_LABELS = {
   rejected: { text: '❌ Rejected', color: 'var(--danger)' },
 };
 
+// "Blog link per client" task: one link box per client; the task submits itself when the last one is saved.
+function BlogLinksTask({ task }) {
+  const router = useRouter();
+  const clients = parseList(task.checklist);
+  const submitted = !!task.submitted_at;
+  const [links, setLinks] = useState(() => {
+    try { const o = JSON.parse(task.item_links || '{}'); return o && typeof o === 'object' ? o : {}; } catch { return {}; }
+  });
+  const [drafts, setDrafts] = useState({});
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState(null);
+  const done = clients.filter((_, i) => links[i]).length;
+
+  const save = async (i, value) => {
+    setBusy(i);
+    setError(null);
+    const result = await setClientBlogLink(task.task_id, i, value);
+    setBusy(null);
+    if (result?.error) return setError(result.error);
+    setLinks((prev) => { const n = { ...prev }; if (value.trim()) n[i] = value.trim(); else delete n[i]; return n; });
+    setDrafts((prev) => { const n = { ...prev }; delete n[i]; return n; });
+    if (result.submitted) router.refresh();
+  };
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', backgroundColor: 'var(--card-bg)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
+        <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Due {task.due_date} {task.template_id ? '12 AM' : task.due_time}</div>
+      </div>
+      <div style={{ padding: '0.75rem 0.9rem', border: '1px solid var(--border)', borderRadius: '0.6rem', backgroundColor: 'var(--background)' }}>
+        <div style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Blog links · {done}/{clients.length} clients</div>
+        <div style={{ height: '5px', borderRadius: '3px', backgroundColor: 'var(--border)', marginBottom: '0.7rem', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${clients.length ? (done / clients.length) * 100 : 0}%`, backgroundColor: 'var(--primary)', transition: 'width 0.2s' }} />
+        </div>
+        {error && <div style={{ fontSize: '0.8rem', color: 'var(--danger)', marginBottom: '0.5rem' }}>{error}</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+          {clients.map((name, i) => {
+            const saved = links[i];
+            const draft = drafts[i] ?? '';
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                <span style={{ flex: '0 0 190px', fontSize: '0.85rem', fontWeight: '600' }}>{saved ? '✓ ' : ''}{name}</span>
+                {saved && (submitted || drafts[i] === undefined) ? (
+                  <>
+                    <a href={saved} target="_blank" rel="noopener noreferrer" style={{ flex: '1 1 200px', minWidth: 0, fontSize: '0.8rem', color: 'var(--primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{saved}</a>
+                    {!submitted && (
+                      <button type="button" onClick={() => setDrafts((p) => ({ ...p, [i]: saved }))} style={{ ...primaryButtonStyle, padding: '0.25rem 0.7rem', fontSize: '0.75rem', backgroundColor: 'transparent', color: 'var(--foreground)', border: '1px solid var(--border)' }}>Edit</button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <input type="url" value={draft} onChange={(e) => setDrafts((p) => ({ ...p, [i]: e.target.value }))} placeholder="https://… link of the blog"
+                      style={{ ...inputStyle, flex: '1 1 220px', minWidth: 0, width: 'auto' }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save(i, draft); } }} />
+                    <button type="button" disabled={busy === i || !draft.trim()} onClick={() => save(i, draft)} style={{ ...primaryButtonStyle, padding: '0.35rem 0.9rem', fontSize: '0.8rem', opacity: busy === i || !draft.trim() ? 0.5 : 1 }}>
+                      {busy === i ? 'Saving…' : 'Save link'}
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {submitted ? (
+        <div style={{ paddingTop: '0.75rem', marginTop: '0.75rem', borderTop: '1px solid var(--border)', fontSize: '0.8rem', color: 'var(--success)', fontWeight: '600' }}>
+          ✅ Done — every client has a blog link · submitted {formatPkt(task.submitted_at)}
+          {!!task.is_late && <span style={{ color: APPROVAL_LABELS[task.approval_status]?.color || '#f59e0b' }}> · {APPROVAL_LABELS[task.approval_status]?.text || '⏳ Pending admin approval'} — submitted late</span>}
+        </div>
+      ) : (
+        <div style={{ paddingTop: '0.6rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>The task is done as soon as every client has a link.</div>
+      )}
+    </div>
+  );
+}
+
 function TaskCard({ task }) {
+  if (task.kind === 'client_blog') return <BlogLinksTask task={task} />;
+  return <ChecklistTaskCard task={task} />;
+}
+
+function ChecklistTaskCard({ task }) {
   const router = useRouter();
   const submitted = !!task.submitted_at;
   const overdue = !submitted && isOverdue(task);
