@@ -126,8 +126,16 @@ export default async function ManagerTasksPage() {
   };
   const webManagers = managers.filter((m) => m.role === 'web_seo_manager').map((m) => ({ id: m.id, name: m.name }));
 
+  // The Graphics Designers and every task any of them has been given (admin's, the Executive's, ...), newest first.
+  const designers = await db.prepare("SELECT id, name FROM users WHERE role = 'graphic_designer' AND is_active = 1 ORDER BY name").all();
+  const designerTasks = [...byAssociateTask.values()]
+    .map((t) => ({ ...t, assignees: t.assignees.filter((a) => a.role === 'graphic_designer') }))
+    .filter((t) => t.assignees.length > 0);
+
   return (
     <ManagerTasksClient
+      designers={designers}
+      designerTasks={designerTasks}
       onboardingTemplates={onboardingTemplates}
       webManagers={webManagers}
       templates={templateRows}

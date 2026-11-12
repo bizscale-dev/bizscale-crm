@@ -10,6 +10,7 @@ import {
   saveOnboardingChecklist, assignWebOnboarding,
 } from './actions';
 import { formatPkt } from '@/lib/formatTime';
+import DesignersTab from './DesignersTab';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const PAGE_SIZE = 15;
@@ -896,11 +897,12 @@ const TABS = [
   { id: 'tasks', label: 'All tasks' },
   { id: 'assign', label: '＋ Assign task' },
   { id: 'default', label: '🔁 Default tasks' },
+  { id: 'designers', label: '🎨 Designers' },
   { id: 'onboarding', label: '🧭 Onboarding' },
   { id: 'balance', label: '🔍 Check & balance' },
 ];
 
-export default function ManagerTasksClient({ managers, tasks, roleLabels, templates = [], associateTasks = [], onboardingTemplates, webManagers = [] }) {
+export default function ManagerTasksClient({ managers, tasks, roleLabels, templates = [], associateTasks = [], onboardingTemplates, webManagers = [], designers = [], designerTasks = [] }) {
   const [tab, setTab] = useState('tasks');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const now = useMemo(() => new Date(), []);
@@ -959,6 +961,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
       {tab === 'tasks' && <TasksTab tasks={tasks} managers={managers} filters={filters} setFilters={setFilters} />}
       {tab === 'assign' && <AssignTab managers={managers} roleLabels={roleLabels} />}
       {tab === 'default' && <DefaultTab managers={managers} roleLabels={roleLabels} templates={templates} />}
+      {tab === 'designers' && <DesignersTab designers={designers} tasks={designerTasks} />}
       {tab === 'onboarding' && <OnboardingTab templates={onboardingTemplates} webManagers={webManagers} />}
       {tab === 'balance' && <BalanceTab managers={managers} tasks={tasks} associateTasks={associateTasks} />}
     </div>
