@@ -22,24 +22,47 @@ function due12h(due) {
   return `${h % 12 || 12}:${m[2]} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
+const PEOPLE_GROUPS = [
+  { role: 'graphic_designer_executive', label: 'Graphic Designer Executive' },
+  { role: 'graphic_designer', label: 'Graphics Designers' },
+];
+
 function DesignerPicker({ designers, selected, setSelected }) {
   const all = designers.length > 0 && designers.every((d) => selected.includes(d.id));
   return (
     <div>
       <label style={labelStyle}>Assign to · {selected.length} selected</label>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1.1rem', alignItems: 'center' }}>
-        {designers.map((d) => (
-          <label key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-            <input type="checkbox" checked={selected.includes(d.id)} onChange={() => setSelected((p) => (p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id]))} />
-            {d.name}
-          </label>
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+        {PEOPLE_GROUPS.map((g) => {
+          const list = designers.filter((d) => d.role === g.role);
+          if (list.length === 0) return null;
+          const groupAll = list.every((d) => selected.includes(d.id));
+          return (
+            <div key={g.role} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.65rem 0.9rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: '700' }}>{g.label}</span>
+                {list.length > 1 && (
+                  <button type="button" onClick={() => setSelected((p) => (groupAll ? p.filter((id) => !list.some((d) => d.id === id)) : [...new Set([...p, ...list.map((d) => d.id)])]))}
+                    style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer' }}>{groupAll ? 'Clear' : 'Select all'}</button>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1.1rem' }}>
+                {list.map((d) => (
+                  <label key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={selected.includes(d.id)} onChange={() => setSelected((p) => (p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id]))} />
+                    {d.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {designers.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No active Graphics Designers or Executive yet.</span>}
         {designers.length > 1 && (
-          <button type="button" onClick={() => setSelected(all ? [] : designers.map((d) => d.id))} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer' }}>
-            {all ? 'Clear' : 'Select all'}
+          <button type="button" onClick={() => setSelected(all ? [] : designers.map((d) => d.id))} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer', padding: 0 }}>
+            {all ? 'Clear everyone' : 'Select everyone'}
           </button>
         )}
-        {designers.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No active Graphics Designers yet.</span>}
       </div>
     </div>
   );
@@ -99,7 +122,7 @@ function SingleForm({ designers }) {
         </div>
       </div>
       <UrgencySelect value={urgency} onChange={setUrgency} labelStyle={labelStyle} inputStyle={inputStyle} />
-      <ImageAttachField value={image} onChange={setImage} />
+      <ImageAttachField value={image} onChange={setImage} label="Image (optional - goes to the designers)" />
       <DesignerPicker designers={designers} selected={selected} setSelected={setSelected} />
       <div><button type="submit" disabled={busy} style={{ ...primaryButtonStyle, opacity: busy ? 0.6 : 1 }}>{busy ? 'Assigning…' : 'Assign task'}</button></div>
     </form>
@@ -203,7 +226,7 @@ export default function DesignersTab({ designers, tasks }) {
       <div style={cardStyle}>
         <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.1rem' }}>🎨 Designers tasks</h2>
         <p style={{ margin: '0 0 1.1rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-          Assign work to the Graphics Designers. Use <strong>Bulk dates</strong> for one task that repeats on many dates: every date becomes its own task, due a few days before that date.
+          Assign work to the Graphic Designer Executive and the Graphics Designers. Use <strong>Bulk dates</strong> for one task that repeats on many dates: every date becomes its own task, due a few days before that date.
         </p>
         <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.25rem' }}>
           {[['bulk', '🔁 Bulk dates (default task)'], ['single', '＋ Single task']].map(([id, label]) => (
@@ -215,7 +238,7 @@ export default function DesignersTab({ designers, tasks }) {
 
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Designer tasks</h2>
+          <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Designer &amp; Executive tasks</h2>
           <div style={{ display: 'flex', gap: '0.4rem' }}>
             {[['open', 'Open'], ['done', 'Completed'], ['all', 'All']].map(([id, label]) => (
               <button key={id} type="button" onClick={() => setFilter(id)} style={{ padding: '0.3rem 0.9rem', borderRadius: '2rem', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer', border: '1px solid var(--primary)', color: filter === id ? 'white' : 'var(--primary)', backgroundColor: filter === id ? 'var(--primary)' : 'transparent' }}>{label}</button>
