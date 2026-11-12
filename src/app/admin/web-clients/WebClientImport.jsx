@@ -118,11 +118,12 @@ export default function WebClientImport() {
           Paste your Google Sheet URL to import web clients with their assigned Web SEO Associates.
         </p>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0.5rem 0 0 0' }}>
-          The sheet should have a tab named <strong>"Active Clients"</strong> with two client-associate pairs:
+          The sheet should have a tab named <strong>"Active Clients"</strong> with one table, every client on its own row (blank rows in between are fine). Columns are found by their header:
         </p>
         <ul style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0.5rem 0 1rem 1.5rem', paddingLeft: '0' }}>
-          <li><strong>Pair 1:</strong> Column D (Client Names) + Column F (Web SEO Associates)</li>
-          <li><strong>Pair 2:</strong> Column L (Client Names) + Column N (Web SEO Associates)</li>
+          <li><strong>NAME</strong> — the client name</li>
+          <li><strong>Site ULRs</strong> — the client&apos;s website</li>
+          <li><strong>Assigned To</strong> — Sikandar or Ammar</li>
         </ul>
       </div>
 

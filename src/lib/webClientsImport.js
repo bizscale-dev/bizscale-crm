@@ -108,7 +108,7 @@ export async function runWebClientsImport(sheetUrl) {
   console.log('[runWebClientsImport] Got access token, fetching sheet...');
 
   const sheetName = 'Active Clients';
-  const range = `'${sheetName}'!A:N`;
+  const range = `'${sheetName}'!A:Z`;
   const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`;
 
   const response = await fetch(apiUrl, {
@@ -248,25 +248,28 @@ export async function runWebClientsImport(sheetUrl) {
     }
   }
 
-  // Pair 1: Column C (index 2) = Site URL → Column D (index 3) = Client Names → Column F (index 5) = Associate Names
-  // Pair 2: Column K (index 10) = Site URL → Column L (index 11) = Client Names → Column N (index 13) = Associate Names
+  // One table, every client on its own row (the managers' clients sit one under the other, with blank
+  // rows between them): `   | date | Site ULRs | NAME | DOC | Assigned To | ON PAGE | Sheet Urls`.
+  // Columns are found by their header, so moving or adding a column does not break the import; the old
+  // fixed positions (C = site, D = name, F = assigned to) are only the fallback if a header is missing.
+  const headers = (values[0] || []).map((h) => String(h || '').trim().toLowerCase());
+  const find = (...tests) => headers.findIndex((h) => tests.some((t) => t(h)));
+  const col = {
+    site: find((h) => h.startsWith('site')),
+    name: find((h) => h === 'name', (h) => h === 'client name', (h) => h === 'client'),
+    assigned: find((h) => h.startsWith('assigned')),
+  };
+  if (col.site === -1) col.site = 2;
+  if (col.name === -1) col.name = 3;
+  if (col.assigned === -1) col.assigned = 5;
+  console.log('[runWebClientsImport] Columns:', col);
+
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
     if (!row || row.length < 2) continue;
-
-    const site1Url = (row[2] || '').trim();
-    const client1Name = (row[3] || '').trim();
-    const associate1Name = (row[5] || '').trim();
-    if (client1Name) {
-      await upsertClient(client1Name, associate1Name, `Row ${i + 1} (Pair 1)`, site1Url);
-    }
-
-    const site2Url = (row[10] || '').trim();
-    const client2Name = (row[11] || '').trim();
-    const associate2Name = (row[13] || '').trim();
-    if (client2Name) {
-      await upsertClient(client2Name, associate2Name, `Row ${i + 1} (Pair 2)`, site2Url);
-    }
+    const clientName = (row[col.name] || '').trim();
+    if (!clientName || clientName.startsWith('#')) continue; // blank spacer rows / formula errors
+    await upsertClient(clientName, (row[col.assigned] || '').trim(), `Row ${i + 1}`, (row[col.site] || '').trim());
   }
 
   // Deactivate clients that used to be in this sheet but no longer are — keeps their
