@@ -169,6 +169,13 @@ function TaskCard({ task }) {
         </div>
       </div>
 
+      {open && !!task.has_attachment && (
+        <a href={`/api/task-attachment/${task.task_id}`} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', margin: '0 0 0.75rem' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`/api/task-attachment/${task.task_id}`} alt="Task attachment" loading="lazy" style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block' }} />
+        </a>
+      )}
+
       {!open ? null : submitted ? (
         <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: '600', marginBottom: '0.5rem' }}>

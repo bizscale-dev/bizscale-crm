@@ -8,6 +8,7 @@ import {
 } from './actions';
 import TaskBadges from '@/components/TaskBadges';
 import UrgencySelect from '@/components/UrgencySelect';
+import ImageAttachField from '@/components/ImageAttachField';
 import { formatPkt } from '@/lib/formatTime';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -318,6 +319,7 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
   const [dueDate, setDueDate] = useState('');
   const [dueTime, setDueTime] = useState('');
   const [urgency, setUrgency] = useState('moderate');
+  const [image, setImage] = useState(null); // optional picture, as a data URL
   const [selectedIds, setSelectedIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
@@ -336,6 +338,7 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
     formData.set('due_date', dueDate);
     formData.set('due_time', dueTime);
     formData.set('urgency', urgency);
+    if (image) formData.set('attachment', image);
     selectedIds.forEach((id) => formData.append('assignee_ids', id));
 
     const result = await createAssociateTask(formData);
@@ -351,6 +354,7 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
     setDueDate('');
     setDueTime('');
     setUrgency('moderate');
+    setImage(null);
     setSelectedIds([]);
     router.refresh();
   };
@@ -410,6 +414,8 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
 
           <UrgencySelect value={urgency} onChange={setUrgency} labelStyle={labelStyle} inputStyle={inputStyle} />
 
+          <ImageAttachField value={image} onChange={setImage} />
+
           <div>
             <label style={labelStyle}>Assign To</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -454,6 +460,12 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
                     Due {task.due_date} {task.template_id ? '(12 AM)' : task.due_time}
                   </div>
                 </div>
+                {task.has_attachment && (
+                  <a href={`/api/task-attachment/${task.id}`} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginBottom: '0.75rem' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/api/task-attachment/${task.id}`} alt="Task attachment" loading="lazy" style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block' }} />
+                  </a>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem' }}>
                   {task.assignees.map((a) => (
                     <AssigneeStatus key={a.id} assignee={a} />

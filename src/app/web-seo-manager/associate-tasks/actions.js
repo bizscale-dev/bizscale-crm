@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
 import { createNotificationsForUsers, getTasksLinkForRole } from '@/lib/notifications';
 import { parseUrgency } from '@/lib/taskUrgency';
+import { readAttachment } from '@/lib/taskAttachment';
 
 // Web SEO associates and the Web Developer - SEO both receive tasks from the Web SEO managers.
 const ASSOCIATE_ROLES = ['web_seo_associate', 'web_developer_seo'];
@@ -35,6 +36,8 @@ export async function createAssociateTask(formData) {
   const dueDate = (formData.get('due_date') || '').toString().trim();
   const dueTime = (formData.get('due_time') || '').toString().trim();
   const urgency = parseUrgency(formData.get('urgency'));
+  const attachment = readAttachment(formData);
+  if (attachment.error) return { error: attachment.error };
   const assigneeIds = formData.getAll('assignee_ids')
     .map((v) => parseInt(v, 10))
     .filter((n) => !Number.isNaN(n));
@@ -54,9 +57,9 @@ export async function createAssociateTask(formData) {
 
     const create = db.transaction(async (tx) => {
       const result = await tx.prepare(`
-        INSERT INTO associate_tasks (task_text, due_date, due_time, created_by, urgency)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(taskText, dueDate, dueTime, session.userId, urgency);
+        INSERT INTO associate_tasks (task_text, due_date, due_time, created_by, urgency, attachment_base64)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(taskText, dueDate, dueTime, session.userId, urgency, attachment.value);
       for (const u of valid) {
         await tx.prepare(`
           INSERT INTO associate_task_assignees (task_id, user_id) VALUES (?, ?)

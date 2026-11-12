@@ -19,6 +19,7 @@ export default async function WebSeoManagerAssociateTasksPage() {
 
   const rows = await db.prepare(`
     SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency,
+      (t.attachment_base64 IS NOT NULL AND t.attachment_base64 != '') AS has_attachment,
       a.id as assignee_row_id, a.user_id, u.name as associate_name,
       a.submitted_at, a.submission_description, a.proof_image_base64,
       a.is_late, a.late_reason, a.approval_status
@@ -40,6 +41,7 @@ export default async function WebSeoManagerAssociateTasksPage() {
         created_at: row.created_at,
         template_id: row.template_id,
         urgency: row.urgency,
+        has_attachment: !!row.has_attachment,
         assignees: [],
       });
     }

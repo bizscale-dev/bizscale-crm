@@ -8,6 +8,7 @@ import {
 } from './actions';
 import TaskBadges from '@/components/TaskBadges';
 import UrgencySelect from '@/components/UrgencySelect';
+import ImageAttachField from '@/components/ImageAttachField';
 import { formatPkt } from '@/lib/formatTime';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -320,24 +321,8 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
   const [urgency, setUrgency] = useState('moderate');
   const [selectedIds, setSelectedIds] = useState([]);
   const [image, setImage] = useState(null); // optional attachment, as a data URL
-  const [imageKey, setImageKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
-
-  const handleImage = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) { setImage(null); return; }
-    if (file.size > 2 * 1024 * 1024) {
-      setMessage({ type: 'error', text: 'Image is too large — max 2MB.' });
-      e.target.value = '';
-      setImage(null);
-      return;
-    }
-    setMessage(null);
-    const reader = new FileReader();
-    reader.onload = () => setImage(reader.result);
-    reader.readAsDataURL(file);
-  };
 
   const toggleAssociate = (id) => {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -366,7 +351,6 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
 
     setMessage({ type: 'success', text: `Task assigned to ${result.assignedCount} associate(s).` });
     setImage(null);
-    setImageKey((k) => k + 1);
     setTaskText('');
     setDueDate('');
     setDueTime('');
@@ -430,17 +414,7 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
 
           <UrgencySelect value={urgency} onChange={setUrgency} labelStyle={labelStyle} inputStyle={inputStyle} />
 
-          <div>
-            <label style={labelStyle}>Image (optional)</label>
-            <input key={imageKey} type="file" accept="image/*" onChange={handleImage} />
-            {image && (
-              <div style={{ marginTop: '0.5rem' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image} alt="Attachment preview" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block' }} />
-                <button type="button" onClick={() => { setImage(null); setImageKey((k) => k + 1); }} style={{ marginTop: '0.4rem', background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}>Remove image</button>
-              </div>
-            )}
-          </div>
+          <ImageAttachField value={image} onChange={setImage} />
 
           <div>
             <label style={labelStyle}>Assign To</label>
