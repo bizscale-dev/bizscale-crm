@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { submitAssociateTaskProof } from './actions';
+import { submitAssociateTaskProof, setClientCheck } from './actions';
 import TaskBadges from '@/components/TaskBadges';
+import ClientChecklist from '@/components/ClientChecklist';
 import { TASK_URGENCIES, parseUrgency } from '@/lib/taskUrgency';
 import { formatPkt, pktDay, dayLabel } from '@/lib/formatTime';
 
@@ -187,7 +188,9 @@ function TaskCard({ task, twelveHour }) {
         </a>
       )}
 
-      {!open ? null : submitted ? (
+      {!open ? null : task.kind === 'monthly_clients' && !submitted ? (
+        <ClientChecklist task={task} onToggle={setClientCheck} />
+      ) : submitted ? (
         <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: '600', marginBottom: '0.5rem' }}>
             ✅ Submitted {formatPkt(task.submitted_at)}

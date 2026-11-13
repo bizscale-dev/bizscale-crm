@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
+import { applyClientCheck } from '@/lib/clientCheckTask';
 
 // ~2MB of raw image bytes, inflated by base64's ~1.37x overhead — matches the
 // client-side cap in ManagerTasksClient.jsx. Re-validated here since
@@ -111,5 +112,20 @@ export async function submitAssociateTaskProof(taskId, description, proofImageBa
   } catch (err) {
     console.error('[AssociateTasks] submitAssociateTaskProof failed:', err);
     return { error: err.message || 'Failed to submit — please try again.' };
+  }
+}
+
+/** Ticks or unticks one client of a "check every client" task (the ranking checks) for the signed-in Web SEO associate. */
+export async function setClientCheck(taskId, index, checked) {
+  const { session, error: authError } = await requireWebSeoAssociate();
+  if (authError) return { error: authError };
+  try {
+    const db = await getDb();
+    const result = await applyClientCheck(db, session.userId, taskId, index, checked);
+    if (result.success) revalidatePath('/web-associate/manager-tasks');
+    return result;
+  } catch (err) {
+    console.error('[WebAssociateTasks] setClientCheck failed:', err);
+    return { error: 'Could not save — please try again.' };
   }
 }

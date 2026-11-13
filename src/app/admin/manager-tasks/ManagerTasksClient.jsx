@@ -11,6 +11,7 @@ import {
 } from './actions';
 import { formatPkt } from '@/lib/formatTime';
 import DesignersTab from './DesignersTab';
+import RankingChecksSection from './RankingChecksSection';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const PAGE_SIZE = 15;
@@ -572,7 +573,7 @@ function AssignTab({ managers, roleLabels }) {
 
 /* ---------- Tab: default (weekly) tasks ---------- */
 
-function DefaultTab({ managers, roleLabels, templates }) {
+function DefaultTab({ managers, roleLabels, templates, rankingTasks }) {
   const router = useRouter();
   const [taskText, setTaskText] = useState('');
   const [startWeekday, setStartWeekday] = useState('');
@@ -677,6 +678,8 @@ function DefaultTab({ managers, roleLabels, templates }) {
           </div>
         )}
       </div>
+
+      <RankingChecksSection tasks={rankingTasks} />
     </div>
   );
 }
@@ -902,7 +905,7 @@ const TABS = [
   { id: 'balance', label: '🔍 Check & balance' },
 ];
 
-export default function ManagerTasksClient({ managers, tasks, roleLabels, templates = [], associateTasks = [], onboardingTemplates, webManagers = [], designers = [], designerTasks = [] }) {
+export default function ManagerTasksClient({ managers, tasks, roleLabels, templates = [], associateTasks = [], onboardingTemplates, webManagers = [], designers = [], designerTasks = [], rankingTasks = [] }) {
   const [tab, setTab] = useState('tasks');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const now = useMemo(() => new Date(), []);
@@ -960,7 +963,7 @@ export default function ManagerTasksClient({ managers, tasks, roleLabels, templa
 
       {tab === 'tasks' && <TasksTab tasks={tasks} managers={managers} filters={filters} setFilters={setFilters} />}
       {tab === 'assign' && <AssignTab managers={managers} roleLabels={roleLabels} />}
-      {tab === 'default' && <DefaultTab managers={managers} roleLabels={roleLabels} templates={templates} />}
+      {tab === 'default' && <DefaultTab managers={managers} roleLabels={roleLabels} templates={templates} rankingTasks={rankingTasks} />}
       {tab === 'designers' && <DesignersTab designers={designers} tasks={designerTasks} />}
       {tab === 'onboarding' && <OnboardingTab templates={onboardingTemplates} webManagers={webManagers} />}
       {tab === 'balance' && <BalanceTab managers={managers} tasks={tasks} associateTasks={associateTasks} />}

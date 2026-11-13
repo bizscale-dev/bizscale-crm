@@ -138,8 +138,26 @@ export default async function ManagerTasksPage() {
       .filter((t) => t.assignees.length > 0),
   ].sort((x, y) => String(y.created_at).localeCompare(String(x.created_at)));
 
+  // Ranking check tasks (admin-created "check every client" tasks) with each associate's progress.
+  const rankingRows = await db.prepare(`
+    SELECT t.id, t.task_text, t.due_date, u.name, a.checklist, a.checklist_done, a.submitted_at
+    FROM associate_tasks t
+    JOIN associate_task_assignees a ON a.task_id = t.id
+    JOIN users u ON u.id = a.user_id
+    WHERE t.kind = 'monthly_clients'
+    ORDER BY t.due_date DESC, t.id DESC, u.name
+  `).all();
+  const countOf = (v) => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a.length : 0; } catch { return 0; } };
+  const rankingMap = new Map();
+  for (const r of rankingRows) {
+    if (!rankingMap.has(r.id)) rankingMap.set(r.id, { id: r.id, title: r.task_text.split(/\s+[—-]\s+/)[0].trim(), due_date: r.due_date, people: [] });
+    rankingMap.get(r.id).people.push({ name: r.name, total: countOf(r.checklist), done: r.submitted_at ? countOf(r.checklist) : countOf(r.checklist_done), submitted: !!r.submitted_at });
+  }
+  const rankingTasks = [...rankingMap.values()];
+
   return (
     <ManagerTasksClient
+      rankingTasks={rankingTasks}
       designers={designers}
       designerTasks={designerTasks}
       onboardingTemplates={onboardingTemplates}
