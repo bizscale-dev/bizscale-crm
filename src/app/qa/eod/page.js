@@ -21,7 +21,12 @@ export default async function QaEodPage() {
       (SELECT COUNT(*) FROM eod_report_entries e
         JOIN eod_reports r ON r.id = e.report_id WHERE r.user_id = u.id) as entry_count,
       (SELECT MAX(r.report_date) FROM eod_reports r WHERE r.user_id = u.id) as last_report_date,
-      (SELECT COUNT(*) FROM qa_reports q WHERE q.manager_id = u.id) as flagged_count
+      (SELECT COUNT(*) FROM qa_reports q WHERE q.manager_id = u.id) as flagged_count,
+      (SELECT COUNT(*) FROM eod_report_entries e JOIN eod_reports r ON r.id = e.report_id
+        WHERE r.user_id = u.id AND r.report_date = (SELECT MAX(r2.report_date) FROM eod_reports r2 WHERE r2.user_id = u.id)) as last_entries,
+      (SELECT COUNT(*) FROM eod_report_entries e JOIN eod_reports r ON r.id = e.report_id
+        JOIN eod_entry_checks k ON k.entry_id = e.id
+        WHERE r.user_id = u.id AND r.report_date = (SELECT MAX(r2.report_date) FROM eod_reports r2 WHERE r2.user_id = u.id)) as last_checked
     FROM users u
     WHERE u.role IN ('web_seo_manager', 'seo_manager', 'writers_manager', 'web_developer_seo', 'graphic_designer')
     ORDER BY u.role, u.name
@@ -80,8 +85,13 @@ export default async function QaEodPage() {
                 ))}
               </div>
 
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                {m.last_report_date ? `Last report: ${m.last_report_date}` : 'No reports yet'}
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span>{m.last_report_date ? `Last report: ${m.last_report_date}` : 'No reports yet'}</span>
+                {m.last_entries > 0 && m.last_checked >= m.last_entries && (
+                  <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem', borderRadius: '0.25rem', backgroundColor: 'rgba(22, 178, 147, 0.12)', color: BRAND_COLOR, fontWeight: '700', whiteSpace: 'nowrap' }}>
+                    ✓ Checked
+                  </span>
+                )}
               </div>
               <div style={{ marginTop: '0.85rem', fontSize: '0.8rem', fontWeight: '600', color: BRAND_COLOR }}>
                 Review reports →
