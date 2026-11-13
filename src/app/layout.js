@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: "Bizscale CRM - SEO Campaign Management",
   description: "Professional SEO campaign management platform for tracking links, associates, and content delivery",
+  robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } },
   icons: {
     icon: '/logo.png',
     apple: '/logo.png',

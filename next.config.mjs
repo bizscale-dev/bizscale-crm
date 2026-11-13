@@ -9,6 +9,9 @@ const nextConfig = {
   // ~2.7MB after base64 inflation) straight through a server action — well past
   // Next's default 1MB server action body limit. No other feature in this app
   // currently needs a raised limit.
+  async headers() {
+    return [{ source: '/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }] }];
+  },
   experimental: {
     serverActions: { bodySizeLimit: '4mb' },
   },
