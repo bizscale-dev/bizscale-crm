@@ -1,6 +1,7 @@
 import { getDb } from './db';
 import { getWorkingDays } from './offDays';
 import { getOffDaysSet } from './webSeoCampaignOffDays';
+import { pakistanDate } from './qaAssociateWork';
 
 const LINK_TYPES = { web2: 'webseo_web2_target', guestpost: 'webseo_guestpost_target' };
 
@@ -58,6 +59,15 @@ export async function generateWebSeoTasks(webSeoCampaignId) {
     priorCompleted.set(`${row.client_id}|${row.day_number}|${row.post_type}`, row.completed_count);
   }
 
+  // A visit that has already passed is only rebuilt if that exact row existed before. A client added or switched
+  // on part-way through the month therefore only gets today and later — rebuilding the whole month for them would
+  // leave "overdue" tasks nobody could have done.
+  const priorKeys = new Set(
+    (await db.prepare('SELECT client_id, day_number, post_type FROM webseo_tasks WHERE webseo_campaign_id = ?').all(webSeoCampaignId))
+      .map((r) => `${r.client_id}|${r.day_number}|${r.post_type}`)
+  );
+  const today = pakistanDate(0);
+
   await db.prepare('DELETE FROM webseo_tasks WHERE webseo_campaign_id = ?').run(webSeoCampaignId);
 
   const rows = [];
@@ -100,8 +110,10 @@ export async function generateWebSeoTasks(webSeoCampaignId) {
 
           visitDays.forEach((visit, vIdx) => {
             const count = perVisitBase + (vIdx < extraVisits ? 1 : 0);
-            if (count > 0) {
-              const priorKey = `${client.id}|${visit.dayNumber}|${postType}`;
+            const priorKey = `${client.id}|${visit.dayNumber}|${postType}`;
+            // Past visit with no earlier row (first run of a brand-new campaign has no rows at all, so nothing is skipped).
+            const skipPast = priorKeys.size > 0 && visit.dateStr < today && !priorKeys.has(priorKey);
+            if (count > 0 && !skipPast) {
               rows.push({
                 webseo_campaign_id: webSeoCampaignId,
                 client_id: client.id,
