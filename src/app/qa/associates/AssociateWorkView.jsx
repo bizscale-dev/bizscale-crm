@@ -232,7 +232,10 @@ function AssociateCard({ kind, associate, date }) {
           ) : associate.clients.map((c) => (
             <div key={c.clientId} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.8rem 1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{c.name}</div>
+                <div style={{ fontWeight: '600', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  {c.name}
+                  {c.sheetUrl && <a href={c.sheetUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', fontWeight: '600', color: 'var(--primary)', textDecoration: 'none', whiteSpace: 'nowrap' }}>📄 Open sheet ↗</a>}
+                </div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <PassAllButton kind={kind} client={c} statuses={statuses} onPassed={passMany(c.clientId)} />
                   <CopyLinksButton client={c} />

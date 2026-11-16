@@ -47,13 +47,13 @@ export async function loadAssociateWork(db, kind, date) {
 
   const rows = isWeb
     ? await db.prepare(`
-        SELECT t.associate_id, t.client_id, t.task_date, t.post_type, t.post_type AS link_type, t.completed_count, c.name AS client_name
+        SELECT t.associate_id, t.client_id, t.task_date, t.post_type, t.post_type AS link_type, t.completed_count, c.name AS client_name, NULL AS sheet_url
         FROM webseo_tasks t JOIN web_clients c ON c.id = t.client_id
         WHERE t.task_date = ? AND t.completed_count > 0
         ORDER BY c.name, t.post_type
       `).all(date)
     : await db.prepare(`
-        SELECT t.associate_id, t.client_id, t.task_date, t.link_type, t.completed_count, c.name AS client_name
+        SELECT t.associate_id, t.client_id, t.task_date, t.link_type, t.completed_count, c.name AS client_name, c.sheet_url AS sheet_url
         FROM seo_tasks t JOIN clients c ON c.id = t.client_id
         WHERE t.task_date = ? AND t.completed_count > 0
         ORDER BY c.name, t.link_type
@@ -76,7 +76,7 @@ export async function loadAssociateWork(db, kind, date) {
   for (const r of rows) {
     const u = byUser.get(r.associate_id);
     if (!u) continue;
-    if (!u.clients.has(r.client_id)) u.clients.set(r.client_id, { clientId: r.client_id, name: r.client_name, types: [] });
+    if (!u.clients.has(r.client_id)) u.clients.set(r.client_id, { clientId: r.client_id, name: r.client_name, sheetUrl: r.sheet_url || null, types: [] });
     u.clients.get(r.client_id).types.push({
       type: r.link_type,
       count: r.completed_count,
