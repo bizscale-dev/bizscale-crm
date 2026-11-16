@@ -136,7 +136,14 @@ export default function ClientList({ clients, associates = [] }) {
           {filteredClients.map(c => (
             <tr key={c.id} style={{ borderBottom: '1px solid var(--border)', opacity: c.is_active ? 1 : 0.6 }}>
               <td style={{ padding: '1rem 0', color: 'var(--text-muted)' }}>{c.sort_order}</td>
-              <td style={{ padding: '1rem 0', fontWeight: '500' }}>{c.name}</td>
+              <td style={{ padding: '1rem 0', fontWeight: '500' }}>
+                {c.name}
+                {c.sheet_url && (
+                  <div style={{ marginTop: '0.2rem' }}>
+                    <a href={c.sheet_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', fontWeight: '500', color: 'var(--primary)', textDecoration: 'none' }}>📄 Open sheet ↗</a>
+                  </div>
+                )}
+              </td>
               <td style={{ padding: '1rem 0', fontWeight: '500', color: 'var(--primary)' }}>
                 {c.assigned_associate || '—'}
               </td>

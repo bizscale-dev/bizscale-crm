@@ -213,6 +213,11 @@ export async function POST(request) {
     const writerAssignments = {}; // { "Writer Name": ["Client 1", "Client 2", ...] }
     const sheetClients = new Map(); // name -> { name, website }
     const supportByClient = new Map(); // lower-case name -> Support number (1-10) or null
+    const sheetUrlByClient = new Map(); // lower-case name -> the client's own sheet URL
+    // The "Sheet URL" column is found by its header (e.g. "Sheet URLs" / "Sheet Link"), wherever it sits.
+    const headerRow = (rows[0] || []).map((h) => String(h || '').toLowerCase());
+    let sheetUrlCol = headerRow.findIndex((h) => h.includes('sheet') && (h.includes('url') || h.includes('link')));
+    if (sheetUrlCol === -1) sheetUrlCol = headerRow.findIndex((h) => h.includes('url'));
 
     console.log(`[sync-clients] Sheet has ${rows.length} total rows`);
     console.log(`[sync-clients] Header row: ${rows[0]?.join(' | ')}`);
@@ -226,14 +231,17 @@ export async function POST(request) {
       const supportNumber = parseInt(row[6], 10) || null; // Column G (index 6) — Support 1-10
       const associateName = row[7]?.trim(); // Column H (index 7)
       const writerName = row[8]?.trim(); // Column I (index 8)
+      const rawSheetUrl = sheetUrlCol >= 0 ? String(row[sheetUrlCol] || '').trim() : '';
+      const clientSheetUrl = /^https?:\/\//i.test(rawSheetUrl) ? rawSheetUrl : null;
 
       if (clientName) {
         parsedCount++;
         // Add client to map (no website in this sheet, so empty string). Stored
         // verbatim as whatever text is in the sheet's Joining Date column — see
         // clients.joining_date in src/lib/db.js.
-        sheetClients.set(clientName.toLowerCase(), { name: clientName, website: '', joiningDate, supportNumber });
+        sheetClients.set(clientName.toLowerCase(), { name: clientName, website: '', joiningDate, supportNumber, sheetUrl: clientSheetUrl });
         supportByClient.set(clientName.toLowerCase(), supportNumber);
+        sheetUrlByClient.set(clientName.toLowerCase(), clientSheetUrl);
 
         // Add to associate assignment
         if (associateName) {
@@ -274,6 +282,10 @@ export async function POST(request) {
     // by the QA Executives page to send an issue only to the manager who owns the client.
     for (const [lowerName, support] of supportByClient) {
       await db.prepare('UPDATE clients SET support_number = ? WHERE lower(name) = ?').run(support, lowerName);
+    }
+
+    for (const [lowerName, url] of sheetUrlByClient) {
+      await db.prepare('UPDATE clients SET sheet_url = ? WHERE lower(name) = ?').run(url, lowerName);
     }
 
     // Get current database clients

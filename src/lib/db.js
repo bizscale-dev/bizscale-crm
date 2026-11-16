@@ -334,6 +334,8 @@ async function runMigrationsBody(raw) {
     // The SEO sheet's "Support" column (1-10): which SEO manager looks after the client
     // (see src/lib/qaClientOwners.js). Refreshed by the daily clients sync.
     "ALTER TABLE clients ADD COLUMN support_number INTEGER",
+    // The SEO sheet's "Sheet URL" column: each client's own tracking sheet. Refreshed by the clients sync.
+    "ALTER TABLE clients ADD COLUMN sheet_url TEXT",
     // Tag for a task the admin assigned by hand (shown on the associate's task list).
     "ALTER TABLE seo_tasks ADD COLUMN admin_label TEXT",
     // A manager's fix goes to status 'pending_review' first; QA confirms it (status
