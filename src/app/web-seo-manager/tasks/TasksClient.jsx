@@ -127,7 +127,7 @@ function BlogLinksTask({ task }) {
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem', backgroundColor: 'var(--card-bg)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
-        <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
+        <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}><TaskBadges byQa={!!task.by_qa} urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Due {task.due_date} {task.template_id ? '12 AM' : task.due_time}</div>
       </div>
       <div style={{ padding: '0.75rem 0.9rem', border: '1px solid var(--border)', borderRadius: '0.6rem', backgroundColor: 'var(--background)' }}>
@@ -279,7 +279,7 @@ function ChecklistTaskCard({ task }) {
       backgroundColor: 'var(--card-bg)',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.75rem' }}>
-        <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
+        <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}><TaskBadges byQa={!!task.by_qa} urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
           Due {task.due_date} {task.template_id ? '12 AM' : task.due_time}
         </div>

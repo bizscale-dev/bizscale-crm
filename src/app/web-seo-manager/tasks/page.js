@@ -13,7 +13,7 @@ export default async function WebSeoManagerTasksPage() {
   const tasks = await db.prepare(`
     SELECT t.id as task_id, t.task_text, t.due_date, t.due_time,
       a.submitted_at, a.submission_description, a.proof_image_base64,
-      a.is_late, a.late_reason, a.approval_status, t.template_id, t.urgency, t.is_default,
+      a.is_late, a.late_reason, a.approval_status, t.template_id, t.urgency, (SELECT role FROM users WHERE id = t.created_by) = 'qa' AS by_qa,  t.is_default,
       t.checklist, a.checklist_done, t.kind, a.item_links
     FROM manager_task_assignees a
     JOIN manager_tasks t ON t.id = a.task_id
