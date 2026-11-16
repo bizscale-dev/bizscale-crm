@@ -16,8 +16,8 @@ function formatDue12h(due) {
   return `${h % 12 || 12}:${m[2]} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
-function TaskCard({ task, targetLabel }) {
-  const [open, setOpen] = useState(false);
+// One task is open at a time (the parent holds which); marking Pass / Fail closes it.
+function TaskCard({ task, targetLabel, open, setOpen }) {
   const [status, setStatus] = useState(task.check_status || '');
   const [reports, setReports] = useState(task.report_count);
   const [reporting, setReporting] = useState(false);
@@ -30,6 +30,7 @@ function TaskCard({ task, targetLabel }) {
     const value = status === next ? '' : next;
     const before = status;
     setStatus(value);
+    setOpen(false);
     const res = await setTaskCheck({ taskId: task.task_id, userId: task.user_id, status: value });
     if (res?.error) { setStatus(before); setMessage({ error: true, text: res.error }); }
   };
@@ -120,6 +121,7 @@ function TaskCard({ task, targetLabel }) {
 export default function CheckClient({ tasks, targetLabel, people }) {
   const [filter, setFilter] = useState('all');
   const [person, setPerson] = useState('');
+  const [openKey, setOpenKey] = useState(null);
 
   const visible = tasks.filter((t) => {
     if (person && String(t.user_id) !== person) return false;
@@ -162,7 +164,10 @@ export default function CheckClient({ tasks, targetLabel, people }) {
             {dayLabel(g.day)} · {g.tasks.length}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {g.tasks.map((t) => <TaskCard key={`${t.task_id}-${t.user_id}`} task={t} targetLabel={targetLabel} />)}
+            {g.tasks.map((t) => {
+              const k = `${t.task_id}-${t.user_id}`;
+              return <TaskCard key={k} task={t} targetLabel={targetLabel} open={openKey === k} setOpen={(v) => setOpenKey(v ? k : (openKey === k ? null : openKey))} />;
+            })}
           </div>
         </div>
       ))}
