@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { logout } from '@/app/login/actions';
 import Logo from '@/components/Logo';
 import NotificationBell from '@/components/NotificationBell';
+import ThemeToggle from '@/components/ThemeToggle';
 import NotificationLoginDialog from '@/components/NotificationLoginDialog';
 
 const BRAND_COLOR = 'var(--primary)';
@@ -290,6 +291,7 @@ export default function RoleLayoutShell({ navItems, portalLabel, headerTitle, he
                 {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
               </div>
             )}
+            <ThemeToggle />
             <NotificationBell />
           </div>
         </header>
