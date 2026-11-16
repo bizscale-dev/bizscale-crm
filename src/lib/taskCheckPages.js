@@ -88,7 +88,7 @@ export async function renderExecReportsPage() {
   const db = await getDb();
   const people = await db.prepare('SELECT id, name FROM users WHERE role = ? AND is_active = 1 ORDER BY name').all(cfg.targetRole);
   const reports = await db.prepare(`
-    SELECT r.id, r.task_id, r.user_id, r.created_by, r.task_text, r.comment, r.status, r.resolution_note, r.resolved_at, r.confirmed_at, r.rejection_count, r.created_at, r.link, (r.image_base64 IS NOT NULL AND r.image_base64 != '') AS has_image, u.name AS assignee_name, e.name AS reporter_name, e.role AS reporter_role
+    SELECT r.id, r.task_id, r.user_id, r.created_by, r.task_text, r.comment, r.status, r.resolution_note, r.resolved_at, r.confirmed_at, r.rejection_count, r.created_at, r.link, r.edited_at, (r.image_base64 IS NOT NULL AND r.image_base64 != '') AS has_image, u.name AS assignee_name, e.name AS reporter_name, e.role AS reporter_role
     FROM task_check_reports r
     JOIN users u ON u.id = r.user_id AND u.role = ?
     LEFT JOIN users e ON e.id = r.created_by
@@ -102,7 +102,7 @@ export async function renderExecReportsPage() {
         Tasks reported to the {cfg.targetLabel}. When they say it is fixed it waits here for your check: confirm it, or send it back.
       </Heading>
       <BugReportForm people={people} targetLabel={cfg.targetLabel} />
-      <ReportsClient reports={reports} mode="exec" people={people} />
+      <ReportsClient reports={reports} mode="exec" people={people} meId={session.userId} />
       {qaReports.length > 0 && (
         <>
           <Heading title="QA Reports">Issues QA flagged on you. Fix them and submit the fix — QA confirms it.</Heading>
@@ -141,7 +141,7 @@ export async function renderMyReportsPage() {
   if (!session || !CHECKED_ROLES.includes(session.role)) redirect('/');
   const db = await getDb();
   const reports = await db.prepare(`
-    SELECT r.id, r.task_id, r.user_id, r.created_by, r.task_text, r.comment, r.status, r.resolution_note, r.resolved_at, r.confirmed_at, r.rejection_count, r.created_at, r.link, (r.image_base64 IS NOT NULL AND r.image_base64 != '') AS has_image, e.name AS reporter_name, e.role AS reporter_role FROM task_check_reports r
+    SELECT r.id, r.task_id, r.user_id, r.created_by, r.task_text, r.comment, r.status, r.resolution_note, r.resolved_at, r.confirmed_at, r.rejection_count, r.created_at, r.link, r.edited_at, (r.image_base64 IS NOT NULL AND r.image_base64 != '') AS has_image, e.name AS reporter_name, e.role AS reporter_role FROM task_check_reports r
     LEFT JOIN users e ON e.id = r.created_by
     WHERE r.user_id = ?
     ORDER BY (r.status = 'open') DESC, r.created_at DESC, r.id DESC

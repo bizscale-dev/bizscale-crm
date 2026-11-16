@@ -281,6 +281,8 @@ async function runMigrationsBody(raw) {
     // description is the comment, with an optional picture and link.
     "ALTER TABLE task_check_reports ADD COLUMN image_base64 TEXT",
     "ALTER TABLE task_check_reports ADD COLUMN link TEXT",
+    // Set when the Executive edits a report afterwards (also busts the browser cache of its picture).
+    "ALTER TABLE task_check_reports ADD COLUMN edited_at DATETIME",
     "ALTER TABLE associate_task_assignees ADD COLUMN checklist TEXT",
     "ALTER TABLE associate_task_assignees ADD COLUMN checklist_done TEXT",
     // First working day of a Month 1 client's CURRENT week — the 5-working-day

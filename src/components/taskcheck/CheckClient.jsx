@@ -4,6 +4,7 @@ import { useState } from 'react';
 import TaskBadges from '@/components/TaskBadges';
 import { formatPkt, pktDay, dayLabel } from '@/lib/formatTime';
 import { setTaskCheck, reportTask } from '@/lib/taskCheckActions';
+import ImagePicker from '@/components/taskcheck/ImagePicker';
 
 const ghostBtn = { fontSize: '0.78rem', padding: '0.3rem 0.8rem', backgroundColor: 'transparent', border: '1px solid var(--border)', color: 'var(--foreground)', cursor: 'pointer', borderRadius: '0.4rem', fontWeight: '600' };
 const FILTERS = [['all', 'All'], ['unchecked', 'Unchecked'], ['pass', 'Passed'], ['fail', 'Failed']];
@@ -21,6 +22,7 @@ function TaskCard({ task, targetLabel }) {
   const [reports, setReports] = useState(task.report_count);
   const [reporting, setReporting] = useState(false);
   const [comment, setComment] = useState('');
+  const [image, setImage] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -36,13 +38,14 @@ function TaskCard({ task, targetLabel }) {
     e.preventDefault();
     setBusy(true);
     setMessage(null);
-    const res = await reportTask({ taskId: task.task_id, userId: task.user_id, comment });
+    const res = await reportTask({ taskId: task.task_id, userId: task.user_id, comment, image });
     setBusy(false);
     if (res?.error) return setMessage({ error: true, text: res.error });
     setStatus('fail');
     setReports((n) => n + 1);
     setReporting(false);
     setComment('');
+    setImage(null);
     setMessage({ text: `Reported — ${res.name} has been notified.` });
   };
 
@@ -97,6 +100,10 @@ function TaskCard({ task, targetLabel }) {
               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Reporting this task to {task.assignee_name} ({targetLabel})</div>
               <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Comment (optional) — where exactly the issue is…"
                 style={{ width: '100%', padding: '0.55rem 0.8rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--card-bg)', color: 'var(--foreground)', fontSize: '0.875rem', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' }} />
+              <div>
+                <div style={{ fontSize: '0.72rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Picture (optional)</div>
+                <ImagePicker value={image} onChange={setImage} />
+              </div>
               <div>
                 <button type="submit" disabled={busy} className="btn" style={{ padding: '0.45rem 1.1rem', backgroundColor: 'var(--primary)', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
                   {busy ? 'Sending…' : 'Send report'}

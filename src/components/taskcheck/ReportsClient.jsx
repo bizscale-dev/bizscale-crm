@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatPkt } from '@/lib/formatTime';
-import { markReportFixed, confirmTaskReportFix, rejectTaskReportFix } from '@/lib/taskCheckActions';
+import { markReportFixed, confirmTaskReportFix, rejectTaskReportFix, updateTaskReport, deleteTaskReport } from '@/lib/taskCheckActions';
+import ImagePicker from '@/components/taskcheck/ImagePicker';
 
 const STATUS = {
   open: { label: 'Open', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)' },
@@ -16,12 +17,19 @@ const area = { width: '100%', padding: '0.55rem 0.8rem', borderRadius: '0.5rem',
 const ROLE_LABEL = { web_developer_executive: 'Web Developer Executive', web_seo_manager: 'Web SEO Manager', graphic_designer_executive: 'Graphic Designer Executive', qa: 'QA', admin: 'Admin' };
 const by = (r) => `${r.reporter_name}${ROLE_LABEL[r.reporter_role] ? ` (${ROLE_LABEL[r.reporter_role]})` : ''}`;
 
-function ReportCard({ report, mode }) {
+function ReportCard({ report, mode, meId }) {
   const router = useRouter();
   const [text, setText] = useState('');
   const [rejecting, setRejecting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [editComment, setEditComment] = useState('');
+  const [editLink, setEditLink] = useState('');
+  const [newImage, setNewImage] = useState(null);
+  const [dropImage, setDropImage] = useState(false);
+  const canManage = mode === 'exec' && !!meId && report.created_by === meId;
+  const imageUrl = `/api/task-check-report-image/${report.id}?v=${encodeURIComponent(report.edited_at || '')}`;
   const st = STATUS[report.status] || STATUS.open;
 
   const run = async (fn) => {
@@ -35,6 +43,27 @@ function ReportCard({ report, mode }) {
     router.refresh();
   };
 
+  const startEdit = () => {
+    setEditComment(report.comment || '');
+    setEditLink(report.link || '');
+    setNewImage(null);
+    setDropImage(false);
+    setError(null);
+    setEditing(true);
+  };
+  const saveEdit = (e) => {
+    e.preventDefault();
+    run(async () => {
+      const res = await updateTaskReport({ reportId: report.id, comment: editComment, link: editLink, image: newImage, removeImage: dropImage });
+      if (!res?.error) setEditing(false);
+      return res;
+    });
+  };
+  const remove = () => {
+    if (!confirm('Delete this report? It disappears for the person it was reported to as well.')) return;
+    run(() => deleteTaskReport(report.id));
+  };
+
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.1rem 1.25rem', backgroundColor: 'var(--card-bg)', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
@@ -42,19 +71,30 @@ function ReportCard({ report, mode }) {
           {mode === 'exec' ? <>Task by <strong style={{ color: 'var(--foreground)' }}>{report.assignee_name}</strong> · reported by <strong style={{ color: 'var(--foreground)' }}>{by(report)}</strong></> : <>Reported by <strong style={{ color: 'var(--foreground)' }}>{by(report)}</strong></>} · {formatPkt(report.created_at)}
           {report.rejection_count > 0 ? ` · failed re-check ${report.rejection_count}×` : ''}
         </div>
-        <span style={{ fontSize: '0.72rem', fontWeight: '600', color: st.color, backgroundColor: st.bg, padding: '0.2rem 0.6rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>{st.label}</span>
+        <span style={{ fontSize: '0.72rem', fontWeight: '600', color: st.color, backgroundColor: st.bg, padding: '0.2rem 0.6rem', borderRadius: '1rem', whiteSpace: 'nowrap' }}>{st.label}{report.edited_at ? ' · edited' : ''}</span>
       </div>
       <div style={{ fontSize: '0.92rem', whiteSpace: 'pre-wrap' }}>{report.task_text}</div>
-      {report.link && (
+      {editing && (
+        <form onSubmit={saveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', padding: '0.8rem', border: '1px solid var(--border)', borderRadius: '0.5rem', backgroundColor: 'var(--background)' }}>
+          <textarea value={editComment} onChange={(e) => setEditComment(e.target.value)} rows={3} style={area} placeholder={report.task_id === 0 ? 'Describe the bug…' : 'Comment (optional)'} />
+          <input type="text" value={editLink} onChange={(e) => setEditLink(e.target.value)} style={{ ...area, resize: 'none' }} placeholder="Link (optional) https://…" />
+          <ImagePicker value={newImage} onChange={(v) => { setNewImage(v); if (v) setDropImage(false); }} existing={report.has_image && !dropImage ? imageUrl : null} onRemoveExisting={() => setDropImage(true)} />
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="submit" disabled={busy} style={{ ...btn, backgroundColor: 'var(--primary)', opacity: busy ? 0.6 : 1 }}>{busy ? 'Saving…' : 'Save changes'}</button>
+            <button type="button" onClick={() => setEditing(false)} style={{ ...btn, backgroundColor: 'transparent', border: '1px solid var(--border)', color: 'var(--foreground)' }}>Cancel</button>
+          </div>
+        </form>
+      )}
+      {!editing && report.link && (
         <a href={report.link} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.82rem', color: 'var(--primary)', wordBreak: 'break-all' }}>🔗 {report.link}</a>
       )}
-      {!!report.has_image && (
-        <a href={`/api/task-check-report-image/${report.id}`} target="_blank" rel="noopener noreferrer" style={{ alignSelf: 'flex-start' }}>
+      {!editing && !!report.has_image && (
+        <a href={imageUrl} target="_blank" rel="noopener noreferrer" style={{ alignSelf: 'flex-start' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`/api/task-check-report-image/${report.id}`} alt="Bug" loading="lazy" style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block' }} />
+          <img src={imageUrl} alt="Bug" loading="lazy" style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block' }} />
         </a>
       )}
-      {report.comment && (
+      {!editing && report.comment && (
         <div style={{ padding: '0.7rem 0.9rem', backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderLeft: '3px solid #f59e0b', borderRadius: '0.5rem', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>{report.comment}</div>
       )}
       {report.resolution_note && report.status !== 'open' && (
@@ -67,6 +107,13 @@ function ReportCard({ report, mode }) {
       )}
 
       {error && <div style={{ fontSize: '0.8rem', color: 'var(--danger)' }}>{error}</div>}
+
+      {canManage && !editing && (
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button type="button" onClick={startEdit} style={{ ...btn, backgroundColor: 'transparent', border: '1px solid var(--border)', color: 'var(--foreground)' }}>✎ Edit</button>
+          <button type="button" disabled={busy} onClick={remove} style={{ ...btn, backgroundColor: 'transparent', border: '1px solid var(--danger)', color: 'var(--danger)' }}>🗑 Delete</button>
+        </div>
+      )}
 
       {mode === 'mine' && report.status === 'open' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -100,7 +147,7 @@ function Pill({ label, value, color }) {
   );
 }
 
-export default function ReportsClient({ reports, mode, people = [] }) {
+export default function ReportsClient({ reports, mode, people = [], meId = null }) {
   const count = (s) => reports.filter((r) => r.status === s).length;
   const [person, setPerson] = useState('');
   const visible = person ? reports.filter((r) => String(r.user_id) === person) : reports;
@@ -123,7 +170,7 @@ export default function ReportsClient({ reports, mode, people = [] }) {
         <p style={{ color: 'var(--text-muted)' }}>No reports yet.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-          {visible.map((r) => <ReportCard key={r.id} report={r} mode={mode} />)}
+          {visible.map((r) => <ReportCard key={r.id} report={r} mode={mode} meId={meId} />)}
         </div>
       )}
     </div>

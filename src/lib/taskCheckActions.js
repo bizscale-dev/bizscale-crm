@@ -9,6 +9,14 @@ import { submitFixForReview, QA_MAX_SCREENSHOT_BASE64 } from '@/lib/qaReports';
 
 const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
+// Optional picture on a report: a data URL of an image, max 2MB. Returns an error text, or '' when fine / empty.
+function checkImage(image) {
+  if (!image) return '';
+  if (typeof image !== 'string' || !/^data:image\/[a-z0-9.+-]+;base64,/i.test(image)) return 'The picture looks invalid — try attaching it again';
+  if (image.length > QA_MAX_SCREENSHOT_BASE64) return 'The picture is too large (max 2MB)';
+  return '';
+}
+
 async function requireExec() {
   const session = await verifySession();
   const cfg = session ? CHECK_TARGETS[session.role] : null;
@@ -52,19 +60,21 @@ export async function setTaskCheck({ taskId, userId, status }) {
  * row. The reported person is notified with the task text and the comment, the task is marked Fail, and
  * the report goes on both people's Reports pages until it is fixed and confirmed.
  */
-export async function reportTask({ taskId, userId, comment }) {
+export async function reportTask({ taskId, userId, comment, image }) {
   const ctx = await requireExec();
   if (!ctx) return { error: 'Not authorized' };
   const tid = parseInt(taskId, 10);
   const uid = parseInt(userId, 10);
   const note = clean(comment, 3000);
+  const imageError = checkImage(image);
+  if (imageError) return { error: imageError };
   const db = await getDb();
   const row = await loadSubmitted(db, ctx.cfg, tid, uid);
   if (!row) return { error: 'Task not found' };
 
   await db.prepare(`
-    INSERT INTO task_check_reports (task_id, user_id, created_by, task_text, comment) VALUES (?, ?, ?, ?, ?)
-  `).run(tid, uid, ctx.session.userId, row.task_text, note || null);
+    INSERT INTO task_check_reports (task_id, user_id, created_by, task_text, comment, image_base64) VALUES (?, ?, ?, ?, ?, ?)
+  `).run(tid, uid, ctx.session.userId, row.task_text, note || null, image || null);
   await db.prepare(`
     INSERT INTO task_checks (task_id, user_id, status, checked_by) VALUES (?, ?, 'fail', ?)
     ON CONFLICT(task_id, user_id) DO UPDATE SET status = 'fail', checked_by = excluded.checked_by, checked_at = CURRENT_TIMESTAMP
@@ -230,4 +240,68 @@ export async function reportBug({ userId, description, link, image }) {
 
   revalidatePath(ctx.cfg.reportsPath);
   return { success: true, name: person.name };
+}
+
+/**
+ * The Executive edits a report they filed: the comment (for a hand-filed bug, its description), the link, and the
+ * picture (keep, replace with `image`, or drop with removeImage). Only the person who filed it can change it, and
+ * the reported person is told it was updated.
+ */
+export async function updateTaskReport({ reportId, comment, link, image, removeImage }) {
+  const ctx = await requireExec();
+  if (!ctx) return { error: 'Not authorized' };
+  const id = parseInt(reportId, 10);
+  const db = await getDb();
+  const r = await db.prepare(`
+    SELECT r.id, r.task_id, r.task_text, r.user_id, r.image_base64, u.role AS user_role
+    FROM task_check_reports r JOIN users u ON u.id = r.user_id
+    WHERE r.id = ? AND r.created_by = ? AND u.role = ?
+  `).get(id, ctx.session.userId, ctx.cfg.targetRole);
+  if (!r) return { error: 'Report not found' };
+
+  const isBug = r.task_id === 0;
+  const text = clean(comment, 3000);
+  if (isBug && !text) return { error: 'Describe the bug' };
+
+  let url = clean(link, 2000);
+  if (url) {
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    try { new URL(url); } catch { return { error: 'That link does not look valid' }; }
+  }
+  const imageError = checkImage(image);
+  if (imageError) return { error: imageError };
+  const nextImage = image ? image : removeImage ? null : r.image_base64;
+  const title = isBug ? `Bug: ${text.replace(/\s+/g, ' ').slice(0, 100)}` : r.task_text;
+
+  await db.prepare(`
+    UPDATE task_check_reports SET task_text = ?, comment = ?, link = ?, image_base64 = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ?
+  `).run(title, text || null, url || null, nextImage, id);
+
+  await createNotificationsForUsers(db, [r.user_id], {
+    title: `${ctx.cfg.execLabel} updated a report`,
+    message: (isBug ? text : r.task_text).slice(0, 140),
+    link: getCheckReportsLinkForRole(r.user_role),
+  });
+  revalidatePath(ctx.cfg.reportsPath);
+  revalidatePath('/web-developer/reports');
+  revalidatePath('/graphic-designer/reports');
+  return { success: true };
+}
+
+/** The Executive deletes a report they filed (the reported person's copy goes with it). */
+export async function deleteTaskReport(reportId) {
+  const ctx = await requireExec();
+  if (!ctx) return { error: 'Not authorized' };
+  const id = parseInt(reportId, 10);
+  const db = await getDb();
+  const r = await db.prepare(`
+    SELECT r.id FROM task_check_reports r JOIN users u ON u.id = r.user_id
+    WHERE r.id = ? AND r.created_by = ? AND u.role = ?
+  `).get(id, ctx.session.userId, ctx.cfg.targetRole);
+  if (!r) return { error: 'Report not found' };
+  await db.prepare('DELETE FROM task_check_reports WHERE id = ?').run(id);
+  revalidatePath(ctx.cfg.reportsPath);
+  revalidatePath('/web-developer/reports');
+  revalidatePath('/graphic-designer/reports');
+  return { success: true };
 }
