@@ -37,8 +37,16 @@ export default function QaLayout({ children }) {
     { href: '/qa/follow-ups', label: 'Follow-ups', badgeCount: followUpCount },
   ];
 
+  const byHref = Object.fromEntries(navItems.map((i) => [i.href, i]));
+  const pick = (icon, ...pairs) => pairs.map(([href, ic]) => ({ ...byHref[href], icon: ic || icon }));
+  const navGroups = [
+    { label: 'Performance & Reports', icon: 'chart', items: pick('chart', ['/qa/stats', 'chart'], ['/qa/clients-stats', 'users'], ['/qa/reports', 'doc'], ['/qa/resolved', 'check']) },
+    { label: 'Team Management', icon: 'users', items: pick('user', ['/qa/manager-tasks', 'clipboard'], ['/qa/seo-associates', 'user'], ['/qa/web-seo-associates', 'monitor'], ['/qa/executives', 'star']) },
+    { label: 'Daily Operations', icon: 'calendar', items: pick('doc', ['/qa/eod', 'doc'], ['/qa/assign-tasks', 'plus'], ['/qa/follow-ups', 'bell']) },
+  ];
+
   return (
-    <RoleLayoutShell navItems={navItems} portalLabel="QA" headerTitle="QA Portal">
+    <RoleLayoutShell navItems={navItems} navGroups={navGroups} portalLabel="QA" headerTitle="QA Portal">
       {children}
     </RoleLayoutShell>
   );
