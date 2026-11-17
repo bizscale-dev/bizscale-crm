@@ -47,7 +47,7 @@ export async function loadAssociateWork(db, kind, date) {
 
   const rows = isWeb
     ? await db.prepare(`
-        SELECT t.associate_id, t.client_id, t.task_date, t.post_type, t.post_type AS link_type, t.completed_count, c.name AS client_name, NULL AS sheet_url
+        SELECT t.associate_id, t.client_id, t.task_date, t.post_type, t.post_type AS link_type, t.completed_count, c.name AS client_name, c.sheet_url AS sheet_url
         FROM webseo_tasks t JOIN web_clients c ON c.id = t.client_id
         WHERE t.task_date = ? AND t.completed_count > 0
         ORDER BY c.name, t.post_type

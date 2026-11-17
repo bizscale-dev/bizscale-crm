@@ -171,6 +171,7 @@ async function runMigrationsBody(raw) {
     // C and K, paired with the name columns D and L — see webClientsImport.js). Used
     // to fetch that site's sitemap for the EOD Report page-picker.
     "ALTER TABLE web_clients ADD COLUMN website TEXT",
+    "ALTER TABLE web_clients ADD COLUMN sheet_url TEXT",
     // Which specific page on the site an EOD report entry's work applies to —
     // selected from the site's sitemap, or typed manually if no sitemap is found.
     "ALTER TABLE eod_report_entries ADD COLUMN page_url TEXT",

@@ -167,7 +167,7 @@ export async function runWebClientsImport(sheetUrl) {
   // Upserts one client from the sheet: creates it if new, reactivates it if it was
   // previously removed, and assigns/updates its associate. Shared by both column
   // pairs below since they're otherwise identical.
-  async function upsertClient(clientName, associateName, rowLabel, siteUrl) {
+  async function upsertClient(clientName, associateName, rowLabel, siteUrl, clientSheetUrl) {
     seenClientNames.add(clientName);
     try {
       const existing = await db.prepare(`
@@ -203,6 +203,11 @@ export async function runWebClientsImport(sheetUrl) {
       // assignment below — always overwrite with whatever's currently in the column.
       if (siteUrl && clientId) {
         await db.prepare('UPDATE web_clients SET website = ? WHERE id = ?').run(siteUrl, clientId);
+      }
+
+      // The client's own Google Sheet (the "Sheet Urls" column); "N/A" and blanks are ignored.
+      if (clientId && /^https?:\/\//i.test(clientSheetUrl || '')) {
+        await db.prepare('UPDATE web_clients SET sheet_url = ? WHERE id = ?').run(clientSheetUrl, clientId);
       }
 
       if (associateName && clientId) {
@@ -258,6 +263,7 @@ export async function runWebClientsImport(sheetUrl) {
     site: find((h) => h.startsWith('site')),
     name: find((h) => h === 'name', (h) => h === 'client name', (h) => h === 'client'),
     assigned: find((h) => h.startsWith('assigned')),
+    sheetUrl: find((h) => h.includes('sheet') && (h.includes('url') || h.includes('link'))),
   };
   if (col.site === -1) col.site = 2;
   if (col.name === -1) col.name = 3;
@@ -269,7 +275,7 @@ export async function runWebClientsImport(sheetUrl) {
     if (!row || row.length < 2) continue;
     const clientName = (row[col.name] || '').trim();
     if (!clientName || clientName.startsWith('#')) continue; // blank spacer rows / formula errors
-    await upsertClient(clientName, (row[col.assigned] || '').trim(), `Row ${i + 1}`, (row[col.site] || '').trim());
+    await upsertClient(clientName, (row[col.assigned] || '').trim(), `Row ${i + 1}`, (row[col.site] || '').trim(), col.sheetUrl === -1 ? '' : (row[col.sheetUrl] || '').trim());
   }
 
   // Deactivate clients that used to be in this sheet but no longer are — keeps their
