@@ -12,15 +12,13 @@ import GroupedNav from '@/components/GroupedNav';
 
 const BRAND_COLOR = 'var(--primary)';
 
-const NAVY = '#0b2447';
-
 // navGroups (optional) switches the sidebar to the dark, grouped menu; navItems stay the flat list
 // (used for the "dashboard root" exact-match rule).
 export default function RoleLayoutShell({ navItems, navGroups, portalLabel, headerTitle, headerExtra, children }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const dark = !!navGroups;
-  const accent = dark ? '#ffffff' : BRAND_COLOR;
+  const accent = BRAND_COLOR;
 
   // The first nav item is always the role's dashboard root (e.g. "/writer") and needs
   // an exact match, or it would also light up for every nested route under it.
@@ -36,8 +34,8 @@ export default function RoleLayoutShell({ navItems, navGroups, portalLabel, head
     <div style={{ display: 'flex', height: '100dvh', overflow: 'hidden', backgroundColor: 'var(--background)' }}>
       <aside style={{
         width: sidebarOpen ? '260px' : '80px',
-        backgroundColor: dark ? NAVY : 'var(--card-bg)',
-        borderRight: dark ? 'none' : '1px solid var(--border)',
+        backgroundColor: 'var(--card-bg)',
+        borderRight: '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
         transition: 'width 0.3s ease',
@@ -45,7 +43,7 @@ export default function RoleLayoutShell({ navItems, navGroups, portalLabel, head
       }}>
         <div style={{
           padding: '1.5rem',
-          borderBottom: dark ? '1px solid rgba(255,255,255,0.12)' : '1px solid var(--border)',
+          borderBottom: '1px solid var(--border)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -116,7 +114,7 @@ export default function RoleLayoutShell({ navItems, navGroups, portalLabel, head
         {sidebarOpen && portalLabel && (
           <span style={{
             fontSize: '0.75rem',
-            color: dark ? '#94a3b8' : 'var(--text-muted)',
+            color: 'var(--text-muted)',
             paddingLeft: '2.75rem',
             paddingBottom: '0.5rem'
           }}>
@@ -256,12 +254,12 @@ export default function RoleLayoutShell({ navItems, navGroups, portalLabel, head
           `}</style>
         </nav>
 
-        <div style={{ padding: '1rem', borderTop: dark ? '1px solid rgba(255,255,255,0.12)' : '1px solid var(--border)' }}>
+        <div style={{ padding: '1rem', borderTop: '1px solid var(--border)' }}>
           <form action={logout}>
             <button type="submit" className="btn" style={{
               width: '100%',
               backgroundColor: 'transparent',
-              border: `1px solid ${dark ? 'rgba(255,255,255,0.5)' : BRAND_COLOR}`,
+              border: `1px solid ${BRAND_COLOR}`,
               color: accent,
               fontWeight: '500',
               transition: 'all 0.2s',
@@ -270,7 +268,7 @@ export default function RoleLayoutShell({ navItems, navGroups, portalLabel, head
               fontSize: sidebarOpen ? '1rem' : '0.75rem'
             }}
             onMouseEnter={(e) => {
-              e.target.style.backgroundColor = dark ? '#2563eb' : BRAND_COLOR;
+              e.target.style.backgroundColor = BRAND_COLOR;
               e.target.style.color = 'white';
             }}
             onMouseLeave={(e) => {

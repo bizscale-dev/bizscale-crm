@@ -28,8 +28,8 @@ export function NavIcon({ name, size = 18 }) {
   );
 }
 
-const ACTIVE_BG = '#2563eb';
-const MUTED = '#cbd5e1';
+const ACTIVE_BG = 'var(--primary)';
+const MUTED = 'var(--text-muted)';
 
 // Sidebar menu split into collapsible groups, each with a header icon and small icons per item.
 // groups: [{ label, icon, items: [{ href, label, icon, badgeCount }] }]
@@ -49,7 +49,7 @@ export default function GroupedNav({ groups, isActive, sidebarOpen }) {
                 type="button"
                 onClick={() => toggle(g.label)}
                 aria-expanded={open}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.7rem 0.6rem', background: 'none', border: 'none', color: '#fff', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer', textAlign: 'left' }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.7rem 0.6rem', background: 'none', border: 'none', color: 'var(--foreground)', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer', textAlign: 'left' }}
               >
                 <NavIcon name={g.icon} />
                 <span style={{ flex: 1 }}>{g.label}</span>
@@ -59,7 +59,7 @@ export default function GroupedNav({ groups, isActive, sidebarOpen }) {
                 </svg>
               </button>
             ) : (
-              <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.12)', margin: '0.6rem 0.4rem' }} />
+              <div style={{ height: '1px', backgroundColor: 'var(--border)', margin: '0.6rem 0.4rem' }} />
             )}
 
             {(open || !sidebarOpen) && (
@@ -99,7 +99,7 @@ export default function GroupedNav({ groups, isActive, sidebarOpen }) {
                             height: '11px',
                             borderRadius: '50%',
                             backgroundColor: '#22c55e',
-                            border: '2px solid #0b2447',
+                            border: '2px solid var(--card-bg)',
                             boxShadow: '0 0 0 0 rgba(34, 197, 94, 0.7)',
                           }} />
                         )}
@@ -113,7 +113,7 @@ export default function GroupedNav({ groups, isActive, sidebarOpen }) {
         );
       })}
       <style>{`
-        .grouped-nav-link:hover { background-color: rgba(255,255,255,0.08) !important; color: #fff !important; }
+        .grouped-nav-link:hover { background-color: rgba(22, 178, 147, 0.1) !important; color: var(--primary) !important; }
       `}</style>
     </div>
   );
