@@ -406,8 +406,19 @@ export async function generateSEOTasks(campaignId, pinThroughDate = null) {
         const pastDates = new Set(pastRows.filter(r => r.client_id === client.id).map(r => r.task_date));
         const startWeek = client.funnel_month1_start_week || 1;
         const coveredUpTo = startWeek + pastDates.size; // first week NOT yet covered
+        // The client's CURRENT week (2+) is due by the last (5th) working day of that week, counted from the day
+        // the week started — inside the client's own window, not parked on the campaign's last working day
+        // (that left a 2-week client with week 1 on the 5th and week 2 on the 27th).
+        const weekStarted = client.funnel_month1_week_started_on;
+        const currentWeekDue = weekStarted
+          ? sortedWorkingDaysForClamp.filter(d => d.dateStr >= weekStarted)[4]
+          : null;
+        const currentWeek = client.funnel_month1_current_week || startWeek;
         const m1 = occurrences
           .filter(o => o.week >= coveredUpTo)
+          .map(o => (currentWeekDue && o.week === currentWeek && currentWeek > 1
+            ? { ...o, dayNumber: currentWeekDue.dayNumber, dateStr: currentWeekDue.dateStr }
+            : o))
           .map(o => o.dateStr <= pinBoundary
             ? { ...o, dayNumber: firstFutureWorkingDay.dayNumber, dateStr: firstFutureWorkingDay.dateStr }
             : o);
