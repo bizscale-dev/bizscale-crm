@@ -13,6 +13,7 @@ const ROLE_LABELS = {
   senior_seo_associate: 'Senior SEO Associate',
   web_seo_manager: 'Web SEO Manager',
   writers_manager: 'Writers Manager',
+  graphic_designer: 'Graphics Designer',
 };
 
 const STATUS_STYLES = {
@@ -64,7 +65,7 @@ export default function ManagerTasksView({ rows, initialReportCounts }) {
       <div>
         <h1 style={{ fontSize: '1.5rem', margin: '0 0 0.35rem' }}>Managers Tasks</h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.875rem' }}>
-          Every task admin has assigned to managers.
+          Every task assigned to managers and Graphics Designers.
         </p>
       </div>
 
@@ -145,7 +146,7 @@ function TaskCard({ row, flagCount, onReported }) {
             </span>
           </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            Assigned by Admin · Due {row.due_date} {row.template_id ? '(12 AM)' : row.due_time}
+            Assigned by {row.assigned_by_name ? (row.assigned_by_role === 'admin' ? 'Admin' : row.assigned_by_name) : 'Admin'} · Due {row.due_date} {row.template_id ? '(12 AM)' : row.due_time}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -155,13 +156,15 @@ function TaskCard({ row, flagCount, onReported }) {
             </span>
           )}
           <span style={{ fontSize: '0.8rem', fontWeight: '600', color: status.color, whiteSpace: 'nowrap' }}>{status.text}</span>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setReporting(true); setError(null); }}
-            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.4rem', padding: '0.2rem 0.55rem', fontSize: '0.7rem', fontWeight: '600', color: 'var(--foreground)', cursor: 'pointer' }}
-          >
-            Report
-          </button>
+          {!row.from_associate && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setReporting(true); setError(null); }}
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.4rem', padding: '0.2rem 0.55rem', fontSize: '0.7rem', fontWeight: '600', color: 'var(--foreground)', cursor: 'pointer' }}
+            >
+              Report
+            </button>
+          )}
         </div>
       </div>
 
