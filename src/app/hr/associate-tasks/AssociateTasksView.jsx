@@ -132,9 +132,9 @@ function TaskCard({ row }) {
             {row.is_late && row.late_reason && <><br />Late reason: {row.late_reason}</>}
           </div>
           <div style={{ fontSize: '0.85rem', marginBottom: '0.75rem', whiteSpace: 'pre-wrap' }}>{row.submission_description}</div>
-          {row.proof_image_base64 && (
+          {row.has_proof && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={row.proof_image_base64} alt="Proof" style={{ maxWidth: '100%', maxHeight: '350px', borderRadius: '0.5rem', border: '1px solid var(--border)' }} />
+            <img src={`/api/task-proof/${row.assignee_id}`} alt="Proof" loading="lazy" style={{ maxWidth: '100%', maxHeight: '350px', borderRadius: '0.5rem', border: '1px solid var(--border)' }} />
           )}
         </div>
       )}

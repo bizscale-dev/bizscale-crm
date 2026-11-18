@@ -26,7 +26,7 @@ export default async function ManagerTasksPage() {
   const rows = await db.prepare(`
     SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency, t.is_default, t.checklist,
       a.checklist_done, a.id as assignee_row_id, a.user_id, u.name as manager_name, u.role as manager_role,
-      a.submitted_at, a.submission_description, a.proof_image_base64,
+      a.submitted_at, a.submission_description, (a.proof_image_base64 IS NOT NULL AND a.proof_image_base64 != '') AS has_proof,
       a.is_late, a.late_reason, a.approval_status
     FROM manager_tasks t
     JOIN manager_task_assignees a ON a.task_id = t.id
@@ -60,7 +60,7 @@ export default async function ManagerTasksPage() {
       role: row.manager_role,
       submitted_at: row.submitted_at,
       submission_description: row.submission_description,
-      proof_image_base64: row.proof_image_base64,
+      proof_url: row.has_proof ? `/api/manager-task-proof/${row.assignee_row_id}` : null,
       is_late: row.is_late,
       late_reason: row.late_reason,
       approval_status: row.approval_status,
@@ -83,7 +83,7 @@ export default async function ManagerTasksPage() {
     SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency,
       t.created_by as manager_id,
       a.id as assignee_row_id, a.user_id, u.name as associate_name, u.role as associate_role,
-      a.submitted_at, a.submission_description, a.proof_image_base64,
+      a.submitted_at, a.submission_description, (a.proof_image_base64 IS NOT NULL AND a.proof_image_base64 != '') AS has_proof,
       a.is_late, a.late_reason, a.approval_status
     FROM associate_tasks t
     JOIN associate_task_assignees a ON a.task_id = t.id
@@ -113,7 +113,7 @@ export default async function ManagerTasksPage() {
       role: row.associate_role,
       submitted_at: row.submitted_at,
       submission_description: row.submission_description,
-      proof_image_base64: row.proof_image_base64,
+      proof_url: row.has_proof ? `/api/task-proof/${row.assignee_row_id}` : null,
       is_late: row.is_late,
       late_reason: row.late_reason,
       approval_status: row.approval_status,

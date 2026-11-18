@@ -269,8 +269,8 @@ function AssigneeStatus({ assignee }) {
             </div>
           )}
           <div style={{ fontSize: '0.85rem', marginBottom: '0.6rem', whiteSpace: 'pre-wrap' }}>{assignee.submission_description}</div>
-          {assignee.proof_image_base64 && (
-            <img src={assignee.proof_image_base64} alt="Proof"
+          {assignee.proof_url && (
+            <img src={assignee.proof_url} alt="Proof" loading="lazy"
               style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: pendingReview ? '0.7rem' : 0 }} />
           )}
           {pendingReview && (

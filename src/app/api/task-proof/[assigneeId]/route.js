@@ -23,7 +23,7 @@ export async function GET(_request, { params }) {
   if (!row?.proof_image_base64) return new Response('Not found', { status: 404 });
 
   const cfg = CHECK_TARGETS[session.role];
-  const allowed = session.role === 'admin' || row.user_id === session.userId || row.created_by === session.userId
+  const allowed = ['admin', 'qa', 'hr'].includes(session.role) || row.user_id === session.userId || row.created_by === session.userId
     || (cfg && cfg.targetRole === row.user_role);
   if (!allowed) return new Response('Forbidden', { status: 403 });
 
