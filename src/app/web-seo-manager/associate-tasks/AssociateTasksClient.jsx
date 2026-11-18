@@ -134,7 +134,7 @@ function AssigneeStatus({ assignee }) {
               {assignee.late_reason && <><br />Reason: {assignee.late_reason}</>}
             </div>
           )}
-          <div style={{ fontSize: '0.85rem', marginBottom: '0.75rem', whiteSpace: 'pre-wrap' }}>
+          <div style={{ fontSize: '0.85rem', marginBottom: '0.75rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
             {assignee.submission_description}
           </div>
           {assignee.proof_image_base64 && (
@@ -290,7 +290,7 @@ function DefaultTasksSection({ associates, templates }) {
           {templates.map((t) => (
             <div key={t.id} style={{ border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', opacity: t.is_active ? 1 : 0.55 }}>
               <div>
-                <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}><TaskBadges urgency={t.urgency} isDefault={false} />{t.task_text}</div>
+                <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', minWidth: 0 }}><TaskBadges urgency={t.urgency} isDefault={false} />{t.task_text}</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                   Every {formatTemplateSchedule(t.weekdays, t.duration_days)} · {t.assignee_names || 'no associates'}{t.is_active ? '' : ' · paused'}
                 </div>
@@ -455,7 +455,7 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
             {tasks.map((task) => (
               <div key={task.id} style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', gap: '1rem' }}>
-                  <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
+                  <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', minWidth: 0 }}><TaskBadges urgency={task.urgency} isDefault={!!(task.template_id || task.is_default)} />{task.task_text}</div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                     Due {task.due_date} {task.template_id ? '(12 AM)' : task.due_time}
                   </div>
