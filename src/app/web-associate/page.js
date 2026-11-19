@@ -22,7 +22,7 @@ export default async function WebAssociateDashboard() {
       SELECT wt.*, c.business_name as client_name
       FROM webseo_tasks wt
       JOIN web_clients c ON c.id = wt.client_id
-      WHERE wt.associate_id = ? AND wt.webseo_campaign_id = ? AND wt.task_date = ?
+      WHERE wt.associate_id = ? AND wt.webseo_campaign_id = ? AND wt.task_date = ? AND c.is_active = 1
       ORDER BY c.business_name, wt.post_type
     `).all(userId, campaign.id, today);
 
@@ -32,7 +32,7 @@ export default async function WebAssociateDashboard() {
       SELECT wt.*, c.business_name as client_name
       FROM webseo_tasks wt
       JOIN web_clients c ON c.id = wt.client_id
-      WHERE wt.associate_id = ? AND wt.webseo_campaign_id = ?
+      WHERE wt.associate_id = ? AND wt.webseo_campaign_id = ? AND c.is_active = 1
         AND wt.task_date < ? AND wt.completed_count < wt.target_count
       ORDER BY wt.task_date DESC, c.business_name, wt.post_type
     `).all(userId, campaign.id, today);
@@ -41,9 +41,9 @@ export default async function WebAssociateDashboard() {
     await attachSyncedWebLinks(db, pendingTasks);
 
     overallStats = await db.prepare(`
-      SELECT SUM(target_count) as target, SUM(completed_count) as completed
-      FROM webseo_tasks
-      WHERE associate_id = ? AND webseo_campaign_id = ?
+      SELECT SUM(wt.target_count) as target, SUM(wt.completed_count) as completed
+      FROM webseo_tasks wt JOIN web_clients c ON c.id = wt.client_id
+      WHERE wt.associate_id = ? AND wt.webseo_campaign_id = ? AND c.is_active = 1
     `).get(userId, campaign.id);
   }
 
