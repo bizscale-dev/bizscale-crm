@@ -14,7 +14,14 @@ import { createNotificationsForUsers, getTasksLinkForRole } from './notification
  * at all). Only ever spawns for TODAY — a day nobody loaded the app is not
  * backfilled.
  */
+// Every associate page load calls this, and a spawn only ever needs to happen once a day, so a load
+// within a minute of the last check skips it (each check is several database round trips).
+let lastCheckAt = 0;
+const CHECK_EVERY_MS = 60_000;
+
 export async function ensureRecurringAssociateTasks() {
+  if (Date.now() - lastCheckAt < CHECK_EVERY_MS) return 0;
+  lastCheckAt = Date.now();
   const db = await getDb();
   const today = new Date().toISOString().split('T')[0];
   const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
@@ -80,6 +87,11 @@ async function spawnMonthlyClientTask(db, t, today) {
   const dueDay = t.month_day || 1;
   if (day < (t.spawn_day || 1) || day > dueDay) return false;
   const dueDateStr = `${today.slice(0, 8)}${String(dueDay).padStart(2, '0')}`;
+
+  // Already spawned this month: stop before the per-associate client lookups below, which would
+  // otherwise run on every page load for the whole spawn window.
+  const existing = await db.prepare('SELECT 1 AS x FROM associate_tasks WHERE template_id = ? AND due_date = ?').get(t.id, dueDateStr);
+  if (existing) return false;
 
   const campaign = await db.prepare(`
     SELECT COALESCE(
