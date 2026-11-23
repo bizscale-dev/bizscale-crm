@@ -210,9 +210,10 @@ function TaskCard({ task, twelveHour }) {
           <div style={{ fontSize: '0.85rem', marginBottom: '0.75rem', whiteSpace: 'pre-wrap' }}>
             {task.submission_description}
           </div>
-          {task.proof_image_base64 && (
+          {task.proof_url && (
             <img
-              src={task.proof_image_base64}
+              src={task.proof_url}
+              loading="lazy"
               alt="Proof"
               style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)' }}
             />

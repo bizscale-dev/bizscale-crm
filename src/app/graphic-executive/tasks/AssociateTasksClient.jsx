@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import {
   createAssociateTask, approveAssociateTaskSubmission, rejectAssociateTaskSubmission,
   createRecurringAssociateTemplate, setRecurringAssociateTemplateActive, deleteRecurringAssociateTemplate,
+  updateAssociateTask, deleteAssociateTask,
 } from './actions';
+import TaskOwnerControls from '@/components/TaskOwnerControls';
 import TaskBadges from '@/components/TaskBadges';
 import UrgencySelect from '@/components/UrgencySelect';
 import ImageAttachField from '@/components/ImageAttachField';
@@ -313,7 +315,7 @@ function DefaultTasksSection({ associates, templates }) {
   );
 }
 
-export default function AssociateTasksClient({ associates, tasks, templates = [] }) {
+export default function AssociateTasksClient({ associates, tasks, templates = [], meId }) {
   const router = useRouter();
   const [taskText, setTaskText] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -465,6 +467,9 @@ export default function AssociateTasksClient({ associates, tasks, templates = []
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={`/api/task-attachment/${task.id}`} alt="Task attachment" loading="lazy" style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block' }} />
                   </a>
+                )}
+                {meId && task.created_by === meId && (
+                  <TaskOwnerControls task={task} onUpdate={updateAssociateTask} onDelete={deleteAssociateTask} />
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem' }}>
                   {task.assignees.map((a) => (

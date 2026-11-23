@@ -1,4 +1,5 @@
 import { getDb } from '@/lib/db';
+import { verifySession } from '@/lib/session';
 import AssociateTasksClient from './AssociateTasksClient';
 import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
 
@@ -10,6 +11,7 @@ const ROLE_PLACEHOLDERS = ASSOCIATE_ROLES.map(() => '?').join(',');
 const ROLE_TAGS = { web_developer_seo: 'Web Developer' };
 
 export default async function WebSeoManagerAssociateTasksPage() {
+  const session = await verifySession();
   await ensureRecurringAssociateTasks();
   const db = await getDb();
 
@@ -18,7 +20,7 @@ export default async function WebSeoManagerAssociateTasksPage() {
   `).all(...ASSOCIATE_ROLES);
 
   const rows = await db.prepare(`
-    SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency,
+    SELECT t.id as task_id, t.created_by, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency,
       (t.attachment_base64 IS NOT NULL AND t.attachment_base64 != '') AS has_attachment,
       a.id as assignee_row_id, a.user_id, u.name as associate_name,
       a.submitted_at, a.submission_description, a.proof_image_base64,
@@ -39,6 +41,7 @@ export default async function WebSeoManagerAssociateTasksPage() {
         due_date: row.due_date,
         due_time: row.due_time,
         created_at: row.created_at,
+        created_by: row.created_by,
         template_id: row.template_id,
         urgency: row.urgency,
         has_attachment: !!row.has_attachment,
@@ -72,6 +75,7 @@ export default async function WebSeoManagerAssociateTasksPage() {
 
   return (
     <AssociateTasksClient
+      meId={session?.userId}
       templates={templateRows}
       associates={associates.map((a) => ({ id: a.id, name: ROLE_TAGS[a.role] ? `${a.name} (${ROLE_TAGS[a.role]})` : a.name }))}
       tasks={[...byTask.values()]}

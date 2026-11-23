@@ -13,7 +13,7 @@ export default async function TasksPage() {
 
   const tasks = await db.prepare(`
     SELECT t.id as task_id, t.task_text, t.due_date, t.due_time,
-      a.submitted_at, a.submission_description, a.proof_image_base64,
+      a.id AS assignee_row_id, a.submitted_at, a.submission_description, (a.proof_image_base64 IS NOT NULL AND a.proof_image_base64 != '') AS has_proof,
       a.is_late, a.late_reason, a.approval_status, t.template_id, t.urgency, (SELECT role FROM users WHERE id = t.created_by) = 'qa' AS by_qa,  (t.attachment_base64 IS NOT NULL AND t.attachment_base64 != '') AS has_attachment,
       m.name AS assigned_by
     FROM associate_task_assignees a
@@ -28,5 +28,5 @@ export default async function TasksPage() {
     UPDATE associate_task_assignees SET review_seen = 1 WHERE user_id = ? AND review_seen = 0
   `).run(session.userId);
 
-  return <ManagerTasksClient tasks={tasks} urgencyFilter twelveHour />;
+  return <ManagerTasksClient tasks={tasks.map(({ has_proof, ...t }) => ({ ...t, proof_url: has_proof ? `/api/task-proof/${t.assignee_row_id}` : null }))} urgencyFilter twelveHour />;
 }

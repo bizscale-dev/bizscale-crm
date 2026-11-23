@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
 import { createNotificationsForUsers, getTasksLinkForRole } from '@/lib/notifications';
 import { parseUrgency } from '@/lib/taskUrgency';
+import { updateOwnAssociateTask, deleteOwnAssociateTask } from '@/lib/associateTaskEdit';
 
 const ASSOCIATE_ROLE = 'seo_associate'; // only used for the notification link — seniors share it
 const BASE_PATH = '/seo-manager/associate-tasks';
@@ -228,4 +229,26 @@ export async function approveAssociateTaskSubmission(assigneeId) {
 
 export async function rejectAssociateTaskSubmission(assigneeId) {
   return reviewTaskSubmission(assigneeId, 'rejected');
+}
+
+/** Edits a task this person assigned: text, due date / time, urgency. The assignees are notified. */
+export async function updateAssociateTask(taskId, fields) {
+  const { session, error } = await requireSeoManager();
+  if (error) return { error };
+  const db = await getDb();
+  const result = await updateOwnAssociateTask(db, session, taskId, fields);
+  if (result.error) return result;
+  revalidatePath(BASE_PATH);
+  return { success: true };
+}
+
+/** Deletes a task this person assigned, for every assignee. */
+export async function deleteAssociateTask(taskId) {
+  const { session, error } = await requireSeoManager();
+  if (error) return { error };
+  const db = await getDb();
+  const result = await deleteOwnAssociateTask(db, session, taskId);
+  if (result.error) return result;
+  revalidatePath(BASE_PATH);
+  return { success: true };
 }
