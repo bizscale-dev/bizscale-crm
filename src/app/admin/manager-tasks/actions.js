@@ -333,6 +333,10 @@ export async function extendTaskDeadline(kind, taskId, newDate, newTime) {
  * to 1 the next time they actually open their Tasks page.
  */
 async function reviewTaskSubmission(assigneeId, decision) {
+  // decision: 'on_time' (approved, counts as on time: is_late goes to 0), 'late' (approved, stays late)
+  // or 'rejected' (not approved). The column only allows pending/approved/rejected, so "approved + not
+  // late" is what marks a late submission the admin shifted to on time. Admin can change their mind
+  // later: any late submission, or one already shifted to on time, can be re-decided.
   const { session, error: authError } = await requireAdmin();
   if (authError) return { error: authError };
 
@@ -344,14 +348,16 @@ async function reviewTaskSubmission(assigneeId, decision) {
   try {
     const db = await getDb();
 
+    const status = decision === 'rejected' ? 'rejected' : 'approved';
+    const isLate = decision === 'on_time' ? 0 : 1;
     const result = await db.prepare(`
       UPDATE manager_task_assignees
-      SET approval_status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, review_seen = 0
-      WHERE id = ? AND is_late = 1 AND approval_status = 'pending'
-    `).run(decision, session.userId, id);
+      SET approval_status = ?, is_late = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, review_seen = 0
+      WHERE id = ? AND submitted_at IS NOT NULL AND (is_late = 1 OR approval_status = 'approved')
+    `).run(status, isLate, session.userId, id);
 
     if (!result.changes) {
-      return { error: 'This submission is no longer pending review' };
+      return { error: 'This submission can not be reviewed (it was on time, or is not submitted)' };
     }
 
     revalidatePath('/admin/manager-tasks');
@@ -363,8 +369,14 @@ async function reviewTaskSubmission(assigneeId, decision) {
   }
 }
 
+// Approved - on time: late submission the admin does not count as late.
+export async function approveTaskOnTime(assigneeId) {
+  return reviewTaskSubmission(assigneeId, 'on_time');
+}
+
+// Approved - late: accepted, but stays late.
 export async function approveTaskSubmission(assigneeId) {
-  return reviewTaskSubmission(assigneeId, 'approved');
+  return reviewTaskSubmission(assigneeId, 'late');
 }
 
 export async function rejectTaskSubmission(assigneeId) {

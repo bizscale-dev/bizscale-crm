@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import TaskBadges from '@/components/TaskBadges';
 import { TASK_URGENCIES } from '@/lib/taskUrgency';
 import {
-  createManagerTask, approveTaskSubmission, rejectTaskSubmission,
+  createManagerTask, approveTaskSubmission, approveTaskOnTime, rejectTaskSubmission,
   createRecurringTemplate, setRecurringTemplateActive, deleteRecurringTemplate, extendTaskDeadline,
   saveOnboardingChecklist, assignWebOnboarding,
 } from './actions';
@@ -208,8 +208,8 @@ function ManagerPicker({ managers, roleLabels, selectedIds, setSelectedIds }) {
 
 const REVIEW_LABELS = {
   pending: { text: 'Late — needs your review', color: '#f59e0b' },
-  approved: { text: 'Late — approved', color: 'var(--success)' },
-  rejected: { text: 'Late — rejected', color: 'var(--danger)' },
+  approved: { text: 'Approved — late', color: '#0ea5e9' },
+  rejected: { text: 'Not approved', color: 'var(--danger)' },
 };
 
 function AssigneeStatus({ assignee }) {
@@ -219,12 +219,16 @@ function AssigneeStatus({ assignee }) {
   const [reviewError, setReviewError] = useState(null);
   const submitted = !!assignee.submitted_at;
   const isLate = !!assignee.is_late;
+  // A late submission the admin shifted to on time: not late any more, but still reviewable.
+  const shifted = !isLate && assignee.approval_status === 'approved';
   const pendingReview = isLate && assignee.approval_status === 'pending';
+  const reviewable = submitted && (isLate || shifted);
+  const current = shifted ? 'on_time' : isLate && assignee.approval_status === 'approved' ? 'late' : isLate && assignee.approval_status === 'rejected' ? 'rejected' : null;
 
   const handleReview = async (decision) => {
     setReviewError(null);
     setReviewing(true);
-    const action = decision === 'approved' ? approveTaskSubmission : rejectTaskSubmission;
+    const action = decision === 'on_time' ? approveTaskOnTime : decision === 'late' ? approveTaskSubmission : rejectTaskSubmission;
     const result = await action(assignee.id);
     setReviewing(false);
     if (result?.error) { setReviewError(result.error); return; }
@@ -232,8 +236,10 @@ function AssigneeStatus({ assignee }) {
   };
 
   const statusColor = !submitted ? 'var(--text-muted)'
+    : shifted ? 'var(--success)'
     : isLate ? (REVIEW_LABELS[assignee.approval_status]?.color || '#f59e0b') : 'var(--success)';
   const statusText = !submitted ? 'Pending'
+    : shifted ? 'Approved — on time'
     : isLate ? (REVIEW_LABELS[assignee.approval_status]?.text || REVIEW_LABELS.pending.text)
       : `Submitted ${new Date(assignee.submitted_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
 
@@ -262,25 +268,34 @@ function AssigneeStatus({ assignee }) {
 
       {submitted && expanded && (
         <div style={{ marginTop: '0.7rem', paddingTop: '0.7rem', borderTop: '1px solid var(--border)' }}>
-          {isLate && (
+          {(isLate || shifted) && (
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.6rem' }}>
-              Submitted late: {formatPkt(assignee.submitted_at)}
+              {shifted ? 'Submitted after the due time (counted as on time)' : 'Submitted late'}: {formatPkt(assignee.submitted_at)}
               {assignee.late_reason && <><br />Reason: {assignee.late_reason}</>}
             </div>
           )}
           <div style={{ fontSize: '0.85rem', marginBottom: '0.6rem', whiteSpace: 'pre-wrap' }}>{assignee.submission_description}</div>
           {assignee.proof_url && (
             <img src={assignee.proof_url} alt="Proof" loading="lazy"
-              style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: pendingReview ? '0.7rem' : 0 }} />
+              style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: reviewable ? '0.7rem' : 0 }} />
           )}
-          {pendingReview && (
+          {reviewable && (
             <div onClick={(e) => e.stopPropagation()}>
               {reviewError && <div style={{ fontSize: '0.8rem', color: 'var(--danger)', marginBottom: '0.5rem' }}>{reviewError}</div>}
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="button" disabled={reviewing} onClick={() => handleReview('approved')}
-                  style={{ ...smallButtonStyle, backgroundColor: 'var(--success)', color: 'white', opacity: reviewing ? 0.6 : 1 }}>Approve</button>
-                <button type="button" disabled={reviewing} onClick={() => handleReview('rejected')}
-                  style={{ ...smallButtonStyle, backgroundColor: 'var(--danger)', color: 'white', opacity: reviewing ? 0.6 : 1 }}>Reject</button>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                {pendingReview ? 'This submission was late. Your decision:' : 'Your decision (you can change it):'}
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {[
+                  ['on_time', 'Approved - on time', 'var(--success)'],
+                  ['late', 'Approved - late', '#0ea5e9'],
+                  ['rejected', 'Not Approved', 'var(--danger)'],
+                ].map(([value, label, color]) => (
+                  <button key={value} type="button" disabled={reviewing || current === value} onClick={() => handleReview(value)}
+                    style={{ ...smallButtonStyle, backgroundColor: color, color: 'white', opacity: reviewing ? 0.6 : current === value ? 0.55 : 1, cursor: current === value ? 'default' : 'pointer', outline: current === value ? '2px solid var(--foreground)' : 'none' }}>
+                    {current === value ? `✓ ${label}` : label}
+                  </button>
+                ))}
               </div>
             </div>
           )}
