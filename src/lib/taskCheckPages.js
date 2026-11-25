@@ -34,7 +34,7 @@ async function loadQaReports(db, userId) {
   const qaRows = await db.prepare(`
     SELECT q.id, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note,
       q.source, q.title, q.location, q.issue, q.department, q.severity, (q.screenshot_base64 IS NOT NULL AND q.screenshot_base64 != '') AS has_screenshot, q.client_names,
-      q.status, q.created_at, q.resolve_days, q.resolved_at, q.resolution_note, q.rejection_count,
+      q.status, q.created_at, q.resolve_days, q.resolved_at, q.resolution_note, q.rejection_count, CASE WHEN q.fix_images IS NULL OR q.fix_images = '' THEN 0 ELSE json_array_length(q.fix_images) END AS fix_image_count,
       f.name AS filed_by
     FROM qa_reports q JOIN users f ON f.id = q.qa_user_id
     WHERE q.manager_id = ?
@@ -53,7 +53,7 @@ export async function renderCheckPage() {
     SELECT t.id AS task_id, t.task_text, t.due_date, t.due_time, t.template_id, t.urgency,
       m.name AS assigned_by,
       a.id AS assignee_id, a.user_id, u.name AS assignee_name,
-      a.submitted_at, a.submission_description, (a.proof_image_base64 IS NOT NULL AND a.proof_image_base64 != '') AS has_proof,
+      a.submitted_at, a.submission_description, (a.proof_image_base64 IS NOT NULL AND a.proof_image_base64 != '') AS has_proof, CASE WHEN a.extra_proof_images IS NULL OR a.extra_proof_images = '' THEN 0 ELSE json_array_length(a.extra_proof_images) END AS extra_count,
       a.is_late, a.late_reason,
       c.status AS check_status,
       (SELECT COUNT(*) FROM task_check_reports r WHERE r.task_id = t.id AND r.user_id = a.user_id) AS report_count
@@ -88,7 +88,7 @@ export async function renderExecReportsPage() {
   const db = await getDb();
   const people = await db.prepare('SELECT id, name FROM users WHERE role = ? AND is_active = 1 ORDER BY name').all(cfg.targetRole);
   const reports = await db.prepare(`
-    SELECT r.id, r.task_id, r.user_id, r.created_by, r.task_text, r.comment, r.status, r.resolution_note, r.resolved_at, r.confirmed_at, r.rejection_count, r.created_at, r.link, r.edited_at, (r.image_base64 IS NOT NULL AND r.image_base64 != '') AS has_image, u.name AS assignee_name, e.name AS reporter_name, e.role AS reporter_role
+    SELECT r.id, r.task_id, r.user_id, r.created_by, r.task_text, r.comment, r.status, r.resolution_note, CASE WHEN r.resolution_images IS NULL OR r.resolution_images = '' THEN 0 ELSE json_array_length(r.resolution_images) END AS fix_image_count, r.resolved_at, r.confirmed_at, r.rejection_count, r.created_at, r.link, r.edited_at, (r.image_base64 IS NOT NULL AND r.image_base64 != '') AS has_image, u.name AS assignee_name, e.name AS reporter_name, e.role AS reporter_role
     FROM task_check_reports r
     JOIN users u ON u.id = r.user_id AND u.role = ?
     LEFT JOIN users e ON e.id = r.created_by
@@ -106,7 +106,7 @@ export async function renderExecReportsPage() {
       {qaReports.length > 0 && (
         <>
           <Heading title="QA Reports">Issues QA flagged on you. Fix them and submit the fix — QA confirms it.</Heading>
-          <ManagerQaReports reports={qaReports} resolveAction={resolveQaReport} resolveDays={QA_RESOLVE_DAYS} />
+          <ManagerQaReports reports={qaReports} resolveAction={resolveQaReport} resolveDays={QA_RESOLVE_DAYS} allowImages />
         </>
       )}
     </div>
@@ -141,7 +141,7 @@ export async function renderMyReportsPage() {
   if (!session || !CHECKED_ROLES.includes(session.role)) redirect('/');
   const db = await getDb();
   const reports = await db.prepare(`
-    SELECT r.id, r.task_id, r.user_id, r.created_by, r.task_text, r.comment, r.status, r.resolution_note, r.resolved_at, r.confirmed_at, r.rejection_count, r.created_at, r.link, r.edited_at, (r.image_base64 IS NOT NULL AND r.image_base64 != '') AS has_image, e.name AS reporter_name, e.role AS reporter_role FROM task_check_reports r
+    SELECT r.id, r.task_id, r.user_id, r.created_by, r.task_text, r.comment, r.status, r.resolution_note, CASE WHEN r.resolution_images IS NULL OR r.resolution_images = '' THEN 0 ELSE json_array_length(r.resolution_images) END AS fix_image_count, r.resolved_at, r.confirmed_at, r.rejection_count, r.created_at, r.link, r.edited_at, (r.image_base64 IS NOT NULL AND r.image_base64 != '') AS has_image, e.name AS reporter_name, e.role AS reporter_role FROM task_check_reports r
     LEFT JOIN users e ON e.id = r.created_by
     WHERE r.user_id = ?
     ORDER BY (r.status = 'open') DESC, r.created_at DESC, r.id DESC
@@ -158,7 +158,7 @@ export async function renderMyReportsPage() {
       {qaReports.length > 0 && (
         <>
           <Heading title="QA Reports">Issues QA flagged on your work. Fix them and submit the fix — QA confirms it.</Heading>
-          <ManagerQaReports reports={qaReports} resolveAction={resolveQaReport} resolveDays={QA_RESOLVE_DAYS} />
+          <ManagerQaReports reports={qaReports} resolveAction={resolveQaReport} resolveDays={QA_RESOLVE_DAYS} allowImages />
         </>
       )}
     </div>

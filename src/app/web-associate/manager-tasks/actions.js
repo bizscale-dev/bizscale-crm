@@ -5,11 +5,7 @@ import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
 import { ensureRecurringAssociateTasks } from '@/lib/recurringAssociateTasks';
 import { applyClientCheck } from '@/lib/clientCheckTask';
-
-// ~2MB of raw image bytes, inflated by base64's ~1.37x overhead — matches the
-// client-side cap in ManagerTasksClient.jsx. Re-validated here since
-// client-side validation alone isn't trustworthy.
-const MAX_BASE64_LENGTH = 2 * 1024 * 1024 * 1.37;
+import { validateImages } from '@/lib/multiImages';
 
 // A Web Developer - SEO receives tasks from the Web SEO managers exactly like a Web SEO
 // associate does, so both roles share these actions.
@@ -64,15 +60,11 @@ export async function submitAssociateTaskProof(taskId, description, proofImageBa
   if (!cleanedDescription) {
     return { error: 'Description is required' };
   }
-  const hasImage = !!proofImageBase64;
-  if (hasImage) {
-    if (typeof proofImageBase64 !== 'string' || !proofImageBase64.startsWith('data:image/')) {
-      return { error: 'Proof image looks invalid — try re-attaching it' };
-    }
-    if (proofImageBase64.length > MAX_BASE64_LENGTH) {
-      return { error: 'Proof image is too large (max 2MB)' };
-    }
-  }
+  // proofImageBase64 is one picture or a list of them (up to 6). The first goes in proof_image_base64 (what
+  // every viewer already reads), the rest in extra_proof_images.
+  const checked = validateImages(proofImageBase64);
+  if (checked.error) return { error: checked.error };
+  const [firstImage = null, ...otherImages] = checked.images;
 
   try {
     const db = await getDb();
@@ -97,11 +89,12 @@ export async function submitAssociateTaskProof(taskId, description, proofImageBa
     await db.prepare(`
       UPDATE associate_task_assignees
       SET submission_description = ?, proof_image_base64 = ?, submitted_at = CURRENT_TIMESTAMP,
-        is_late = ?, late_reason = ?, approval_status = ?
+        is_late = ?, late_reason = ?, approval_status = ?, extra_proof_images = ?
       WHERE task_id = ? AND user_id = ?
     `).run(
-      cleanedDescription, hasImage ? proofImageBase64 : null, isLate ? 1 : 0,
+      cleanedDescription, firstImage, isLate ? 1 : 0,
       isLate ? cleanedLateReason : null, isLate ? 'pending' : null,
+      otherImages.length ? JSON.stringify(otherImages) : null,
       id, session.userId
     );
 

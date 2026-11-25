@@ -275,10 +275,10 @@ function AssigneeStatus({ assignee }) {
             </div>
           )}
           <div style={{ fontSize: '0.85rem', marginBottom: '0.6rem', whiteSpace: 'pre-wrap' }}>{assignee.submission_description}</div>
-          {assignee.proof_url && (
-            <img src={assignee.proof_url} alt="Proof" loading="lazy"
-              style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: reviewable ? '0.7rem' : 0 }} />
-          )}
+          {(assignee.proof_urls || (assignee.proof_url ? [assignee.proof_url] : [])).map((u, i, all) => (
+            <img key={u} src={u} alt="Proof" loading="lazy"
+              style={{ display: 'block', maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: i === all.length - 1 ? (reviewable ? '0.7rem' : 0) : '0.5rem' }} />
+          ))}
           {reviewable && (
             <div onClick={(e) => e.stopPropagation()}>
               {reviewError && <div style={{ fontSize: '0.8rem', color: 'var(--danger)', marginBottom: '0.5rem' }}>{reviewError}</div>}

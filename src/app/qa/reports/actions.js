@@ -81,7 +81,7 @@ export async function rejectReportFix(reportId, reason) {
 
   const result = await db.prepare(`
     UPDATE qa_reports
-    SET status = 'open', resolved_at = NULL, resolution_note = NULL, resolved_by = NULL,
+    SET status = 'open', resolved_at = NULL, resolution_note = NULL, resolved_by = NULL, fix_images = NULL,
         rejection_count = rejection_count + 1
     WHERE id = ? AND status = 'pending_review'
   `).run(id);

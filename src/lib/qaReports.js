@@ -1,4 +1,5 @@
 import { createNotificationsForUsers } from '@/lib/notifications';
+import { validateImages } from '@/lib/multiImages';
 
 // How long a manager has to resolve a QA report before it counts as overdue.
 export const QA_RESOLVE_DAYS = 5;
@@ -130,18 +131,20 @@ export async function attachComments(db, reports) {
 // A manager says they've fixed a report. It does NOT become resolved: it goes
 // to 'pending_review' and QA is asked to verify it. Scoped to the manager's own
 // open reports. Shared by the three manager portals' resolveReport actions.
-export async function submitFixForReview(db, session, reportId, note) {
+export async function submitFixForReview(db, session, reportId, note, images) {
   const id = parseInt(reportId, 10);
   if (!id) return { error: 'Invalid report' };
   const cleanNote = (note || '').trim();
   if (!cleanNote) return { error: 'Please describe how you fixed it' };
   if (cleanNote.length > 2000) return { error: 'Note is too long (max 2000 characters)' };
+  const checked = validateImages(images);
+  if (checked.error) return { error: checked.error };
 
   const result = await db.prepare(`
     UPDATE qa_reports
-    SET status = 'pending_review', resolved_at = CURRENT_TIMESTAMP, resolution_note = ?, resolved_by = ?
+    SET status = 'pending_review', resolved_at = CURRENT_TIMESTAMP, resolution_note = ?, resolved_by = ?, fix_images = ?
     WHERE id = ? AND manager_id = ? AND status = 'open'
-  `).run(cleanNote, session.userId, id, session.userId);
+  `).run(cleanNote, session.userId, checked.images.length ? JSON.stringify(checked.images) : null, id, session.userId);
   if (!result.changes) return { error: 'This report is not open, or not yours' };
 
   await db.prepare(`INSERT INTO qa_report_comments (report_id, user_id, kind, body) VALUES (?, ?, 'fix', ?)`)

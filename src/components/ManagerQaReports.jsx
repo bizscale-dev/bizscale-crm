@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import QaManualDetails, { SeverityBadge } from '@/components/QaManualDetails';
 import LinkList from '@/components/LinkList';
 import ReportThread from '@/components/ReportThread';
+import FixImages from '@/components/FixImages';
+import MultiImagePicker from '@/components/taskcheck/MultiImagePicker';
 
 const BRAND_COLOR = 'var(--primary)';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -64,7 +66,7 @@ function StatPill({ label, value, color }) {
   );
 }
 
-function ReportCard({ report, resolveAction }) {
+function ReportCard({ report, resolveAction, allowImages }) {
   const router = useRouter();
   const isOpen = report.status === 'open';
   const isPending = report.status === 'pending_review';
@@ -76,19 +78,21 @@ function ReportCard({ report, resolveAction }) {
   const deadline = isOpen ? deadlineInfo(report.due_at) : null;
   const [resolving, setResolving] = useState(false);
   const [note, setNote] = useState('');
+  const [images, setImages] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
   const submit = async () => {
     setSubmitting(true);
     setError(null);
-    const result = await resolveAction(report.id, note);
+    const result = await resolveAction(report.id, note, images);
     setSubmitting(false);
     if (result?.error) {
       setError(result.error);
       return;
     }
     setResolving(false);
+    setImages([]);
     router.refresh();
   };
 
@@ -146,6 +150,7 @@ function ReportCard({ report, resolveAction }) {
             {isPending ? 'Your fix (QA is checking it)' : 'Your resolution'} · {new Date(parseUtc(report.resolved_at)).toLocaleString()}
           </div>
           <Linkify text={report.resolution_note} />
+          <FixImages base="/api/qa-report-fix-image" id={report.id} count={report.fix_image_count} />
         </div>
       )}
 
@@ -171,6 +176,12 @@ function ReportCard({ report, resolveAction }) {
             placeholder="Describe the fix — e.g. replaced the broken link, re-published the page..."
             style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--foreground)', fontSize: '0.9rem', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
           />
+          {allowImages && (
+            <div style={{ marginTop: '0.6rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Pictures of the fix (optional)</label>
+              <MultiImagePicker value={images} onChange={setImages} />
+            </div>
+          )}
           {error && <div style={{ fontSize: '0.8rem', color: 'var(--danger)', marginTop: '0.4rem' }}>{error}</div>}
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
             <button type="button" onClick={submit} disabled={submitting} style={{ padding: '0.5rem 1.1rem', backgroundColor: BRAND_COLOR, color: 'white', border: 'none', borderRadius: '0.4rem', fontWeight: '600', fontSize: '0.82rem', cursor: 'pointer', opacity: submitting ? 0.6 : 1 }}>
@@ -188,7 +199,7 @@ function ReportCard({ report, resolveAction }) {
   );
 }
 
-export default function ManagerQaReports({ reports, resolveAction, resolveDays }) {
+export default function ManagerQaReports({ reports, resolveAction, resolveDays, allowImages = false }) {
   const open = reports.filter((r) => r.status === 'open');
   const pending = reports.filter((r) => r.status === 'pending_review');
   const resolved = reports.filter((r) => r.status === 'resolved');
@@ -219,19 +230,19 @@ export default function ManagerQaReports({ reports, resolveAction, resolveDays }
           {open.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <h2 style={{ fontSize: '1.05rem', margin: 0, color: '#f59e0b' }}>Needs your attention</h2>
-              {open.map((r) => <ReportCard key={r.id} report={r} resolveAction={resolveAction} />)}
+              {open.map((r) => <ReportCard key={r.id} report={r} resolveAction={resolveAction} allowImages={allowImages} />)}
             </div>
           )}
           {pending.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <h2 style={{ fontSize: '1.05rem', margin: 0, color: '#3b82f6' }}>Waiting for QA to confirm</h2>
-              {pending.map((r) => <ReportCard key={r.id} report={r} resolveAction={resolveAction} />)}
+              {pending.map((r) => <ReportCard key={r.id} report={r} resolveAction={resolveAction} allowImages={allowImages} />)}
             </div>
           )}
           {resolved.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <h2 style={{ fontSize: '1.05rem', margin: 0 }}>Resolved</h2>
-              {resolved.map((r) => <ReportCard key={r.id} report={r} resolveAction={resolveAction} />)}
+              {resolved.map((r) => <ReportCard key={r.id} report={r} resolveAction={resolveAction} allowImages={allowImages} />)}
             </div>
           )}
         </>

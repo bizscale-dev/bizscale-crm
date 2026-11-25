@@ -1,0 +1,7 @@
+import { renderClientLinksPage } from '../associates/clientsPage';
+
+export const revalidate = 0;
+
+export default function QaWebClientsPage() {
+  return renderClientLinksPage('web');
+}

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { formatPkt } from '@/lib/formatTime';
 import { markReportFixed, confirmTaskReportFix, rejectTaskReportFix, updateTaskReport, deleteTaskReport } from '@/lib/taskCheckActions';
 import ImagePicker from '@/components/taskcheck/ImagePicker';
+import MultiImagePicker from '@/components/taskcheck/MultiImagePicker';
+import FixImages from '@/components/FixImages';
 
 const STATUS = {
   open: { label: 'Open', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)' },
@@ -20,6 +22,7 @@ const by = (r) => `${r.reporter_name}${ROLE_LABEL[r.reporter_role] ? ` (${ROLE_L
 function ReportCard({ report, mode, meId }) {
   const router = useRouter();
   const [text, setText] = useState('');
+  const [fixImages, setFixImages] = useState([]);
   const [rejecting, setRejecting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -39,6 +42,7 @@ function ReportCard({ report, mode, meId }) {
     setBusy(false);
     if (res?.error) return setError(res.error);
     setText('');
+    setFixImages([]);
     setRejecting(false);
     router.refresh();
   };
@@ -103,6 +107,7 @@ function ReportCard({ report, mode, meId }) {
             {report.status === 'resolved' ? 'Fix (confirmed)' : 'Says it is fixed'} · {formatPkt(report.resolved_at)}
           </div>
           {report.resolution_note}
+          <FixImages base="/api/task-check-fix-image" id={report.id} count={report.fix_image_count} />
         </div>
       )}
 
@@ -118,7 +123,11 @@ function ReportCard({ report, mode, meId }) {
       {mode === 'mine' && report.status === 'open' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} style={area} placeholder="What did you fix?" />
-          <div><button type="button" disabled={busy} onClick={() => run(() => markReportFixed(report.id, text))} style={{ ...btn, backgroundColor: 'var(--primary)', opacity: busy ? 0.6 : 1 }}>Mark as fixed</button></div>
+          <div>
+            <div style={{ fontSize: '0.72rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Pictures of the fix (optional)</div>
+            <MultiImagePicker value={fixImages} onChange={setFixImages} />
+          </div>
+          <div><button type="button" disabled={busy} onClick={() => run(() => markReportFixed(report.id, text, fixImages))} style={{ ...btn, backgroundColor: 'var(--primary)', opacity: busy ? 0.6 : 1 }}>Mark as fixed</button></div>
         </div>
       )}
       {mode === 'exec' && report.status === 'pending_review' && (

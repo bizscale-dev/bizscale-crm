@@ -1,5 +1,7 @@
 'use client';
 
+import FixImages from '@/components/FixImages';
+
 import { useMemo, useState } from 'react';
 import { cardStyle, selectStyle, formatMonth, StatPill, BRAND_COLOR } from '../hrStyles';
 import TaskBadges from '@/components/TaskBadges';
@@ -132,10 +134,7 @@ function TaskCard({ row }) {
             {row.is_late && row.late_reason && <><br />Late reason: {row.late_reason}</>}
           </div>
           <div style={{ fontSize: '0.85rem', marginBottom: '0.75rem', whiteSpace: 'pre-wrap' }}>{row.submission_description}</div>
-          {row.has_proof && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={`/api/task-proof/${row.assignee_id}`} alt="Proof" loading="lazy" style={{ maxWidth: '100%', maxHeight: '350px', borderRadius: '0.5rem', border: '1px solid var(--border)' }} />
-          )}
+          {row.has_proof && <FixImages base="/api/task-proof" id={row.assignee_id} count={1 + (row.extra_count || 0)} plain maxHeight="350px" />}
         </div>
       )}
     </div>

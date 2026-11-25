@@ -1,5 +1,7 @@
 'use client';
 
+import { parseImages } from '@/lib/multiImages';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -139,13 +141,14 @@ function AssigneeStatus({ assignee }) {
           <div style={{ fontSize: '0.85rem', marginBottom: '0.75rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
             {assignee.submission_description}
           </div>
-          {assignee.proof_image_base64 && (
+          {[assignee.proof_image_base64, ...parseImages(assignee.extra_proof_images)].filter(Boolean).map((src, i, all) => (
             <img
-              src={assignee.proof_image_base64}
+              key={i}
+              src={src}
               alt="Proof"
-              style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: isLate && assignee.approval_status === 'pending' ? '0.75rem' : 0 }}
+              style={{ display: 'block', maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: i < all.length - 1 ? '0.5rem' : isLate && assignee.approval_status === 'pending' ? '0.75rem' : 0 }}
             />
-          )}
+          ))}
           {isLate && assignee.approval_status === 'pending' && (
             <div onClick={(e) => e.stopPropagation()}>
               {reviewError && <div style={{ fontSize: '0.8rem', color: 'var(--danger)', marginBottom: '0.5rem' }}>{reviewError}</div>}

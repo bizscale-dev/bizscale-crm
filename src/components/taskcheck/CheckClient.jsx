@@ -1,5 +1,7 @@
 'use client';
 
+import FixImages from '@/components/FixImages';
+
 import { useState } from 'react';
 import TaskBadges from '@/components/TaskBadges';
 import { formatPkt, pktDay, dayLabel } from '@/lib/formatTime';
@@ -83,8 +85,7 @@ function TaskCard({ task, targetLabel, open, setOpen }) {
           )}
           <div style={{ fontSize: '0.88rem', whiteSpace: 'pre-wrap' }}>{task.submission_description || <span style={{ color: 'var(--text-muted)' }}>No description.</span>}</div>
           {task.has_proof ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={`/api/task-proof/${task.assignee_id}`} alt="Proof" loading="lazy" style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)' }} />
+            <FixImages base="/api/task-proof" id={task.assignee_id} count={1 + (task.extra_count || 0)} plain maxHeight="400px" />
           ) : null}
 
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>

@@ -6,6 +6,7 @@ import DeleteReportButton from './DeleteReportButton';
 import EditReportButton from './EditReportButton';
 import ReviewControls from './ReviewControls';
 import ReportThread from '@/components/ReportThread';
+import FixImages from '@/components/FixImages';
 import QaManualDetails, { SeverityBadge } from '@/components/QaManualDetails';
 import { cardStyle, StatPill } from '../qaStyles';
 import { QA_RESOLVE_DAYS, withQaDue, attachComments } from '@/lib/qaReports';
@@ -43,7 +44,7 @@ export default async function QaReportsPage(props = {}) {
   // QA works as a team, and this is the shared record of what's been flagged.
   const rows = await db.prepare(`
     SELECT q.id, q.source, q.title, q.location, q.issue, q.department, q.severity, (q.screenshot_base64 IS NOT NULL AND q.screenshot_base64 != '') AS has_screenshot, q.client_names, q.report_date, q.web_client_name, q.page_url, q.work_done, q.note, q.status, q.created_at, q.resolve_days,
-      q.resolved_at, q.resolution_note, q.rejection_count, q.confirmed_at, q.edited_at,
+      q.resolved_at, q.resolution_note, q.rejection_count, q.confirmed_at, q.edited_at, CASE WHEN q.fix_images IS NULL OR q.fix_images = '' THEN 0 ELSE json_array_length(q.fix_images) END AS fix_image_count,
       m.id as manager_id, m.name as manager_name, m.role as manager_role,
       f.name as filed_by
     FROM qa_reports q
@@ -163,6 +164,7 @@ export default async function QaReportsPage(props = {}) {
                       {toDate(r.resolved_at) > toDate(r.due_at) ? ' · resolved late' : ''}
                     </div>
                     <Linkify text={r.resolution_note} />
+                    <FixImages base="/api/qa-report-fix-image" id={r.id} count={r.fix_image_count} />
                   </div>
                 )}
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.6rem' }}>

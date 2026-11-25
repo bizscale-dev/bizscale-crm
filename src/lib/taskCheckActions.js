@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { createNotificationsForUsers, getCheckReportsLinkForRole } from '@/lib/notifications';
 import { CHECK_TARGETS, CHECKED_ROLES } from '@/lib/taskCheck';
 import { submitFixForReview, QA_MAX_SCREENSHOT_BASE64 } from '@/lib/qaReports';
+import { validateImages } from '@/lib/multiImages';
 
 const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
@@ -93,17 +94,20 @@ export async function reportTask({ taskId, userId, comment, image }) {
 }
 
 /** The reported person says it is fixed: goes to the Executive for confirmation. */
-export async function markReportFixed(reportId, note) {
+export async function markReportFixed(reportId, note, images) {
   const session = await verifySession();
   if (!session || !CHECKED_ROLES.includes(session.role)) return { error: 'Not authorized' };
   const id = parseInt(reportId, 10);
   const text = clean(note, 3000);
   if (!text) return { error: 'Say what you fixed' };
+  const checked = validateImages(images);
+  if (checked.error) return { error: checked.error };
   const db = await getDb();
   const report = await db.prepare("SELECT id, task_text, created_by FROM task_check_reports WHERE id = ? AND user_id = ? AND status = 'open'").get(id, session.userId);
   if (!report) return { error: 'Report not found' };
 
-  await db.prepare("UPDATE task_check_reports SET status = 'pending_review', resolution_note = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?").run(text, id);
+  await db.prepare("UPDATE task_check_reports SET status = 'pending_review', resolution_note = ?, resolution_images = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(text, checked.images.length ? JSON.stringify(checked.images) : null, id);
   const exec = await db.prepare('SELECT id, role FROM users WHERE id = ?').get(report.created_by);
   if (exec) {
     await createNotificationsForUsers(db, [exec.id], {
@@ -185,11 +189,11 @@ export async function getTaskCheckBadgeCount() {
 }
 
 /** The reported person submits a fix for a QA report on their own list (goes to QA for review). */
-export async function resolveQaReport(reportId, note) {
+export async function resolveQaReport(reportId, note, images) {
   const session = await verifySession();
   if (!session || ![...CHECKED_ROLES, 'web_developer_executive', 'graphic_designer_executive'].includes(session.role)) return { error: 'Not authorized' };
   const db = await getDb();
-  const result = await submitFixForReview(db, session, reportId, note);
+  const result = await submitFixForReview(db, session, reportId, note, images);
   if (result.error) return result;
   revalidatePath('/web-developer/reports');
   revalidatePath('/graphic-designer/reports');

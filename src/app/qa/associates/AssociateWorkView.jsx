@@ -26,7 +26,7 @@ function StatChip({ label, value, color }) {
 }
 
 // One link: the URL, a Pass / Fail mark and a Report button that opens a tiny comment form.
-function LinkRow({ kind, associate, client, type, link, date, status, onStatus, onReported }) {
+export function LinkRow({ kind, associate, client, type, link, date, status, onStatus, onReported, meta = null, canReport = true }) {
   const url = link?.url || '';
   const [reporting, setReporting] = useState(false);
   const [comment, setComment] = useState('');
@@ -77,10 +77,13 @@ function LinkRow({ kind, associate, client, type, link, date, status, onStatus, 
             </button>
           </>
         )}
-        <button type="button" onClick={() => setReporting(!reporting)} style={{ ...ghostBtn, ...(reporting ? { backgroundColor: 'var(--primary)', borderColor: 'var(--primary)', color: 'white' } : {}) }}>
-          {reporting ? 'Cancel' : 'Report'}
-        </button>
+        {canReport && (
+          <button type="button" onClick={() => setReporting(!reporting)} style={{ ...ghostBtn, ...(reporting ? { backgroundColor: 'var(--primary)', borderColor: 'var(--primary)', color: 'white' } : {}) }}>
+            {reporting ? 'Cancel' : 'Report'}
+          </button>
+        )}
       </div>
+      {meta && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{meta}</div>}
       {message && (
         <div style={{ marginTop: '0.35rem', fontSize: '0.75rem', color: message.error ? 'var(--danger)' : 'var(--success)' }}>{message.text}</div>
       )}
@@ -105,7 +108,7 @@ function LinkRow({ kind, associate, client, type, link, date, status, onStatus, 
 }
 
 // Copies every link of one client (all link types, one URL per line) to the clipboard.
-function CopyLinksButton({ client }) {
+export function CopyLinksButton({ client }) {
   const [state, setState] = useState('');
   const urls = client.types.flatMap((t) => t.links.map((l) => l.url));
   if (urls.length === 0) return null;
@@ -143,7 +146,7 @@ function CopyLinksButton({ client }) {
 }
 
 // Marks every link of one client that has no mark yet as Pass in one click (links already marked Fail stay Fail).
-function PassAllButton({ kind, client, statuses, onPassed }) {
+export function PassAllButton({ kind, client, statuses, onPassed }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const urls = client.types.flatMap((t) => t.links.map((l) => l.url));

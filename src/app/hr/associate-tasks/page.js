@@ -13,7 +13,7 @@ export default async function HrAssociateTasksPage() {
     SELECT t.id as task_id, t.task_text, t.due_date, t.due_time, t.template_id, t.urgency,
       a.id as assignee_id, u.id as associate_id, u.name as associate_name, u.role as associate_role,
       m.name as assigned_by,
-      a.submitted_at, a.submission_description, (a.proof_image_base64 IS NOT NULL AND a.proof_image_base64 != '') AS has_proof,
+      a.submitted_at, a.submission_description, (a.proof_image_base64 IS NOT NULL AND a.proof_image_base64 != '') AS has_proof, CASE WHEN a.extra_proof_images IS NULL OR a.extra_proof_images = '' THEN 0 ELSE json_array_length(a.extra_proof_images) END AS extra_count,
       a.is_late, a.late_reason, a.approval_status
     FROM associate_tasks t
     JOIN associate_task_assignees a ON a.task_id = t.id

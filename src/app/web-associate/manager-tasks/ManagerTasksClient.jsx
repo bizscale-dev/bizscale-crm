@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { submitAssociateTaskProof, setClientCheck } from './actions';
 import TaskBadges from '@/components/TaskBadges';
 import ClientChecklist from '@/components/ClientChecklist';
+import MultiImagePicker from '@/components/taskcheck/MultiImagePicker';
 import { TASK_URGENCIES, parseUrgency } from '@/lib/taskUrgency';
 import { formatPkt, pktDay, dayLabel } from '@/lib/formatTime';
 
@@ -49,7 +50,6 @@ function writeDraft(taskId, description) {
   }
 }
 
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 const labelStyle = {
   display: 'block',
@@ -106,32 +106,13 @@ function TaskCard({ task, twelveHour }) {
   const overdue = !submitted && isOverdue(task);
   const [description, setDescription] = useState(() => submitted ? '' : readDraft(task.task_id));
   const [lateReason, setLateReason] = useState('');
-  const [imageDataUrl, setImageDataUrl] = useState(null);
-  const [imageError, setImageError] = useState(null);
+  const [images, setImages] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
   const handleDescriptionChange = (value) => {
     setDescription(value);
     writeDraft(task.task_id, value);
-  };
-
-  const handleFileChange = (e) => {
-    setImageError(null);
-    const file = e.target.files?.[0];
-    if (!file) {
-      setImageDataUrl(null);
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setImageError('Image is too large — max 2MB.');
-      e.target.value = '';
-      setImageDataUrl(null);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => setImageDataUrl(reader.result);
-    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async () => {
@@ -146,7 +127,7 @@ function TaskCard({ task, twelveHour }) {
     }
 
     setSubmitting(true);
-    const result = await submitAssociateTaskProof(task.task_id, description, imageDataUrl, lateReason);
+    const result = await submitAssociateTaskProof(task.task_id, description, images, lateReason);
     setSubmitting(false);
 
     if (result?.error) {
@@ -210,14 +191,15 @@ function TaskCard({ task, twelveHour }) {
           <div style={{ fontSize: '0.85rem', marginBottom: '0.75rem', whiteSpace: 'pre-wrap' }}>
             {task.submission_description}
           </div>
-          {task.proof_url && (
+          {(task.proof_urls || (task.proof_url ? [task.proof_url] : [])).map((u) => (
             <img
-              src={task.proof_url}
+              key={u}
+              src={u}
               loading="lazy"
               alt="Proof"
-              style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)' }}
+              style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'block', marginBottom: '0.5rem' }}
             />
-          )}
+          ))}
         </div>
       ) : (
         <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -252,16 +234,8 @@ function TaskCard({ task, twelveHour }) {
             </div>
           )}
           <div>
-            <label style={labelStyle}>Proof Image (optional)</label>
-            <input type="file" accept="image/*" onChange={handleFileChange} />
-            {imageError && <div style={{ fontSize: '0.8rem', color: 'var(--danger)', marginTop: '0.35rem' }}>{imageError}</div>}
-            {imageDataUrl && (
-              <img
-                src={imageDataUrl}
-                alt="Preview"
-                style={{ maxWidth: '100%', maxHeight: '200px', marginTop: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)' }}
-              />
-            )}
+            <label style={labelStyle}>Proof Images (optional — add as many as you need)</label>
+            <MultiImagePicker value={images} onChange={setImages} />
           </div>
           <div>
             <button type="button" onClick={handleSubmit} disabled={submitting} style={{ ...primaryButtonStyle, opacity: submitting ? 0.6 : 1 }}>

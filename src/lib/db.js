@@ -284,6 +284,12 @@ async function runMigrationsBody(raw) {
     "ALTER TABLE task_check_reports ADD COLUMN link TEXT",
     // Set when the Executive edits a report afterwards (also busts the browser cache of its picture).
     "ALTER TABLE task_check_reports ADD COLUMN edited_at DATETIME",
+    // Several pictures on one submission / fix: JSON arrays of image data URLs. For a task proof the first
+    // picture stays in proof_image_base64 and the rest go in extra_proof_images; a report fix keeps all of
+    // them in resolution_images (task_check_reports) or fix_images (qa_reports).
+    "ALTER TABLE associate_task_assignees ADD COLUMN extra_proof_images TEXT",
+    "ALTER TABLE task_check_reports ADD COLUMN resolution_images TEXT",
+    "ALTER TABLE qa_reports ADD COLUMN fix_images TEXT",
     "ALTER TABLE associate_task_assignees ADD COLUMN checklist TEXT",
     "ALTER TABLE associate_task_assignees ADD COLUMN checklist_done TEXT",
     // First working day of a Month 1 client's CURRENT week — the 5-working-day

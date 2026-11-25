@@ -13,7 +13,7 @@ const nextConfig = {
     return [{ source: '/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }] }];
   },
   experimental: {
-    serverActions: { bodySizeLimit: '4mb' },
+    serverActions: { bodySizeLimit: '12mb' },
   },
 };
 

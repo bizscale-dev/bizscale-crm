@@ -23,7 +23,7 @@ export default async function GraphicExecutiveTasksPage() {
     SELECT t.id as task_id, t.created_by, t.task_text, t.due_date, t.due_time, t.created_at, t.template_id, t.urgency,
       (t.attachment_base64 IS NOT NULL AND t.attachment_base64 != '') AS has_attachment,
       a.id as assignee_row_id, a.user_id, u.name as associate_name,
-      a.submitted_at, a.submission_description, a.proof_image_base64,
+      a.submitted_at, a.submission_description, a.proof_image_base64, a.extra_proof_images,
       a.is_late, a.late_reason, a.approval_status
     FROM associate_tasks t
     JOIN associate_task_assignees a ON a.task_id = t.id
@@ -55,6 +55,7 @@ export default async function GraphicExecutiveTasksPage() {
       submitted_at: row.submitted_at,
       submission_description: row.submission_description,
       proof_image_base64: row.proof_image_base64,
+      extra_proof_images: row.extra_proof_images,
       is_late: row.is_late,
       late_reason: row.late_reason,
       approval_status: row.approval_status,
