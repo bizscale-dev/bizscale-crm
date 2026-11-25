@@ -8,12 +8,12 @@ export async function loadClientLinks(db, kind) {
   const clientTable = isWeb ? 'web_clients' : 'clients';
 
   const clients = await db.prepare(`
-    SELECT c.id, TRIM(c.name) AS name, c.assigned_associate_id, ${isWeb ? 'c.sheet_url AS sheet_url' : 'NULL AS sheet_url'}
+    SELECT c.id, TRIM(c.name) AS name, c.assigned_associate_id, c.${isWeb ? 'webseo_campaign_id' : 'campaign_id'} AS campaign_id, ${isWeb ? 'c.sheet_url AS sheet_url' : 'NULL AS sheet_url'}
     FROM ${clientTable} c
     WHERE c.is_active = 1 AND EXISTS (SELECT 1 FROM ${linkTable} l WHERE l.client_id = c.id)
     ORDER BY LOWER(TRIM(c.name))
   `).all();
-  if (clients.length === 0) return [];
+  if (clients.length === 0) return { campaigns: [], clients: [] };
 
   const links = await db.prepare(`
     SELECT client_id, url, task_date, link_type, seeded FROM ${linkTable} ORDER BY task_date DESC, id
@@ -37,7 +37,7 @@ export async function loadClientLinks(db, kind) {
   }
 
   const byClient = new Map(clients.map((c) => [c.id, {
-    clientId: c.id, name: c.name, sheetUrl: c.sheet_url || null, assignedId: c.assigned_associate_id || null, types: new Map(), total: 0,
+    clientId: c.id, campaignId: c.campaign_id, name: c.name, sheetUrl: c.sheet_url || null, assignedId: c.assigned_associate_id || null, types: new Map(), total: 0,
   }]));
   for (const l of links) {
     const c = byClient.get(l.client_id);
@@ -55,11 +55,18 @@ export async function loadClientLinks(db, kind) {
     c.total += 1;
   }
 
-  return [...byClient.values()].map((c) => ({
+  // Each month is its own campaign (clients are copied per campaign), newest first.
+  const campaignRows = await db.prepare(`SELECT id, name, start_date FROM ${isWeb ? 'webseo_campaigns' : 'campaigns'} ORDER BY start_date DESC, id DESC`).all();
+  const used = new Set(clients.map((c) => c.campaign_id));
+  const campaigns = campaignRows.filter((r) => used.has(r.id)).map((r) => ({ id: r.id, name: r.name, startDate: r.start_date }));
+
+  const list = [...byClient.values()].map((c) => ({
     clientId: c.clientId,
+    campaignId: c.campaignId,
     name: c.name,
     sheetUrl: c.sheetUrl,
     total: c.total,
     types: [...c.types.entries()].map(([type, list]) => ({ type, count: list.length, links: list })),
   }));
+  return { campaigns, clients: list };
 }

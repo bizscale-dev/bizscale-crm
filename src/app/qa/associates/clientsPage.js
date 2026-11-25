@@ -5,7 +5,7 @@ import ClientLinksView from './ClientLinksView';
 // Shared by the QA SEO Clients and Web Clients pages: every client with all its links.
 export async function renderClientLinksPage(kind) {
   const db = await getDb();
-  const clients = await loadClientLinks(db, kind);
+  const { campaigns, clients } = await loadClientLinks(db, kind);
   const title = kind === 'web' ? 'Web SEO Clients' : 'SEO Clients';
 
   return (
@@ -17,7 +17,7 @@ export async function renderClientLinksPage(kind) {
           {kind === 'web' ? ' Web SEO Associates' : ' SEO Associates'} page, so checking a link in either place updates the other.
         </p>
       </div>
-      <ClientLinksView kind={kind} clients={clients} />
+      <ClientLinksView kind={kind} clients={clients} campaigns={campaigns} />
     </div>
   );
 }

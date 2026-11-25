@@ -89,19 +89,28 @@ function ClientCard({ kind, client, open, onToggle }) {
   );
 }
 
-export default function ClientLinksView({ kind, clients }) {
+export default function ClientLinksView({ kind, clients, campaigns = [] }) {
+  // Month filter = campaign. Starts on the most recent month.
+  const [month, setMonth] = useState(() => (campaigns[0] ? String(campaigns[0].id) : 'all'));
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState(null);
   const q = query.trim().toLowerCase();
-  const visible = useMemo(() => (q ? clients.filter((c) => c.name.toLowerCase().includes(q)) : clients), [clients, q]);
-  const totalLinks = clients.reduce((a, c) => a + c.total, 0);
+  const visible = useMemo(
+    () => clients.filter((c) => (month === 'all' || String(c.campaignId) === month) && (!q || c.name.toLowerCase().includes(q))),
+    [clients, q, month]
+  );
+  const totalLinks = visible.reduce((a, c) => a + c.total, 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <select value={month} onChange={(e) => { setMonth(e.target.value); setOpenId(null); }} style={inputStyle} aria-label="Month">
+          {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          <option value="all">All months</option>
+        </select>
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search a client…" style={{ ...inputStyle, minWidth: '240px' }} />
         <button type="button" onClick={() => setOpenId(null)} style={ghostBtn}>Collapse all</button>
-        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{visible.length} client{visible.length === 1 ? '' : 's'} · {totalLinks} links in total</span>
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{visible.length} client{visible.length === 1 ? '' : 's'} · {totalLinks} links{month === 'all' ? '' : ' this month'}</span>
       </div>
       {visible.length === 0 ? (
         <div style={cardStyle}><p style={{ margin: 0, color: 'var(--text-muted)' }}>No clients with links.</p></div>
