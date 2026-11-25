@@ -31,16 +31,19 @@ export async function loadStoredLinks(db, table = 'synced_client_links', firstRu
   const rows = await db.prepare(`SELECT client_id, url, seeded, task_date, link_type FROM ${table}`).all();
   const known = new Map();
   const unattached = new Map();
+  // url -> the client it is stored for. A link belongs to one client only (see buildLinkWrites).
+  const owners = new Map();
   for (const r of rows) {
     if (!known.has(r.client_id)) known.set(r.client_id, new Set());
     known.get(r.client_id).add(r.url);
+    if (!owners.has(r.url)) owners.set(r.url, r.client_id);
     if (!r.seeded && !r.task_date) {
       const key = `${r.client_id}|${r.link_type || ''}`;
       if (!unattached.has(key)) unattached.set(key, []);
       unattached.get(key).push(r.url);
     }
   }
-  return { isFirstRun: firstRun ?? rows.length === 0, known, unattached, table };
+  return { isFirstRun: firstRun ?? rows.length === 0, known, unattached, owners, table };
 }
 
 /**
@@ -51,7 +54,17 @@ export function buildLinkWrites({ stored, clientId, linkType, urls, credited, fa
   const writes = [];
   const table = stored.table || 'synced_client_links';
   const known = stored.known.get(clientId) || new Set();
-  const fresh = urls.filter((u) => !known.has(u));
+  // A URL already stored for ANOTHER client is skipped: the sheet's link columns can slip out of line
+  // with its client names for a moment (a row inserted or sorted), and without this the whole previous
+  // client's links would be filed under this one. The first client to claim a URL keeps it.
+  const owners = stored.owners || new Map();
+  const fresh = urls.filter((u) => {
+    if (known.has(u)) return false;
+    const owner = owners.get(u);
+    if (owner !== undefined && owner !== clientId) return false;
+    owners.set(u, clientId);
+    return true;
+  });
 
   if (stored.isFirstRun) {
     for (const url of fresh) {
