@@ -44,7 +44,7 @@ function checkTaskFields({ text, dueDate, dueTime }) {
 }
 
 function refresh() {
-  for (const path of ['/support', '/support/tasks', '/admin/support', '/admin/manager-tasks', '/seo-manager/support', '/web-seo-manager/support']) {
+  for (const path of ['/support', '/support/tasks', '/admin/support', '/admin/manager-tasks', '/seo-manager/support', '/web-seo-manager/support', '/seo-manager/tasks', '/web-seo-manager/tasks']) {
     revalidatePath(path);
   }
 }
@@ -262,6 +262,51 @@ export async function rejectSupportQuery(queryId, note) {
     return { success: true };
   } catch (err) {
     return fail('rejectSupportQuery', err);
+  }
+}
+
+// Removes a support task for everyone. If it was already forwarded, the manager task goes with it,
+// including whatever the managers submitted.
+export async function deleteSupportTask(supportTaskId) {
+  const { db, error } = await requireRole(['admin']);
+  if (error) return { error };
+  const id = parseInt(supportTaskId, 10);
+  try {
+    const remove = db.transaction(async (tx) => {
+      const task = await tx.prepare('SELECT manager_task_id FROM support_tasks WHERE id = ?').get(id || 0);
+      if (!task) return false;
+      if (task.manager_task_id) {
+        await tx.prepare('DELETE FROM manager_task_assignees WHERE task_id = ?').run(task.manager_task_id);
+        await tx.prepare('DELETE FROM manager_tasks WHERE id = ?').run(task.manager_task_id);
+      }
+      await tx.prepare('DELETE FROM support_tasks WHERE id = ?').run(id);
+      return true;
+    });
+    if (!(await remove())) return { error: 'This task is already deleted — refresh the page' };
+    refresh();
+    return { success: true };
+  } catch (err) {
+    return fail('deleteSupportTask', err);
+  }
+}
+
+// Removes a query, who it was sent to and all its replies.
+export async function deleteSupportQuery(queryId) {
+  const { db, error } = await requireRole(['admin']);
+  if (error) return { error };
+  const id = parseInt(queryId, 10);
+  try {
+    const remove = db.transaction(async (tx) => {
+      await tx.prepare('DELETE FROM support_query_replies WHERE query_id = ?').run(id || 0);
+      await tx.prepare('DELETE FROM support_query_recipients WHERE query_id = ?').run(id || 0);
+      const result = await tx.prepare('DELETE FROM support_queries WHERE id = ?').run(id || 0);
+      return !!result.changes;
+    });
+    if (!(await remove())) return { error: 'This query is already deleted — refresh the page' };
+    refresh();
+    return { success: true };
+  } catch (err) {
+    return fail('deleteSupportQuery', err);
   }
 }
 

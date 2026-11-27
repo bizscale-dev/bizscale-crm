@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import UrgencySelect from '@/components/UrgencySelect';
-import { forwardSupportTask, rejectSupportTask, approveSupportQuery, rejectSupportQuery } from '@/lib/supportActions';
+import { forwardSupportTask, rejectSupportTask, approveSupportQuery, rejectSupportQuery, deleteSupportTask, deleteSupportQuery } from '@/lib/supportActions';
 import { TaskCard, QueryCard, ClientSelect, Tabs, ErrorText, useAction, useAutoRefresh, cardStyle, inputStyle, labelStyle, primaryBtn, ghostBtn, mutedStyle } from './shared';
 
 // Tick one or several people.
@@ -108,6 +108,32 @@ function ApproveForm({ query, supportPeople, clients }) {
   );
 }
 
+// Permanent delete, after a confirmation that says what else disappears.
+function DeleteControl({ label, message, onDelete }) {
+  const { busy, error, run } = useAction();
+  return (
+    <div style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+      <button type="button" disabled={busy} onClick={() => { if (confirm(message)) run(onDelete); }}
+        style={{ ...ghostBtn, padding: '0.3rem 0.8rem', fontSize: '0.78rem', color: 'var(--danger)', borderColor: 'var(--danger)', opacity: busy ? 0.6 : 1 }}>
+        {busy ? 'Deleting…' : label}
+      </button>
+      <ErrorText error={error} />
+    </div>
+  );
+}
+
+function DeleteTask({ task }) {
+  const names = task.assignees.map((a) => a.name).join(', ');
+  const message = names
+    ? `Delete this task? It is also removed from the Tasks page of ${names}, including anything they submitted. This cannot be undone.`
+    : 'Delete this task? Support will no longer see it. This cannot be undone.';
+  return <DeleteControl label="Delete task" message={message} onDelete={() => deleteSupportTask(task.id)} />;
+}
+
+function DeleteQuery({ query }) {
+  return <DeleteControl label="Delete query" message="Delete this query and its replies? The manager and Support will no longer see it. This cannot be undone." onDelete={() => deleteSupportQuery(query.id)} />;
+}
+
 function Section({ title, empty, children }) {
   return (
     <>
@@ -137,20 +163,20 @@ export default function AdminSupport({ tasks, queries, managers, supportPeople, 
       {tab === 'tasks' ? (
         <>
           <Section title="Waiting for you" empty="No task is waiting.">
-            {pendingTasks.map((t) => <TaskCard key={t.id} task={t} showFrom><ForwardForm task={t} managers={managers} roleLabels={roleLabels} clients={clients} /></TaskCard>)}
+            {pendingTasks.map((t) => <TaskCard key={t.id} task={t} showFrom><ForwardForm task={t} managers={managers} roleLabels={roleLabels} clients={clients} /><DeleteTask task={t} /></TaskCard>)}
           </Section>
           <Section title="Handled" empty="Nothing yet.">
-            {tasks.filter((t) => t.status !== 'pending').map((t) => <TaskCard key={t.id} task={t} showFrom />)}
+            {tasks.filter((t) => t.status !== 'pending').map((t) => <TaskCard key={t.id} task={t} showFrom><DeleteTask task={t} /></TaskCard>)}
           </Section>
           <div style={mutedStyle}>Late submissions are approved on the <Link href="/admin/manager-tasks" style={{ color: 'var(--primary)' }}>Manager Tasks</Link> page, like any other manager task.</div>
         </>
       ) : (
         <>
           <Section title="Waiting for approval" empty="No query is waiting.">
-            {pendingQueries.map((q) => <QueryCard key={q.id} query={q} showFrom><ApproveForm query={q} supportPeople={supportPeople} clients={clients} /></QueryCard>)}
+            {pendingQueries.map((q) => <QueryCard key={q.id} query={q} showFrom><ApproveForm query={q} supportPeople={supportPeople} clients={clients} /><DeleteQuery query={q} /></QueryCard>)}
           </Section>
           <Section title="Handled" empty="Nothing yet.">
-            {queries.filter((q) => q.status !== 'pending').map((q) => <QueryCard key={q.id} query={q} showFrom />)}
+            {queries.filter((q) => q.status !== 'pending').map((q) => <QueryCard key={q.id} query={q} showFrom><DeleteQuery query={q} /></QueryCard>)}
           </Section>
         </>
       )}
