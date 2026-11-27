@@ -4,11 +4,12 @@ import { useState } from 'react';
 import UrgencySelect from '@/components/UrgencySelect';
 import { DEFAULT_TASK_URGENCY } from '@/lib/taskUrgency';
 import { createSupportTask } from '@/lib/supportActions';
-import { TaskCard, ErrorText, useAction, useAutoRefresh, cardStyle, inputStyle, labelStyle, primaryBtn, mutedStyle } from './shared';
+import { TaskCard, ClientSelect, ErrorText, useAction, useAutoRefresh, cardStyle, inputStyle, labelStyle, primaryBtn, mutedStyle } from './shared';
 
 // Support portal "Tasks to Tech": send a task to the admin and follow what happens to it.
-export default function SupportTasks({ tasks }) {
+export default function SupportTasks({ tasks, clients }) {
   useAutoRefresh();
+  const [clientName, setClientName] = useState('');
   const [text, setText] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [dueTime, setDueTime] = useState('');
@@ -19,8 +20,8 @@ export default function SupportTasks({ tasks }) {
   const submit = (e) => {
     e.preventDefault();
     setSent(false);
-    run(() => createSupportTask({ text, dueDate, dueTime, urgency }), () => {
-      setText(''); setDueDate(''); setDueTime(''); setUrgency(DEFAULT_TASK_URGENCY); setSent(true);
+    run(() => createSupportTask({ text, dueDate, dueTime, urgency, clientName }), () => {
+      setClientName(''); setText(''); setDueDate(''); setDueTime(''); setUrgency(DEFAULT_TASK_URGENCY); setSent(true);
     });
   };
 
@@ -32,6 +33,7 @@ export default function SupportTasks({ tasks }) {
       </div>
 
       <form onSubmit={submit} style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+        <ClientSelect id="support-task-client" clients={clients} value={clientName} onChange={setClientName} />
         <div>
           <label style={labelStyle} htmlFor="support-task-text">Task</label>
           <textarea id="support-task-text" value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder="What needs to be done?" style={{ ...inputStyle, resize: 'vertical' }} required />

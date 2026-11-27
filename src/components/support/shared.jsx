@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Linkify from '@/app/qa/Linkify';
 import TaskBadges from '@/components/TaskBadges';
 import { formatPkt } from '@/lib/formatTime';
+import { withClient } from '@/lib/supportText';
 
 export const cardStyle = { backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1.1rem 1.25rem' };
 export const inputStyle = { width: '100%', padding: '0.55rem 0.8rem', borderRadius: '0.5rem', border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--foreground)', fontSize: '0.9rem', fontFamily: 'inherit' };
@@ -70,6 +71,24 @@ export function Tabs({ tabs, value, onChange }) {
   );
 }
 
+// Optional client from the SEO client list. A value that has since left the list stays selectable.
+export function ClientSelect({ id, clients, value, onChange }) {
+  const options = value && !clients.includes(value) ? [value, ...clients] : clients;
+  return (
+    <div>
+      <label style={labelStyle} htmlFor={id}>Client (optional)</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} style={inputStyle}>
+        <option value="">No client</option>
+        {options.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function ClientTag({ name }) {
+  return name ? <div style={{ fontSize: '0.82rem', fontWeight: '600', color: 'var(--primary)', marginBottom: '0.35rem' }}>Client: {name}</div> : null;
+}
+
 /* ---------- Queries ---------- */
 
 function queryStatus(q) {
@@ -89,6 +108,7 @@ export function QueryCard({ query, showFrom, showSentTo = true, children }) {
         </span>
         <Pill text={status.text} color={status.color} />
       </div>
+      <ClientTag name={query.client_name} />
       <div style={textStyle}><Linkify text={query.query_text} /></div>
       {showSentTo && query.sentTo.length > 0 && <div style={{ ...mutedStyle, marginTop: '0.5rem' }}>Sent to: {query.sentTo.join(', ')}</div>}
       {query.status === 'rejected' && query.admin_note && <div style={{ fontSize: '0.83rem', color: 'var(--danger)', marginTop: '0.5rem' }}>Reason: {query.admin_note}</div>}
@@ -124,7 +144,7 @@ function taskStatus(t) {
 export function TaskCard({ task, showFrom, children }) {
   const status = taskStatus(task);
   const sent = task.status === 'forwarded' && task.sent_text != null;
-  const edited = sent && task.sent_text !== task.task_text;
+  const edited = sent && task.sent_text !== withClient(task.client_name, task.task_text);
   return (
     <div style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
@@ -134,6 +154,7 @@ export function TaskCard({ task, showFrom, children }) {
         </span>
         <Pill text={status.text} color={status.color} />
       </div>
+      <ClientTag name={task.client_name} />
       <div style={textStyle}><TaskBadges urgency={sent ? task.sent_urgency : task.urgency} /><Linkify text={task.task_text} /></div>
       {edited && <div style={{ ...mutedStyle, marginTop: '0.5rem', whiteSpace: 'pre-wrap' }}>Sent to managers as: <Linkify text={task.sent_text} /></div>}
       {task.status === 'rejected' && task.admin_note && <div style={{ fontSize: '0.83rem', color: 'var(--danger)', marginTop: '0.5rem' }}>Reason: {task.admin_note}</div>}

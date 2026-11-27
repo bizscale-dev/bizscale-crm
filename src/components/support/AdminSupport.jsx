@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import UrgencySelect from '@/components/UrgencySelect';
 import { forwardSupportTask, rejectSupportTask, approveSupportQuery, rejectSupportQuery } from '@/lib/supportActions';
-import { TaskCard, QueryCard, Tabs, ErrorText, useAction, useAutoRefresh, cardStyle, inputStyle, labelStyle, primaryBtn, ghostBtn, mutedStyle } from './shared';
+import { TaskCard, QueryCard, ClientSelect, Tabs, ErrorText, useAction, useAutoRefresh, cardStyle, inputStyle, labelStyle, primaryBtn, ghostBtn, mutedStyle } from './shared';
 
 // Tick one or several people.
 function PeoplePicker({ legend, people, selected, onChange, roleLabels = {} }) {
@@ -43,7 +43,8 @@ function RejectControl({ onReject, busy }) {
   );
 }
 
-function ForwardForm({ task, managers, roleLabels }) {
+function ForwardForm({ task, managers, roleLabels, clients }) {
+  const [clientName, setClientName] = useState(task.client_name || '');
   const [text, setText] = useState(task.task_text);
   const [dueDate, setDueDate] = useState(task.due_date);
   const [dueTime, setDueTime] = useState(task.due_time);
@@ -53,6 +54,7 @@ function ForwardForm({ task, managers, roleLabels }) {
 
   return (
     <div style={{ marginTop: '0.9rem', paddingTop: '0.9rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+      <ClientSelect id={`fwd-client-${task.id}`} clients={clients} value={clientName} onChange={setClientName} />
       <div>
         <label style={labelStyle} htmlFor={`fwd-text-${task.id}`}>Task as the managers will see it</label>
         <textarea id={`fwd-text-${task.id}`} value={text} onChange={(e) => setText(e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
@@ -73,7 +75,7 @@ function ForwardForm({ task, managers, roleLabels }) {
         : <PeoplePicker legend="Send to managers" people={managers} selected={selected} onChange={setSelected} roleLabels={roleLabels} />}
       <ErrorText error={error} />
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <button type="button" disabled={busy || selected.length === 0} onClick={() => run(() => forwardSupportTask(task.id, { text, dueDate, dueTime, urgency, managerIds: selected }))}
+        <button type="button" disabled={busy || selected.length === 0} onClick={() => run(() => forwardSupportTask(task.id, { text, dueDate, dueTime, urgency, managerIds: selected, clientName }))}
           style={{ ...primaryBtn, opacity: busy || selected.length === 0 ? 0.6 : 1 }}>
           {busy ? 'Working…' : `Forward as task${selected.length ? ` (${selected.length})` : ''}`}
         </button>
@@ -83,18 +85,20 @@ function ForwardForm({ task, managers, roleLabels }) {
   );
 }
 
-function ApproveForm({ query, supportPeople }) {
+function ApproveForm({ query, supportPeople, clients }) {
+  const [clientName, setClientName] = useState(query.client_name || '');
   const [selected, setSelected] = useState([]);
   const { busy, error, run } = useAction();
 
   return (
     <div style={{ marginTop: '0.9rem', paddingTop: '0.9rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+      <ClientSelect id={`apr-client-${query.id}`} clients={clients} value={clientName} onChange={setClientName} />
       {supportPeople.length === 0
         ? <div style={mutedStyle}>There is no support person yet. Add a user with the Support role on the <Link href="/admin/users" style={{ color: 'var(--primary)' }}>Users</Link> page.</div>
         : <PeoplePicker legend="Send to support" people={supportPeople} selected={selected} onChange={setSelected} />}
       <ErrorText error={error} />
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <button type="button" disabled={busy || selected.length === 0} onClick={() => run(() => approveSupportQuery(query.id, selected))}
+        <button type="button" disabled={busy || selected.length === 0} onClick={() => run(() => approveSupportQuery(query.id, selected, clientName))}
           style={{ ...primaryBtn, opacity: busy || selected.length === 0 ? 0.6 : 1 }}>
           {busy ? 'Working…' : `Approve and send${selected.length ? ` (${selected.length})` : ''}`}
         </button>
@@ -113,7 +117,7 @@ function Section({ title, empty, children }) {
   );
 }
 
-export default function AdminSupport({ tasks, queries, managers, supportPeople, roleLabels }) {
+export default function AdminSupport({ tasks, queries, managers, supportPeople, roleLabels, clients }) {
   useAutoRefresh();
   const pendingTasks = tasks.filter((t) => t.status === 'pending');
   const pendingQueries = queries.filter((q) => q.status === 'pending');
@@ -133,7 +137,7 @@ export default function AdminSupport({ tasks, queries, managers, supportPeople, 
       {tab === 'tasks' ? (
         <>
           <Section title="Waiting for you" empty="No task is waiting.">
-            {pendingTasks.map((t) => <TaskCard key={t.id} task={t} showFrom><ForwardForm task={t} managers={managers} roleLabels={roleLabels} /></TaskCard>)}
+            {pendingTasks.map((t) => <TaskCard key={t.id} task={t} showFrom><ForwardForm task={t} managers={managers} roleLabels={roleLabels} clients={clients} /></TaskCard>)}
           </Section>
           <Section title="Handled" empty="Nothing yet.">
             {tasks.filter((t) => t.status !== 'pending').map((t) => <TaskCard key={t.id} task={t} showFrom />)}
@@ -143,7 +147,7 @@ export default function AdminSupport({ tasks, queries, managers, supportPeople, 
       ) : (
         <>
           <Section title="Waiting for approval" empty="No query is waiting.">
-            {pendingQueries.map((q) => <QueryCard key={q.id} query={q} showFrom><ApproveForm query={q} supportPeople={supportPeople} /></QueryCard>)}
+            {pendingQueries.map((q) => <QueryCard key={q.id} query={q} showFrom><ApproveForm query={q} supportPeople={supportPeople} clients={clients} /></QueryCard>)}
           </Section>
           <Section title="Handled" empty="Nothing yet.">
             {queries.filter((q) => q.status !== 'pending').map((q) => <QueryCard key={q.id} query={q} showFrom />)}

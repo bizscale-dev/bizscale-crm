@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { sendSupportQuery } from '@/lib/supportActions';
-import { QueryCard, ErrorText, useAction, useAutoRefresh, cardStyle, inputStyle, labelStyle, primaryBtn, mutedStyle } from './shared';
+import { QueryCard, ClientSelect, ErrorText, useAction, useAutoRefresh, cardStyle, inputStyle, labelStyle, primaryBtn, mutedStyle } from './shared';
 
 // The managers' Support page: send a query (it goes to the admin first) and read the replies.
-export default function ManagerSupport({ queries }) {
+export default function ManagerSupport({ queries, clients }) {
   useAutoRefresh();
+  const [clientName, setClientName] = useState('');
   const [text, setText] = useState('');
   const [sent, setSent] = useState(false);
   const { busy, error, run } = useAction();
@@ -14,7 +15,7 @@ export default function ManagerSupport({ queries }) {
   const submit = (e) => {
     e.preventDefault();
     setSent(false);
-    run(() => sendSupportQuery(text), () => { setText(''); setSent(true); });
+    run(() => sendSupportQuery(text, clientName), () => { setClientName(''); setText(''); setSent(true); });
   };
 
   return (
@@ -25,6 +26,7 @@ export default function ManagerSupport({ queries }) {
       </div>
 
       <form onSubmit={submit} style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <ClientSelect id="support-query-client" clients={clients} value={clientName} onChange={setClientName} />
         <div>
           <label style={labelStyle} htmlFor="support-query">Your query</label>
           <textarea id="support-query" value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder="What do you need from Support?" style={{ ...inputStyle, resize: 'vertical' }} required />

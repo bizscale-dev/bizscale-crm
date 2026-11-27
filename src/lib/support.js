@@ -23,6 +23,17 @@ export async function getActiveUsersByRole(db, roles) {
   `).all(...roles);
 }
 
+// The clients that can be picked: the active clients of the active SEO campaign (synced from the SEO
+// client sheet).
+export async function getSeoClientNames(db) {
+  const rows = await db.prepare(`
+    SELECT TRIM(c.name) AS name FROM clients c
+    WHERE c.is_active = 1 AND c.campaign_id = (SELECT id FROM campaigns WHERE status = 'active' ORDER BY id DESC LIMIT 1)
+    ORDER BY LOWER(TRIM(c.name))
+  `).all();
+  return [...new Set(rows.map((r) => r.name).filter(Boolean))];
+}
+
 export async function notifyAdmins(db, { title, message }) {
   const admins = await getActiveUsersByRole(db, ['admin']);
   await createNotificationsForUsers(db, admins.map((a) => a.id), { title, message, link: '/admin/support' });
@@ -53,7 +64,7 @@ const inList = (ids) => ids.map(() => '?').join(',');
  */
 export async function loadSupportTasks(db, { createdBy } = {}) {
   const tasks = await db.prepare(`
-    SELECT s.id, s.task_text, s.urgency, s.due_date, s.due_time, s.status, s.admin_note, s.manager_task_id,
+    SELECT s.id, s.client_name, s.task_text, s.urgency, s.due_date, s.due_time, s.status, s.admin_note, s.manager_task_id,
       s.created_at, s.reviewed_at, u.name AS from_name,
       t.task_text AS sent_text, t.due_date AS sent_due_date, t.due_time AS sent_due_time, t.urgency AS sent_urgency
     FROM support_tasks s
@@ -95,7 +106,7 @@ export async function loadSupportQueries(db, { createdBy, recipient } = {}) {
     args.push(recipient);
   }
   const queries = await db.prepare(`
-    SELECT q.id, q.query_text, q.status, q.admin_note, q.created_at, q.reviewed_at, u.name AS from_name, u.role AS from_role
+    SELECT q.id, q.client_name, q.query_text, q.status, q.admin_note, q.created_at, q.reviewed_at, u.name AS from_name, u.role AS from_role
     FROM support_queries q LEFT JOIN users u ON u.id = q.created_by
     ${where} ORDER BY q.id DESC LIMIT 200
   `).all(...args);

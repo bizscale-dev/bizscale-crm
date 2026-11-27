@@ -5,7 +5,8 @@ import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { parseUrgency } from '@/lib/taskUrgency';
 import { createNotificationsForUsers, getTasksLinkForRole } from '@/lib/notifications';
-import { SUPPORT_MANAGER_ROLES, supportLinkForRole, getActiveUsersByRole, notifyAdmins } from '@/lib/support';
+import { SUPPORT_MANAGER_ROLES, supportLinkForRole, getActiveUsersByRole, getSeoClientNames, notifyAdmins } from '@/lib/support';
+import { withClient } from '@/lib/supportText';
 
 const MAX_TEXT = 5000;
 const clean = (v) => String(v || '').trim();
@@ -21,6 +22,18 @@ async function requireRole(roles) {
   if (!user || !roles.includes(user.role)) return { error: 'Not authorized' };
   return { db, user };
 }
+
+// The picked client, if any: must be on the SEO client list. `current` is the one already stored, which
+// stays valid even after it leaves the list (for example when a new month's campaign starts).
+async function resolveClient(db, value, current) {
+  const name = clean(value);
+  if (!name) return { client: null };
+  if (name === current) return { client: current };
+  const match = (await getSeoClientNames(db)).find((c) => c.toLowerCase() === name.toLowerCase());
+  return match ? { client: match } : { error: 'Pick a client from the list' };
+}
+
+const about = (client) => (client ? `${client}: ` : '');
 
 function checkTaskFields({ text, dueDate, dueTime }) {
   if (!clean(text)) return 'Describe the task';
@@ -43,15 +56,17 @@ function fail(where, err) {
 
 /* ---------- Support person ---------- */
 
-export async function createSupportTask({ text, dueDate, dueTime, urgency }) {
+export async function createSupportTask({ text, dueDate, dueTime, urgency, clientName }) {
   const { db, user, error } = await requireRole(['support']);
   if (error) return { error };
   const problem = checkTaskFields({ text, dueDate, dueTime });
   if (problem) return { error: problem };
   try {
-    await db.prepare('INSERT INTO support_tasks (task_text, urgency, due_date, due_time, created_by) VALUES (?, ?, ?, ?, ?)')
-      .run(clean(text), parseUrgency(urgency), clean(dueDate), clean(dueTime), user.id);
-    await notifyAdmins(db, { title: 'New task from Support', message: `${user.name}: ${clean(text).slice(0, 140)}` });
+    const picked = await resolveClient(db, clientName);
+    if (picked.error) return { error: picked.error };
+    await db.prepare('INSERT INTO support_tasks (task_text, urgency, due_date, due_time, created_by, client_name) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(clean(text), parseUrgency(urgency), clean(dueDate), clean(dueTime), user.id, picked.client);
+    await notifyAdmins(db, { title: 'New task from Support', message: `${user.name}: ${about(picked.client)}${clean(text).slice(0, 140)}` });
     refresh();
     return { success: true };
   } catch (err) {
@@ -87,15 +102,17 @@ export async function replyToSupportQuery(queryId, text) {
 
 /* ---------- Manager ---------- */
 
-export async function sendSupportQuery(text) {
+export async function sendSupportQuery(text, clientName) {
   const { db, user, error } = await requireRole(SUPPORT_MANAGER_ROLES);
   if (error) return { error };
   const query = clean(text);
   if (!query) return { error: 'Write your query' };
   if (query.length > MAX_TEXT) return { error: `The query is too long (max ${MAX_TEXT} characters)` };
   try {
-    await db.prepare('INSERT INTO support_queries (query_text, created_by) VALUES (?, ?)').run(query, user.id);
-    await notifyAdmins(db, { title: 'Query for Support needs approval', message: `${user.name}: ${query.slice(0, 140)}` });
+    const picked = await resolveClient(db, clientName);
+    if (picked.error) return { error: picked.error };
+    await db.prepare('INSERT INTO support_queries (query_text, created_by, client_name) VALUES (?, ?, ?)').run(query, user.id, picked.client);
+    await notifyAdmins(db, { title: 'Query for Support needs approval', message: `${user.name}: ${about(picked.client)}${query.slice(0, 140)}` });
     refresh();
     return { success: true };
   } catch (err) {
@@ -105,7 +122,7 @@ export async function sendSupportQuery(text) {
 
 /* ---------- Admin ---------- */
 
-export async function forwardSupportTask(supportTaskId, { text, dueDate, dueTime, urgency, managerIds }) {
+export async function forwardSupportTask(supportTaskId, { text, dueDate, dueTime, urgency, managerIds, clientName }) {
   const { db, user, error } = await requireRole(['admin']);
   if (error) return { error };
   const id = parseInt(supportTaskId, 10);
@@ -116,19 +133,22 @@ export async function forwardSupportTask(supportTaskId, { text, dueDate, dueTime
   try {
     const managers = (await getActiveUsersByRole(db, SUPPORT_MANAGER_ROLES)).filter((m) => wanted.includes(m.id));
     if (managers.length === 0) return { error: 'None of the selected managers are valid' };
-    const source = await db.prepare('SELECT created_by FROM support_tasks WHERE id = ?').get(id || 0);
+    const source = await db.prepare('SELECT created_by, client_name FROM support_tasks WHERE id = ?').get(id || 0);
     if (!source) return { error: 'Task not found' };
+    const picked = await resolveClient(db, clientName, source.client_name);
+    if (picked.error) return { error: picked.error };
+    const managerText = withClient(picked.client, clean(text));
 
     // One transaction: claim the pending support task (so it can't be forwarded twice) and create
     // the manager task with its assignees.
     const forward = db.transaction(async (tx) => {
       const claimed = await tx.prepare(`
-        UPDATE support_tasks SET status = 'forwarded', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
+        UPDATE support_tasks SET status = 'forwarded', client_name = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
         WHERE id = ? AND status = 'pending'
-      `).run(user.id, id);
+      `).run(picked.client, user.id, id);
       if (!claimed.changes) return false;
       const task = await tx.prepare('INSERT INTO manager_tasks (task_text, due_date, due_time, created_by, urgency) VALUES (?, ?, ?, ?, ?)')
-        .run(clean(text), clean(dueDate), clean(dueTime), user.id, parseUrgency(urgency));
+        .run(managerText, clean(dueDate), clean(dueTime), user.id, parseUrgency(urgency));
       for (const m of managers) {
         await tx.prepare('INSERT INTO manager_task_assignees (task_id, user_id) VALUES (?, ?)').run(task.lastInsertRowid, m.id);
       }
@@ -140,13 +160,13 @@ export async function forwardSupportTask(supportTaskId, { text, dueDate, dueTime
     for (const m of managers) {
       await createNotificationsForUsers(db, [m.id], {
         title: 'New Task from Support',
-        message: `${clean(text).slice(0, 140)} — due ${clean(dueDate)} ${clean(dueTime)}`,
+        message: `${about(picked.client)}${clean(text).slice(0, 140)} — due ${clean(dueDate)} ${clean(dueTime)}`,
         link: getTasksLinkForRole(m.role),
       });
     }
     await createNotificationsForUsers(db, [source.created_by], {
       title: 'Your task was sent to the managers',
-      message: `${managers.map((m) => m.name).join(', ')}: ${clean(text).slice(0, 120)}`,
+      message: `${managers.map((m) => m.name).join(', ')}: ${about(picked.client)}${clean(text).slice(0, 120)}`,
       link: '/support/tasks',
     });
     refresh();
@@ -177,7 +197,7 @@ export async function rejectSupportTask(supportTaskId, note) {
   }
 }
 
-export async function approveSupportQuery(queryId, supportIds) {
+export async function approveSupportQuery(queryId, supportIds, clientName) {
   const { db, user, error } = await requireRole(['admin']);
   if (error) return { error };
   const id = parseInt(queryId, 10);
@@ -186,12 +206,16 @@ export async function approveSupportQuery(queryId, supportIds) {
   try {
     const people = (await getActiveUsersByRole(db, ['support'])).filter((p) => wanted.includes(p.id));
     if (people.length === 0) return { error: 'None of the selected support people are valid' };
+    const source = await db.prepare('SELECT client_name FROM support_queries WHERE id = ?').get(id || 0);
+    if (!source) return { error: 'Query not found' };
+    const picked = await resolveClient(db, clientName, source.client_name);
+    if (picked.error) return { error: picked.error };
 
     const approve = db.transaction(async (tx) => {
       const claimed = await tx.prepare(`
-        UPDATE support_queries SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
+        UPDATE support_queries SET status = 'approved', client_name = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
         WHERE id = ? AND status = 'pending'
-      `).run(user.id, id || 0);
+      `).run(picked.client, user.id, id || 0);
       if (!claimed.changes) return false;
       for (const p of people) {
         await tx.prepare('INSERT OR IGNORE INTO support_query_recipients (query_id, user_id) VALUES (?, ?)').run(id, p.id);
@@ -204,7 +228,7 @@ export async function approveSupportQuery(queryId, supportIds) {
       SELECT q.query_text, q.created_by, u.name, u.role FROM support_queries q LEFT JOIN users u ON u.id = q.created_by WHERE q.id = ?
     `).get(id);
     await createNotificationsForUsers(db, people.map((p) => p.id), {
-      title: 'New query', message: `${query.name || 'A manager'}: ${query.query_text.slice(0, 140)}`, link: '/support',
+      title: 'New query', message: `${query.name || 'A manager'}: ${about(picked.client)}${query.query_text.slice(0, 140)}`, link: '/support',
     });
     await createNotificationsForUsers(db, [query.created_by], {
       title: 'Your query was sent to Support',

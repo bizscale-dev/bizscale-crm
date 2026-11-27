@@ -1027,6 +1027,11 @@ async function runMigrationsBody(raw) {
       seen_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
+    // Optional SEO client a support task / query is about. Stored by name: clients are copied into
+    // every month's campaign, so their ids change. Listed here (not with the other ALTERs) because the
+    // tables above must exist first.
+    "ALTER TABLE support_tasks ADD COLUMN client_name TEXT",
+    "ALTER TABLE support_queries ADD COLUMN client_name TEXT",
   ];
 
   for (const sql of createTableStatements) {
