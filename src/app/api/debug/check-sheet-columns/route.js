@@ -4,6 +4,7 @@
  */
 import { getDb } from '@/lib/db';
 import { parseGoogleSheetUrl } from '@/lib/googleSheets';
+import { refuseUnlessRole } from '@/lib/authz';
 
 async function getStoredToken() {
   const db = await getDb();
@@ -23,6 +24,9 @@ async function getStoredToken() {
 }
 
 export async function GET(request) {
+  const denied = await refuseUnlessRole(['admin']);
+  if (denied) return denied;
+
   try {
     const { searchParams } = new URL(request.url);
     const sheetUrl = searchParams.get('sheetUrl');

@@ -2,6 +2,7 @@
 
 import { getDb } from '@/lib/db';
 import { LINK_TYPE_LABELS } from '@/lib/services';
+import { assertAdmin } from '@/lib/authz';
 
 /**
  * Everything a single SEO Associate / Writer / Web SEO Associate did on one
@@ -13,6 +14,7 @@ import { LINK_TYPE_LABELS } from '@/lib/services';
  * (not yet captured — that happens tomorrow at 12:25 AM) has nothing to show yet.
  */
 export async function getUserActivityReport(userId, date) {
+  await assertAdmin();
   const db = await getDb();
 
   const user = await db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(userId);

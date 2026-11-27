@@ -3,8 +3,10 @@
 import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { revalidatePath } from 'next/cache';
+import { assertAdmin, cronHeaders } from '@/lib/authz';
 
 export async function triggerManualSync(campaignId) {
+  await assertAdmin();
   try {
     const db = await getDb();
     
@@ -31,7 +33,7 @@ export async function triggerManualSync(campaignId) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const syncResponse = await fetch(`${baseUrl}/api/google-sheets/sync-clients`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...cronHeaders() },
       body: JSON.stringify({ sheetUrl, campaignId: campaign.id }),
     });
 
@@ -46,7 +48,7 @@ export async function triggerManualSync(campaignId) {
     if (syncData.changes) {
       const applyResponse = await fetch(`${baseUrl}/api/google-sheets/sync-apply-changes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...cronHeaders() },
         body: JSON.stringify({ 
           changes: syncData.changes,
           campaignId: campaign.id,
@@ -64,7 +66,7 @@ export async function triggerManualSync(campaignId) {
     if (syncData.changes && syncData.changes.added && syncData.changes.added.length > 0) {
       const assignResponse = await fetch(`${baseUrl}/api/google-sheets/sync-assign-new-clients`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...cronHeaders() },
         body: JSON.stringify({ 
           newClients: syncData.changes.added,
           associateAssignments: syncData.associateAssignments,
@@ -96,6 +98,7 @@ export async function triggerManualSync(campaignId) {
 }
 
 export async function createClient(formData) {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
 
@@ -139,6 +142,7 @@ export async function createClient(formData) {
 }
 
 export async function updateClient(formData) {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
 
@@ -173,6 +177,7 @@ export async function updateClient(formData) {
 }
 
 export async function bulkCreateClients(formData) {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
 
@@ -211,6 +216,7 @@ export async function bulkCreateClients(formData) {
 }
 
 export async function importClientsFromGoogleSheet(formData) {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
 
@@ -246,6 +252,7 @@ export async function importClientsFromGoogleSheet(formData) {
 }
 
 export async function deleteClient(clientId) {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
 
@@ -277,6 +284,7 @@ export async function deleteClient(clientId) {
 }
 
 export async function deactivateClient(clientId) {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
 
@@ -308,6 +316,7 @@ export async function deactivateClient(clientId) {
 }
 
 export async function activateClient(clientId) {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
 
@@ -332,6 +341,7 @@ export async function activateClient(clientId) {
 }
 
 export async function clearAllClients() {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
 
@@ -360,6 +370,7 @@ export async function clearAllClients() {
 }
 
 export async function toggleClientActive(clientId, currentStatus) {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
 

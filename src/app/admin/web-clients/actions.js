@@ -6,8 +6,10 @@ import { generateWebSeoTasks } from '@/lib/webSeoTaskGenerator';
 import { runWebClientsImport } from '@/lib/webClientsImport';
 import { toggleOffDay } from '@/lib/webSeoCampaignOffDays';
 import { revalidatePath } from 'next/cache';
+import { assertAdmin } from '@/lib/authz';
 
 export async function toggleWebSeoCampaignOffDayAction(dateStr, reason = null) {
+  await assertAdmin();
   const campaign = await getActiveWebSeoCampaign();
   if (!campaign) return { error: 'No active Web SEO campaign found' };
 
@@ -25,6 +27,7 @@ export async function toggleWebSeoCampaignOffDayAction(dateStr, reason = null) {
 // src/lib/db.js). Creating one auto-completes whichever Web SEO campaign was
 // previously active, same UX as Writer Campaigns.
 export async function createWebSeoCampaign(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
 
   const name = (formData.get('name') || '').trim() || 'Web SEO Campaign';
@@ -59,6 +62,7 @@ export async function createWebSeoCampaign(prevState, formData) {
 // numbers stay intact and viewable on its detail page
 // (/admin/web-clients/campaigns/[id]).
 export async function markWebSeoCampaignCompleted(id) {
+  await assertAdmin();
   const db = await getDb();
   try {
     await db.prepare("UPDATE webseo_campaigns SET status = 'completed' WHERE id = ?").run(id);
@@ -72,6 +76,7 @@ export async function markWebSeoCampaignCompleted(id) {
 }
 
 export async function deleteWebSeoCampaign(id) {
+  await assertAdmin();
   const db = await getDb();
   try {
     await db.prepare('DELETE FROM webseo_tasks WHERE webseo_campaign_id = ?').run(id);
@@ -89,6 +94,7 @@ export async function deleteWebSeoCampaign(id) {
 }
 
 export async function importWebClientsFromGoogleSheet(formData) {
+  await assertAdmin();
   try {
     const sheetUrl = formData.get('sheet_url');
     const result = await runWebClientsImport(sheetUrl);
@@ -113,6 +119,7 @@ export async function importWebClientsFromGoogleSheet(formData) {
 // (see upsertClient in src/lib/webClientsImport.js), and applied immediately to
 // every currently-imported client carrying that exact sheet name.
 export async function saveWebAssociateMapping(sheetName, associateId) {
+  await assertAdmin();
   const db = await getDb();
   const trimmedName = (sheetName || '').trim();
   const id = parseInt(associateId, 10);
@@ -155,6 +162,7 @@ export async function saveWebAssociateMapping(sheetName, associateId) {
 }
 
 export async function assignWebAssociate(clientId, associateId) {
+  await assertAdmin();
   try {
     const db = await getDb();
     const campaign = await getActiveWebSeoCampaign();
@@ -212,6 +220,7 @@ export async function assignWebAssociate(clientId, associateId) {
 // removed (today and past stay, so history and counts are kept) and the sheet import won't
 // switch it back on. Other clients' schedules are not regenerated, so nothing else shifts.
 export async function deactivateWebClient(clientId) {
+  await assertAdmin();
   try {
     const db = await getDb();
     const client = await db.prepare('SELECT id, webseo_campaign_id FROM web_clients WHERE id = ?').get(clientId);
@@ -234,6 +243,7 @@ export async function deactivateWebClient(clientId) {
 // Turns it back on and lets the sheet import manage it again; its tasks come back the next
 // time the web task schedule is generated (the nightly sync, or any assignment change).
 export async function activateWebClient(clientId) {
+  await assertAdmin();
   try {
     const db = await getDb();
     const result = await db.prepare('UPDATE web_clients SET is_active = 1, manually_deactivated = 0 WHERE id = ?').run(clientId);

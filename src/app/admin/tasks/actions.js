@@ -5,8 +5,10 @@ import { getActiveCampaign, getActiveWebSeoCampaign } from '@/lib/services';
 import { generateSEOTasks } from '@/lib/taskService';
 import { generateWebSeoTasks } from '@/lib/webSeoTaskGenerator';
 import { revalidatePath } from 'next/cache';
+import { assertAdmin } from '@/lib/authz';
 
 export async function generateSEO() {
+  await assertAdmin();
   const campaign = await getActiveCampaign();
   if (!campaign) return { error: 'No active campaign' };
 
@@ -20,6 +22,7 @@ export async function generateSEO() {
 }
 
 export async function generateAll() {
+  await assertAdmin();
   const campaign = await getActiveCampaign();
   if (!campaign) return { error: 'No active campaign' };
 
@@ -33,6 +36,7 @@ export async function generateAll() {
 }
 
 export async function generateWebSeo() {
+  await assertAdmin();
   const campaign = await getActiveWebSeoCampaign();
   if (!campaign) return { error: 'No active Web SEO campaign' };
 
@@ -47,6 +51,7 @@ export async function generateWebSeo() {
 }
 
 export async function clearWebSeo() {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveWebSeoCampaign();
   if (!campaign) return { error: 'No active Web SEO campaign' };
@@ -62,6 +67,7 @@ export async function clearWebSeo() {
 }
 
 export async function clearSEO() {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
   if (!campaign) return { error: 'No active campaign' };
@@ -76,6 +82,7 @@ export async function clearSEO() {
 }
 
 export async function clearWriting() {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
   if (!campaign) return { error: 'No active campaign' };

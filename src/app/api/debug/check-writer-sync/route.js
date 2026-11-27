@@ -1,8 +1,12 @@
 import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
 import { parseGoogleSheetUrl, fetchGoogleSheetRows } from '@/lib/googleSheets';
+import { refuseUnlessRole } from '@/lib/authz';
 
 export async function GET(request) {
+  const denied = await refuseUnlessRole(['admin']);
+  if (denied) return denied;
+
   try {
     const db = await getDb();
     const campaign = await getActiveCampaign();

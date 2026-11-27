@@ -4,8 +4,10 @@ import { getDb } from '@/lib/db';
 import { revalidatePath } from 'next/cache';
 import { snapshotCampaignClients } from '@/lib/campaignClients';
 import { redirect } from 'next/navigation';
+import { assertAdmin } from '@/lib/authz';
 
 export async function createCampaign(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
   
   const name = formData.get('name');
@@ -48,6 +50,7 @@ export async function createCampaign(prevState, formData) {
 }
 
 export async function updateCampaign(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
   const id = formData.get('id');
   
@@ -93,6 +96,7 @@ export async function updateCampaign(prevState, formData) {
 }
 
 export async function activateCampaign(id) {
+  await assertAdmin();
   const db = await getDb();
   try {
     await db.prepare("UPDATE campaigns SET status = 'paused' WHERE status = 'active'").run();
@@ -110,6 +114,7 @@ export async function activateCampaign(id) {
 // touch clients, tasks, or any other data, so a completed campaign's real
 // numbers stay intact and viewable on its detail page (/admin/campaign/[id]).
 export async function markCampaignCompleted(id) {
+  await assertAdmin();
   const db = await getDb();
   try {
     await db.prepare("UPDATE campaigns SET status = 'completed' WHERE id = ?").run(id);
@@ -133,6 +138,7 @@ export async function markCampaignCompleted(id) {
 }
 
 export async function deleteCampaign(id) {
+  await assertAdmin();
   const db = await getDb();
   try {
     // Delete all related data in cascading order. writing_tasks/writer_assignments

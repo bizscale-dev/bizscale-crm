@@ -4,8 +4,10 @@ import { getDb } from '@/lib/db';
 import { LINK_TYPES } from '@/lib/linkTargetConstants';
 import { enrollClientInFunnel, advanceOneFunnelClient, advanceMonth1Week, moveMonth1WeekBack, jumpFunnelClientToMonth, graduateFunnelClientNow, graduateFunnelClientsNow, enrollHeldClientAtMonth, moveHeldClientToNormal } from '@/lib/funnel';
 import { revalidatePath } from 'next/cache';
+import { assertAdmin } from '@/lib/authz';
 
 export async function addFunnelTemplate(campaignId, templateData) {
+  await assertAdmin();
   const db = await getDb();
 
   try {
@@ -39,6 +41,7 @@ export async function addFunnelTemplate(campaignId, templateData) {
 }
 
 export async function deleteFunnelTemplate(templateId) {
+  await assertAdmin();
   const db = await getDb();
 
   try {
@@ -51,6 +54,7 @@ export async function deleteFunnelTemplate(templateId) {
 }
 
 export async function enrollClientInFunnelAction(clientId, campaignId, startWeek = 1) {
+  await assertAdmin();
   try {
     await enrollClientInFunnel(clientId, campaignId, undefined, startWeek);
     revalidatePath('/admin/funnel');
@@ -66,6 +70,7 @@ export async function enrollClientInFunnelAction(clientId, campaignId, startWeek
 // advanceMonth1Week in src/lib/funnel.js) instead of waiting for a manual month-level
 // advance — prior weeks' history stays generated, only the current week moves forward.
 export async function advanceMonth1WeekAction(clientId) {
+  await assertAdmin();
   try {
     const result = await advanceMonth1Week(clientId);
     if (!result.advanced) {
@@ -82,6 +87,7 @@ export async function advanceMonth1WeekAction(clientId) {
 // Manual: move a Month 1 client back one week — the week being left is emptied,
 // earlier weeks' history stays (see moveMonth1WeekBack in src/lib/funnel.js).
 export async function moveMonth1WeekBackAction(clientId) {
+  await assertAdmin();
   try {
     const result = await moveMonth1WeekBack(clientId);
     if (!result.moved) return { error: result.error || 'Could not move back' };
@@ -96,6 +102,7 @@ export async function moveMonth1WeekBackAction(clientId) {
 // A held client can skip straight to Funnel Month 2 or 3 instead of starting at
 // Month 1 — used by the "On Hold" section's Month 2/3 buttons.
 export async function enrollHeldClientAtMonthAction(clientId, campaignId, targetMonth) {
+  await assertAdmin();
   try {
     const result = await enrollHeldClientAtMonth(clientId, campaignId, targetMonth);
     if (!result.moved) {
@@ -113,6 +120,7 @@ export async function enrollHeldClientAtMonthAction(clientId, campaignId, target
 // A held client can also skip the Funnel entirely and go straight into the normal
 // client list — used by the "On Hold" section's "Move to Regular Clients" button.
 export async function moveHeldClientToNormalAction(clientId, campaignId) {
+  await assertAdmin();
   try {
     const result = await moveHeldClientToNormal(clientId, campaignId);
     if (!result.moved) {
@@ -130,6 +138,7 @@ export async function moveHeldClientToNormalAction(clientId, campaignId) {
 // Manual escape hatch: force a client to advance to their next funnel month (or
 // graduate, if already in month 3) instead of waiting for the daily cron sweep.
 export async function forceAdvanceFunnelClientAction(clientId) {
+  await assertAdmin();
   try {
     const result = await advanceOneFunnelClient(clientId);
     if (!result.advanced) {
@@ -150,6 +159,7 @@ export async function forceAdvanceFunnelClientAction(clientId) {
 // through seo_tasks day-by-day and Google Sheet-synced like a normal client),
 // the skipped month's tasks are never created.
 export async function jumpFunnelClientToMonthAction(clientId, targetMonth) {
+  await assertAdmin();
   try {
     const result = await jumpFunnelClientToMonth(clientId, targetMonth);
     if (!result.moved) {
@@ -167,6 +177,7 @@ export async function jumpFunnelClientToMonthAction(clientId, targetMonth) {
 // Skip whatever funnel months remain and move a client straight into the regular
 // client list right now, instead of advancing one month at a time.
 export async function moveFunnelClientToNormalAction(clientId) {
+  await assertAdmin();
   try {
     const result = await graduateFunnelClientNow(clientId);
     if (!result.graduated) {
@@ -183,6 +194,7 @@ export async function moveFunnelClientToNormalAction(clientId) {
 
 // Move several funnel clients straight into the regular client list in one go.
 export async function moveFunnelClientsToNormalAction(clientIds) {
+  await assertAdmin();
   try {
     if (!Array.isArray(clientIds) || clientIds.length === 0) {
       return { error: 'No clients selected' };
@@ -207,6 +219,7 @@ export async function moveFunnelClientsToNormalAction(clientIds) {
 }
 
 export async function updateFunnelBonusTargets(campaignId, formData) {
+  await assertAdmin();
   const db = await getDb();
 
   try {

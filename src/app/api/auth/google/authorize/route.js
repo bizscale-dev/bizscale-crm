@@ -1,4 +1,9 @@
+import { refuseUnlessRole } from '@/lib/authz';
+
 export async function GET(request) {
+  const denied = await refuseUnlessRole(['admin']);
+  if (denied) return denied;
+
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI;
 

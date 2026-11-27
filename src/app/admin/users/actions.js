@@ -5,8 +5,10 @@ import { getActiveCampaign } from '@/lib/services';
 import { generateSEOTasks } from '@/lib/taskService';
 import bcrypt from 'bcryptjs';
 import { revalidatePath } from 'next/cache';
+import { assertAdmin } from '@/lib/authz';
 
 export async function createUser(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
   const name = formData.get('name');
   const email = formData.get('email');
@@ -27,6 +29,7 @@ export async function createUser(prevState, formData) {
 }
 
 export async function updateUser(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
   const id = formData.get('id');
   const name = formData.get('name');
@@ -53,6 +56,7 @@ export async function updateUser(prevState, formData) {
 }
 
 export async function deleteUser(id) {
+  await assertAdmin();
   const db = await getDb();
   try {
     // First delete all related records (due to foreign key constraints)
@@ -87,6 +91,7 @@ export async function deleteUser(id) {
 }
 
 export async function assignAssociate(formData) {
+  await assertAdmin();
   const db = await getDb();
   const id = formData.get('id');
   const campaign = await getActiveCampaign();
@@ -123,6 +128,7 @@ export async function assignAssociate(formData) {
 }
 
 export async function assignWriter(formData) {
+  await assertAdmin();
   const db = await getDb();
   const id = formData.get('id');
   const campaign = await getActiveCampaign();
@@ -143,6 +149,7 @@ export async function assignWriter(formData) {
 }
 
 export async function unassignUser(id) {
+  await assertAdmin();
   const db = await getDb();
   const campaign = await getActiveCampaign();
   if (!campaign) return { error: 'No active campaign' };
@@ -158,6 +165,7 @@ export async function unassignUser(id) {
 }
 
 export async function importAssociatesFromSheet(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
   const associatesJson = formData.get('associates_json');
 

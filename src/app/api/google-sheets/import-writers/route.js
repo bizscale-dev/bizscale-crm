@@ -5,6 +5,7 @@
  */
 import { getDb, initDb } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import { refuseUnlessAdminOrCron } from '@/lib/authz';
 
 // 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
 // for why this matters (a killed function fails silently with no error surfaced). This
@@ -12,6 +13,9 @@ import bcrypt from 'bcryptjs';
 export const maxDuration = 60;
 
 export async function POST(request) {
+  const denied = await refuseUnlessAdminOrCron(request);
+  if (denied) return denied;
+
   try {
     await initDb();
     const db = await getDb();

@@ -5,6 +5,7 @@ import { runWriterOffpageSync } from '@/lib/writerOffpageSync';
 import { getActiveWriterCampaign } from '@/lib/services';
 import { listOffDays, toggleOffDay } from '@/lib/writerCampaignOffDays';
 import { revalidatePath } from 'next/cache';
+import { assertAdmin } from '@/lib/authz';
 
 // Creates a new, independent Writer Campaign — its own start_date/total_days,
 // fully decoupled from the main (SEO) campaigns table, so writers can be given a
@@ -13,6 +14,7 @@ import { revalidatePath } from 'next/cache';
 // automatically from the GBP-Off/Web-Off sheets on sync — no SEO campaign or
 // client list is needed to create or run a writer campaign.
 export async function createWriterCampaign(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
 
   const name = (formData.get('name') || '').trim() || null;
@@ -57,6 +59,7 @@ export async function createWriterCampaign(prevState, formData) {
 // real numbers stay intact and viewable on its detail page
 // (/admin/writers/campaigns/[id]).
 export async function markWriterCampaignCompleted(id) {
+  await assertAdmin();
   const db = await getDb();
   try {
     await db.prepare("UPDATE writer_campaigns SET status = 'completed' WHERE id = ?").run(id);
@@ -69,6 +72,7 @@ export async function markWriterCampaignCompleted(id) {
 }
 
 export async function deleteWriterCampaign(id) {
+  await assertAdmin();
   const db = await getDb();
   try {
     await db.prepare('DELETE FROM writer_offpage_tasks WHERE writer_campaign_id = ?').run(id);
@@ -90,6 +94,7 @@ export async function deleteWriterCampaign(id) {
 // writerOffpageSync.js) — same logic the twice-daily cron runs, exposed here so an
 // admin doesn't have to wait for the next scheduled run.
 export async function regenerateWriterTasks() {
+  await assertAdmin();
   const writerCampaign = await getActiveWriterCampaign();
 
   if (!writerCampaign) {
@@ -116,6 +121,7 @@ export async function regenerateWriterTasks() {
 }
 
 export async function clearWriterTasks() {
+  await assertAdmin();
   const db = await getDb();
   const writerCampaign = await getActiveWriterCampaign();
 
@@ -135,6 +141,7 @@ export async function clearWriterTasks() {
 }
 
 export async function getOffDaysForActiveWriterCampaignAction() {
+  await assertAdmin();
   const writerCampaign = await getActiveWriterCampaign();
   if (!writerCampaign) return [];
 
@@ -143,6 +150,7 @@ export async function getOffDaysForActiveWriterCampaignAction() {
 }
 
 export async function toggleWriterCampaignOffDayAction(dateStr, reason = null) {
+  await assertAdmin();
   const writerCampaign = await getActiveWriterCampaign();
   if (!writerCampaign) return { error: 'No active writer campaign found' };
 

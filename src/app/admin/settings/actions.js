@@ -2,6 +2,7 @@
 
 import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
+import { assertAdmin } from '@/lib/authz';
 import bcrypt from 'bcryptjs';
 import { revalidatePath } from 'next/cache';
 
@@ -35,9 +36,8 @@ export async function updatePassword(prevState, formData) {
 }
 
 export async function disconnectGoogleAccount() {
+  await assertAdmin();
   const db = await getDb();
-  const session = await verifySession();
-  if (!session) return { error: 'Not authenticated' };
 
   try {
     await db.prepare('DELETE FROM google_oauth_tokens WHERE user_id IS NULL').run();
@@ -49,12 +49,8 @@ export async function disconnectGoogleAccount() {
 }
 
 export async function updateGoogleSheetsUrl(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
-  const session = await verifySession();
-  
-  if (!session) {
-    return { error: 'Not authenticated' };
-  }
 
   const sheetUrl = formData.get('sheet_url')?.trim();
 
@@ -96,12 +92,8 @@ export async function updateGoogleSheetsUrl(prevState, formData) {
 // sync) — this is the sheet the "Sync Completed Links" feature reads link-completion
 // counts from, which has an entirely different column format.
 export async function updateCompletedLinksSheetUrl(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
-  const session = await verifySession();
-
-  if (!session) {
-    return { error: 'Not authenticated' };
-  }
 
   const sheetUrl = formData.get('sheet_url')?.trim();
 
@@ -134,12 +126,8 @@ export async function updateCompletedLinksSheetUrl(prevState, formData) {
 // Associate task sync reads from, which tracks web2/guest-post link counts per
 // web client rather than the regular SEO associates' link types.
 export async function updateWebSeoCompletedLinksSheetUrl(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
-  const session = await verifySession();
-
-  if (!session) {
-    return { error: 'Not authenticated' };
-  }
 
   const sheetUrl = formData.get('sheet_url')?.trim();
 
@@ -172,12 +160,8 @@ export async function updateWebSeoCompletedLinksSheetUrl(prevState, formData) {
 // with an "Active Clients" tab), distinct from the completed-links sheets above —
 // saved so the admin doesn't have to re-paste the same URL on every import.
 export async function updateWebClientsImportSheetUrl(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
-  const session = await verifySession();
-
-  if (!session) {
-    return { error: 'Not authenticated' };
-  }
 
   const sheetUrl = formData.get('sheet_url')?.trim();
 
@@ -210,12 +194,8 @@ export async function updateWebClientsImportSheetUrl(prevState, formData) {
 // named by current month/year, see src/lib/writerOffpageSync.js) — one spreadsheet,
 // both tabs looked up by name at sync time.
 export async function updateWriterOffpageSheetUrl(prevState, formData) {
+  await assertAdmin();
   const db = await getDb();
-  const session = await verifySession();
-
-  if (!session) {
-    return { error: 'Not authenticated' };
-  }
 
   const sheetUrl = formData.get('sheet_url')?.trim();
 

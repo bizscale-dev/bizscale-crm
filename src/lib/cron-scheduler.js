@@ -1,4 +1,5 @@
 import { getDb } from './db';
+import { cronHeaders } from './authz';
 
 // On Vercel, server-to-server calls can't target localhost — use the deployment's own
 // URL. Vercel sets VERCEL_URL automatically (host only, no protocol); NEXT_PUBLIC_APP_URL
@@ -50,7 +51,7 @@ export async function runSyncJob() {
         // Call sync-clients endpoint
         const syncResponse = await fetch(`${baseUrl}/api/google-sheets/sync-clients`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...cronHeaders() },
           body: JSON.stringify({ sheetUrl, campaignId: campaign.id }),
         });
 
@@ -74,7 +75,7 @@ export async function runSyncJob() {
             
             const importRes = await fetch(`${baseUrl}/api/google-sheets/import-writers`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...cronHeaders() },
               body: JSON.stringify({ writerNames }),
             });
 
@@ -93,7 +94,7 @@ export async function runSyncJob() {
         if (syncData.changes) {
           const applyResponse = await fetch(`${baseUrl}/api/google-sheets/sync-apply-changes`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...cronHeaders() },
             body: JSON.stringify({ 
               changes: syncData.changes,
               campaignId: campaign.id,
@@ -112,7 +113,7 @@ export async function runSyncJob() {
         if (syncData.changes && syncData.changes.added && syncData.changes.added.length > 0) {
           const assignResponse = await fetch(`${baseUrl}/api/google-sheets/sync-assign-new-clients`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...cronHeaders() },
             body: JSON.stringify({ 
               newClients: syncData.changes.added,
               associateAssignments: syncData.associateAssignments,

@@ -4,6 +4,7 @@ import { parseGoogleSheetUrl, fetchGoogleSheetRows, parseCsv } from '@/lib/googl
 import { logSyncRun } from '@/lib/syncLog';
 import { parseSheetLinks, loadStoredLinks, buildLinkWrites } from '@/lib/syncedClientLinks';
 import { autoAdvanceMonth1Weeks } from '@/lib/funnel';
+import { refuseUnlessAdminOrCron } from '@/lib/authz';
 
 // 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
 // for why this matters (a killed function fails silently with no error surfaced).
@@ -40,6 +41,9 @@ function latestDoneTask(dueTasks, credited, linkType) {
 }
 
 export async function POST(request) {
+  const denied = await refuseUnlessAdminOrCron(request);
+  if (denied) return denied;
+
   // Logs the failure to sync_logs (visible on /admin/link-sync) before returning it —
   // early-exit failures like "no sheet URL configured" are exactly what that page needs
   // to surface, since they'd otherwise only show up in Vercel's function logs.

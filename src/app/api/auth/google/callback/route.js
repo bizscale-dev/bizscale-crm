@@ -1,10 +1,15 @@
+import { refuseUnlessRole } from '@/lib/authz';
+
 export async function GET(request) {
+  const denied = await refuseUnlessRole(['admin']);
+  if (denied) return denied;
+
   try {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
     const error = searchParams.get('error');
     const state = searchParams.get('state'); // Get returnTo from state
-    const returnTo = (state && state.startsWith('/')) ? state : '/admin/settings'; // Default redirect
+    const returnTo = (state && /^\/(?![\/\\])/.test(state)) ? state : '/admin/settings'; // Default redirect
 
     console.log('[OAuth Callback] Code:', code?.substring(0, 20) + '...');
     console.log('[OAuth Callback] Error:', error);

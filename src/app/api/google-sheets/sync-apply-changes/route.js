@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
 import { getActiveCampaign } from '@/lib/services';
+import { refuseUnlessAdminOrCron } from '@/lib/authz';
 
 // 60s is the max allowed on Vercel's Hobby plan — see src/app/api/cron/daily-sync/route.js
 // for why this matters (a killed function fails silently with no error surfaced). This
@@ -7,6 +8,9 @@ import { getActiveCampaign } from '@/lib/services';
 export const maxDuration = 60;
 
 export async function POST(request) {
+  const denied = await refuseUnlessAdminOrCron(request);
+  if (denied) return denied;
+
   try {
     const db = await getDb();
     

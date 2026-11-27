@@ -1,20 +1,26 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const secretKey = process.env.SESSION_SECRET || 'bizscale-secret-key';
-const encodedKey = new TextEncoder().encode(secretKey);
+// The key that signs login cookies. There is deliberately no default in production: with one, anyone
+// who has seen the code could create a login for any account. Development gets a throwaway key.
+function getKey() {
+  const secret = process.env.SESSION_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'development-only-key');
+  if (!secret) throw new Error('SESSION_SECRET is not set');
+  return new TextEncoder().encode(secret);
+}
 
 export async function encrypt(payload) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('30d')
-    .sign(encodedKey);
+    .sign(getKey());
 }
 
 export async function decrypt(session) {
+  const key = getKey();
   try {
-    const { payload } = await jwtVerify(session, encodedKey, {
+    const { payload } = await jwtVerify(session, key, {
       algorithms: ['HS256'],
     });
     return payload;

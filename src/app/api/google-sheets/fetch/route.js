@@ -4,6 +4,7 @@ import {
   extractClientsFromRows,
 } from '@/lib/googleSheets';
 import { cookies } from 'next/headers';
+import { refuseUnlessRole } from '@/lib/authz';
 
 async function refreshAccessToken(refreshToken) {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
@@ -29,6 +30,9 @@ async function refreshAccessToken(refreshToken) {
 }
 
 export async function POST(request) {
+  const denied = await refuseUnlessRole(['admin', 'seo_associate', 'senior_seo_associate']);
+  if (denied) return denied;
+
   try {
     const { sheetUrl, nameColumn, websiteColumn, skipHeader } = await request.json();
 
