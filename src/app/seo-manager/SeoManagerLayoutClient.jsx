@@ -4,18 +4,21 @@ import { useState, useEffect } from 'react';
 import RoleLayoutShell from '@/components/RoleLayoutShell';
 import { getUnsubmittedTaskCount } from './tasks/actions';
 import { getOpenReportCount } from './reports/actions';
+import { getSupportBadgeCount } from '@/lib/supportActions';
 
 export default function SeoManagerLayoutClient({ children }) {
   const [pendingTaskCount, setPendingTaskCount] = useState(0);
   const [openReportCount, setOpenReportCount] = useState(0);
+  const [supportCount, setSupportCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
-      const [taskCount, reportCount] = await Promise.all([getUnsubmittedTaskCount(), getOpenReportCount()]);
+      const [taskCount, reportCount, supportReplies] = await Promise.all([getUnsubmittedTaskCount(), getOpenReportCount(), getSupportBadgeCount()]);
       if (!cancelled) {
         setPendingTaskCount(taskCount);
         setOpenReportCount(reportCount);
+        setSupportCount(supportReplies);
       }
     };
     poll();
@@ -29,6 +32,7 @@ export default function SeoManagerLayoutClient({ children }) {
     { href: '/seo-manager/tasks', label: 'Tasks', badgeCount: pendingTaskCount },
     { href: '/seo-manager/associate-tasks', label: 'Associate Tasks' },
     { href: '/seo-manager/reports', label: 'Reports', badgeCount: openReportCount },
+    { href: '/seo-manager/support', label: 'Support', badgeCount: supportCount },
   ];
 
   return (

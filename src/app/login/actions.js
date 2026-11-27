@@ -49,7 +49,8 @@ export async function login(prevState, formData) {
     web_developer_seo: '/web-developer',
     web_developer_executive: '/web-dev-executive',
     graphic_designer: '/graphic-designer',
-    graphic_designer_executive: '/graphic-executive'
+    graphic_designer_executive: '/graphic-executive',
+    support: '/support'
   };
 
   redirect(redirectMap[user.role] || '/');

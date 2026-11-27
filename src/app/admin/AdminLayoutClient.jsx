@@ -1,6 +1,8 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import RoleLayoutShell from '@/components/RoleLayoutShell';
+import { getSupportBadgeCount } from '@/lib/supportActions';
 import AdminHeaderCalendar from './AdminHeaderCalendar';
 
 const navItems = [
@@ -19,13 +21,29 @@ const navItems = [
   { href: '/admin/reports', label: 'Reports' },
   { href: '/admin/eods', label: 'EODs' },
   { href: '/admin/qa', label: 'QA' },
+  { href: '/admin/support', label: 'Support' },
   { href: '/admin/settings', label: 'Settings' },
 ];
 
 export default function AdminLayoutClient({ children }) {
+  const [supportWaiting, setSupportWaiting] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      const count = await getSupportBadgeCount();
+      if (!cancelled) setSupportWaiting(count);
+    };
+    poll();
+    const interval = setInterval(poll, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  const items = navItems.map((item) => (item.href === '/admin/support' ? { ...item, badgeCount: supportWaiting } : item));
+
   return (
     <RoleLayoutShell
-      navItems={navItems}
+      navItems={items}
       portalLabel="Admin Portal"
       headerTitle="Admin Dashboard"
       headerExtra={<AdminHeaderCalendar />}

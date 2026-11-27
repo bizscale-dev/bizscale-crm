@@ -21,6 +21,7 @@ export default async function Home() {
       web_developer_executive: '/web-dev-executive',
       graphic_designer: '/graphic-designer',
       graphic_designer_executive: '/graphic-executive',
+      support: '/support',
     };
     redirect(roleRedirects[session.role] || '/login');
   }

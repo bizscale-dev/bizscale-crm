@@ -3,6 +3,7 @@
 import { getDb } from '@/lib/db';
 import { verifySession } from '@/lib/session';
 import { revalidatePath } from 'next/cache';
+import { notifySupportTaskSubmitted } from '@/lib/support';
 import { ensureRecurringManagerTasks } from '@/lib/recurringManagerTasks';
 
 // ~2MB of raw image bytes, inflated by base64's ~1.37x overhead — matches the
@@ -113,6 +114,7 @@ export async function submitTaskProof(taskId, description, proofImageBase64, lat
       isLate ? cleanedLateReason : null, isLate ? 'pending' : null,
       id, session.userId
     );
+    await notifySupportTaskSubmitted(db, id, session.userId);
 
     revalidatePath('/web-seo-manager/tasks');
 

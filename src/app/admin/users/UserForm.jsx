@@ -54,6 +54,7 @@ export default function UserForm({ mode = 'create', initialData = null, onSucces
             <option value="writer">Writer</option>
             <option value="hr">HR</option>
             <option value="qa">QA</option>
+            <option value="support">Support</option>
           </select>
         </div>
         <div>

@@ -985,6 +985,48 @@ async function runMigrationsBody(raw) {
       name TEXT NOT NULL,
       chat_user_id TEXT NOT NULL
     )`,
+    // Support portal (see src/lib/support.js). A task Support sends to tech waits for the admin, who
+    // forwards it to managers as an ordinary manager_tasks row (manager_task_id). No foreign keys
+    // to users on purpose: these are records that must survive a user being removed.
+    `CREATE TABLE IF NOT EXISTS support_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_text TEXT NOT NULL,
+      urgency TEXT NOT NULL DEFAULT 'moderate',
+      due_date DATE NOT NULL,
+      due_time TEXT NOT NULL,
+      created_by INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      admin_note TEXT,
+      manager_task_id INTEGER,
+      reviewed_by INTEGER,
+      reviewed_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    // A query from a manager to Support: the admin approves it and picks the support people who
+    // receive it; their replies go straight back to the manager. Not a task.
+    `CREATE TABLE IF NOT EXISTS support_queries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      query_text TEXT NOT NULL,
+      created_by INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      admin_note TEXT,
+      reviewed_by INTEGER,
+      reviewed_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS support_query_recipients (
+      query_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      PRIMARY KEY (query_id, user_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS support_query_replies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      query_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      reply_text TEXT NOT NULL,
+      seen_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
   ];
 
   for (const sql of createTableStatements) {
@@ -1271,73 +1313,19 @@ async function runMigrationsBody(raw) {
     console.warn('writer_clients backfill skipped:', e.message);
   }
 
-  // Widen the users.role CHECK constraint as new roles are added. Guarded by
-  // inspecting the current schema so the rename+recreate only runs when a role is
-  // actually missing.
-  //
-  // `users_new`'s column list below must stay in sync with every column ever
-  // added to `users` via an alterStatement above (e.g. mirrors_web_associate_id)
-  // — `INSERT INTO users_new SELECT * FROM users` fails on a column-count
-  // mismatch otherwise. This silently no-ops (caught below, just a console
-  // warning) rather than crashing, which is exactly how a role added after
-  // alterStatements drifted out of sync with this list went unnoticed —
-  // check this list against `PRAGMA table_info(users)` if a future role
-  // addition logs this migration being skipped.
-  //
-  // Other tables (web_clients, seo_tasks, etc.) have FOREIGN KEY ... REFERENCES
-  // users(id). Renaming `users` itself would make SQLite auto-rewrite those other
-  // tables' FK references to follow the rename (e.g. to "users_old"), which then
-  // breaks them once the old table is dropped — and Turso's remote protocol doesn't
-  // allow the `PRAGMA legacy_alter_table` that normally suppresses this. Avoided
-  // entirely by building the replacement under a throwaway name that nothing
-  // references yet, dropping the original, then renaming the replacement into
-  // place — at that point nothing points at the throwaway name, so there's nothing
-  // for SQLite to rewrite, and every other table's existing "REFERENCES users(id)"
-  // text (never touched) resolves correctly once `users` exists again.
+  // users.role has a CHECK constraint, so a new role needs a schema change. It is NOT done
+  // automatically: the old automatic users-table rebuild cascade-deleted child tables (2026-10-19).
+  // Run scripts/add-user-role.mjs instead (it swaps only the role column, never drops the table).
   try {
-    const REQUIRED_ROLES = ['admin', 'seo_associate', 'writer', 'manager', 'web_seo_associate', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa', 'web_developer_seo', 'senior_seo_associate', 'web_developer_executive', 'graphic_designer', 'graphic_designer_executive'];
+    const REQUIRED_ROLES = ['admin', 'seo_associate', 'writer', 'manager', 'web_seo_associate', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa', 'web_developer_seo', 'senior_seo_associate', 'web_developer_executive', 'graphic_designer', 'graphic_designer_executive', 'support'];
     const currentSchema = await raw.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'");
     const currentSql = currentSchema.rows[0]?.sql || '';
-    const missingRole = REQUIRED_ROLES.some(role => !currentSql.includes(`'${role}'`));
-
-    // DISABLED BY DEFAULT: DROP TABLE users cascades ON DELETE CASCADE into
-    // every child table (eod_reports, manager_tasks, associate_tasks,
-    // notifications, qa_reports, ...) unless foreign keys are really off for
-    // that statement — and the PRAGMA below is not reliable over Turso's
-    // remote protocol (it's per-connection, a no-op inside a transaction, and
-    // `next build` runs this from several parallel workers). On 2026-10-19
-    // it wiped those tables' rows while adding the 'qa' role. Never run this
-    // automatically again: take a Turso backup / point-in-time branch first,
-    // then opt in explicitly with ALLOW_USERS_TABLE_REBUILD=true for ONE
-    // process, and verify the child tables' row counts afterwards.
-    if (missingRole && process.env.ALLOW_USERS_TABLE_REBUILD !== 'true') {
-      console.error(
-        '[db] users.role CHECK is missing a role, but the automatic users-table rebuild is disabled ' +
-        '(it cascade-deletes child tables). Back up first, then run once with ALLOW_USERS_TABLE_REBUILD=true.'
-      );
-    } else if (missingRole) {
-      await raw.execute('PRAGMA foreign_keys = OFF');
-      await raw.execute('DROP TABLE IF EXISTS users_new');
-      await raw.execute(`
-        CREATE TABLE users_new (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          email TEXT UNIQUE NOT NULL,
-          password TEXT NOT NULL,
-          role TEXT NOT NULL CHECK(role IN (${REQUIRED_ROLES.map(r => `'${r}'`).join(',')})),
-          is_active INTEGER DEFAULT 1,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          lifetime_completed_links INTEGER DEFAULT 0,
-          mirrors_web_associate_id INTEGER
-        )
-      `);
-      await raw.execute('INSERT INTO users_new SELECT * FROM users');
-      await raw.execute('DROP TABLE users');
-      await raw.execute('ALTER TABLE users_new RENAME TO users');
-      await raw.execute('PRAGMA foreign_keys = ON');
+    const missing = REQUIRED_ROLES.filter((role) => !currentSql.includes(`'${role}'`));
+    if (currentSql && missing.length) {
+      console.error(`[db] users.role does not allow: ${missing.join(', ')} — run scripts/add-user-role.mjs`);
     }
   } catch (e) {
-    console.warn('users role-constraint migration skipped:', e.message);
+    console.warn('users role check skipped:', e.message);
   }
 }
 
@@ -1365,7 +1353,7 @@ export async function initDb() {
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('admin','seo_associate','writer','manager','web_seo_associate','writers_manager','seo_manager','web_seo_manager','hr','qa','web_developer_seo','senior_seo_associate','web_developer_executive','graphic_designer','graphic_designer_executive')),
+      role TEXT NOT NULL CHECK(role IN ('admin','seo_associate','writer','manager','web_seo_associate','writers_manager','seo_manager','web_seo_manager','hr','qa','web_developer_seo','senior_seo_associate','web_developer_executive','graphic_designer','graphic_designer_executive','support')),
       is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       lifetime_completed_links INTEGER DEFAULT 0

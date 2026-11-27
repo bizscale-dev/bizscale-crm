@@ -75,7 +75,7 @@ export default function UserList({ users, assignedAssociates, assignedWriters, h
                 <td style={{ padding: '1rem 0' }}>
                   {!hasActiveCampaign && <span style={{ color: 'var(--text-muted)' }}>No Active Campaign</span>}
                   {hasActiveCampaign && u.role === 'admin' && <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                  {hasActiveCampaign && ['manager', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa', 'web_developer_seo', 'web_developer_executive', 'graphic_designer', 'graphic_designer_executive'].includes(u.role) && <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  {hasActiveCampaign && ['manager', 'writers_manager', 'seo_manager', 'web_seo_manager', 'hr', 'qa', 'web_developer_seo', 'web_developer_executive', 'graphic_designer', 'graphic_designer_executive', 'support'].includes(u.role) && <span style={{ color: 'var(--text-muted)' }}>—</span>}
                   
                   {hasActiveCampaign && (u.role === 'seo_associate' || u.role === 'senior_seo_associate' || u.role === 'writer') && (
                     isAssigned ? (
@@ -160,6 +160,7 @@ function RoleBadge({ role }) {
     writer: { label: 'Writer', tone: 'success' },
     hr: { label: 'HR', tone: 'neutral' },
     qa: { label: 'QA', tone: 'neutral' },
+    support: { label: 'Support', tone: 'brand' },
   };
   const config = map[role] || { label: role, tone: 'neutral' };
 

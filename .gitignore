@@ -48,3 +48,6 @@ next-env.d.ts
 
 # local database exports
 *.db
+
+# one-off users table backups from scripts/add-user-role.mjs (contain password hashes)
+users-backup-*.json
